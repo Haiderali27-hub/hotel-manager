@@ -1,0 +1,15 @@
+# Ignore build and system files
+/node_modules
+/dist
+/out
+.DS_Store
+.env
+sqlite.db
+*.log
+
+# Tauri build artifacts
+/src-tauri/target
+/src-tauri/.cargo
+
+# VSCode settings
+.vscode/

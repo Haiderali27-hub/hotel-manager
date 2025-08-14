@@ -1,6 +1,7 @@
 import React from 'react';
 import './App.css';
-import { Dashboard } from './components/Dashboard';
+
+import Dashboard from './components/Dashboard';
 import OfflineLoginPage from './components/OfflineLoginPage';
 import { AuthProvider, useAuth } from './context/SimpleAuthContext';
 

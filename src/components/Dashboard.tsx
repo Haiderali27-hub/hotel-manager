@@ -1,12 +1,108 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/SimpleAuthContext';
+import type { DashboardStats } from '../services/DatabaseService';
+import DatabaseService from '../services/DatabaseService';
 
 const Dashboard: React.FC = () => {
   const { logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [dbStats, setDbStats] = useState<DashboardStats | null>(null);
+  const [dbError, setDbError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [testMode, setTestMode] = useState(false);
 
   const toggleSidebar = () => {
     setSidebarOpen(!sidebarOpen);
+  };
+
+  // Test database connection
+  const testDatabase = async () => {
+    setLoading(true);
+    setDbError(null);
+    try {
+      console.log('🔍 Testing database connection...');
+      const stats = await DatabaseService.getDashboardStats();
+      console.log('✅ Database response:', stats);
+      setDbStats(stats);
+      setTestMode(true);
+    } catch (error) {
+      console.error('❌ Database error:', error);
+      setDbError(error instanceof Error ? error.message : 'Database connection failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load database data on component mount
+  useEffect(() => {
+    testDatabase();
+  }, []);
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-PK', {
+      style: 'currency',
+      currency: 'PKR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(amount).replace('PKR', 'Rs.');
+  };
+
+  // Get display stats (real data when available and test mode is on, otherwise sample data)
+  const getDisplayStats = () => {
+    if (testMode && dbStats) {
+      return [
+        { 
+          title: 'Total Guests This Month', 
+          value: dbStats.totalGuests.toString(), 
+          icon: '👥', 
+          color: 'linear-gradient(135deg, #3B82F6, #1D4ED8)',
+          change: 'Real Data' 
+        },
+        { 
+          title: 'Total Income', 
+          value: dbStats.totalIncome.toLocaleString(), 
+          currency: 'Rs.', 
+          icon: '💰', 
+          color: 'linear-gradient(135deg, #22C55E, #16A34A)',
+          change: 'Real Data' 
+        },
+        { 
+          title: 'Total Expenses', 
+          value: dbStats.totalExpenses.toLocaleString(), 
+          currency: 'Rs.', 
+          icon: '💸', 
+          color: 'linear-gradient(135deg, #EF4444, #DC2626)',
+          change: 'Real Data' 
+        },
+        { 
+          title: 'Profit/Loss', 
+          value: dbStats.profitLoss.toLocaleString(), 
+          currency: 'Rs.', 
+          icon: dbStats.profitLoss >= 0 ? '📈' : '📉', 
+          color: dbStats.profitLoss >= 0 
+            ? 'linear-gradient(135deg, #10B981, #059669)'
+            : 'linear-gradient(135deg, #EF4444, #DC2626)',
+          change: 'Real Data' 
+        },
+        { 
+          title: 'Total Food Orders', 
+          value: dbStats.totalFoodOrders.toString(), 
+          icon: '🍽️', 
+          color: 'linear-gradient(135deg, #F59E0B, #D97706)',
+          change: 'Real Data' 
+        },
+        { 
+          title: 'Active Guests', 
+          value: dbStats.activeGuests.toString(), 
+          icon: '👥', 
+          color: 'linear-gradient(135deg, #8B5CF6, #7C3AED)',
+          change: 'Real Data' 
+        }
+      ];
+    }
+    
+    // Return sample data
+    return stats;
   };
 
   // Sample data for stats - Professional hotel management dashboard
@@ -266,6 +362,92 @@ const Dashboard: React.FC = () => {
           </h1>
         </div>
 
+        {/* Database Test Section */}
+        <div style={{
+          backgroundColor: '#fff',
+          padding: '1.5rem',
+          borderRadius: '12px',
+          marginBottom: '2rem',
+          border: '1px solid #E5E7EB',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+        }}>
+          <h2 style={{ 
+            color: '#333', 
+            fontSize: '1.2rem', 
+            fontWeight: '600', 
+            marginBottom: '1rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem'
+          }}>
+            🗄️ Database Connection Test
+          </h2>
+          
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <button
+              onClick={testDatabase}
+              disabled={loading}
+              style={{
+                backgroundColor: loading ? '#9CA3AF' : '#3B82F6',
+                color: 'white',
+                padding: '0.5rem 1rem',
+                borderRadius: '6px',
+                border: 'none',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                fontWeight: '500'
+              }}
+            >
+              {loading ? '🔄 Testing...' : '🔍 Test Database'}
+            </button>
+
+            <button
+              onClick={() => setTestMode(!testMode)}
+              style={{
+                backgroundColor: testMode ? '#10B981' : '#6B7280',
+                color: 'white',
+                padding: '0.5rem 1rem',
+                borderRadius: '6px',
+                border: 'none',
+                cursor: 'pointer',
+                fontWeight: '500'
+              }}
+            >
+              {testMode ? '📊 Show Real Data' : '📋 Show Sample Data'}
+            </button>
+          </div>
+
+          {dbError && (
+            <div style={{
+              backgroundColor: '#FEF2F2',
+              border: '1px solid #FECACA',
+              color: '#DC2626',
+              padding: '0.75rem',
+              borderRadius: '6px',
+              marginTop: '1rem'
+            }}>
+              ❌ Error: {dbError}
+            </div>
+          )}
+
+          {dbStats && (
+            <div style={{
+              backgroundColor: '#F0FDF4',
+              border: '1px solid #BBF7D0',
+              color: '#16A34A',
+              padding: '0.75rem',
+              borderRadius: '6px',
+              marginTop: '1rem'
+            }}>
+              ✅ Database Connected! 
+              <br />
+              <small>
+                Real Data: {dbStats.totalGuests} guests, {formatCurrency(dbStats.totalIncome)} income, 
+                {formatCurrency(dbStats.totalExpenses)} expenses, {dbStats.totalFoodOrders} orders
+              </small>
+            </div>
+          )}
+        </div>
+
         {/* Stats Cards */}
         <div style={{
           display: 'grid',
@@ -273,7 +455,7 @@ const Dashboard: React.FC = () => {
           gap: '1.5rem',
           marginBottom: '2rem'
         }}>
-          {stats.map((stat, index) => (
+          {getDisplayStats().map((stat, index) => (
             <div
               key={index}
               style={{

@@ -1,35 +1,56 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import React from 'react';
+import './App.css';
+import { Dashboard } from './components/Dashboard';
+import OfflineLoginPage from './components/OfflineLoginPage';
+import { AuthProvider, useAuth } from './context/SimpleAuthContext';
+
+const AppContent: React.FC = () => {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  console.log('🔍 App State:', { isAuthenticated, isLoading });
+
+  if (isLoading) {
+    console.log('⏳ Showing loading spinner');
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh',
+        flexDirection: 'column',
+        backgroundColor: '#f0f0f0'
+      }}>
+        <div style={{
+          border: '4px solid #f3f3f3',
+          borderTop: '4px solid #3498db',
+          borderRadius: '50%',
+          width: '50px',
+          height: '50px',
+          animation: 'spin 1s linear infinite'
+        }}></div>
+        <p style={{marginTop: '20px', fontSize: '18px'}}>Loading Hotel Manager...</p>
+      </div>
+    );
+  }
+
+  console.log('📱 Showing main content, authenticated:', isAuthenticated);
+  
+  if (isAuthenticated) {
+    console.log('✅ User is authenticated - showing Dashboard');
+    return <Dashboard />;
+  } else {
+    console.log('❌ User not authenticated - showing Login Page');
+    return <OfflineLoginPage />;
+  }
+};
 
 function App() {
-  const [count, setCount] = useState(0)
-
+  console.log('🚀 App component rendering');
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
 }
 
-export default App
+export default App;

@@ -7,9 +7,11 @@ use offline_auth::{
 };
 
 use database::{
-    get_dashboard_stats, get_all_guests, add_guest, update_guest, delete_guest,
-    get_all_orders, add_order, add_revenue, add_expense, get_financial_summary,
-    authenticate_admin, verify_otp
+    get_dashboard_stats, get_all_guests, add_guest, edit_guest, checkout_guest,
+    get_all_rooms, add_room, edit_room, delete_room,
+    get_all_menu_items, add_menu_item, edit_menu_item, delete_menu_item,
+    get_all_orders, add_order, update_order_status,
+    add_revenue, add_expense, get_financial_summary
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -26,15 +28,22 @@ pub fn run() {
             get_dashboard_stats,
             get_all_guests,
             add_guest,
-            update_guest,
-            delete_guest,
+            edit_guest,
+            checkout_guest,
+            get_all_rooms,
+            add_room,
+            edit_room,
+            delete_room,
+            get_all_menu_items,
+            add_menu_item,
+            edit_menu_item,
+            delete_menu_item,
             get_all_orders,
             add_order,
+            update_order_status,
             add_revenue,
             add_expense,
-            get_financial_summary,
-            authenticate_admin,
-            verify_otp
+            get_financial_summary
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

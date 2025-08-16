@@ -44,7 +44,7 @@ fn create_database_schema(conn: &Connection) -> Result<(), String> {
         PRAGMA foreign_keys = ON;
         PRAGMA journal_mode = WAL;
         
-        -- Rooms table
+        -- Rooms table with updated_at
         CREATE TABLE IF NOT EXISTS rooms (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             number TEXT NOT NULL UNIQUE,
@@ -52,10 +52,11 @@ fn create_database_schema(conn: &Connection) -> Result<(), String> {
             is_occupied INTEGER NOT NULL DEFAULT 0,
             guest_id INTEGER,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (guest_id) REFERENCES guests(id)
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (guest_id) REFERENCES guests(id) ON DELETE SET NULL
         );
         
-        -- Guests table  
+        -- Guests table with proper foreign key constraint
         CREATE TABLE IF NOT EXISTS guests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -66,20 +67,22 @@ fn create_database_schema(conn: &Connection) -> Result<(), String> {
             daily_rate REAL NOT NULL,
             is_active INTEGER NOT NULL DEFAULT 1,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (room_id) REFERENCES rooms(id)
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE RESTRICT
         );
         
-        -- Menu items table
+        -- Menu items table with updated_at
         CREATE TABLE IF NOT EXISTS menu_items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             price REAL NOT NULL,
             category TEXT NOT NULL DEFAULT 'General',
             is_available INTEGER NOT NULL DEFAULT 1,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
         
-        -- Food orders table
+        -- Food orders table with paid_at timestamp
         CREATE TABLE IF NOT EXISTS food_orders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             guest_id INTEGER NOT NULL,
@@ -87,10 +90,11 @@ fn create_database_schema(conn: &Connection) -> Result<(), String> {
             total_amount REAL NOT NULL DEFAULT 0.0,
             is_paid INTEGER NOT NULL DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (guest_id) REFERENCES guests(id)
+            paid_at DATETIME,
+            FOREIGN KEY (guest_id) REFERENCES guests(id) ON DELETE SET NULL
         );
         
-        -- Food order items table
+        -- Food order items table with proper foreign keys
         CREATE TABLE IF NOT EXISTS food_order_items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             order_id INTEGER NOT NULL,
@@ -99,10 +103,10 @@ fn create_database_schema(conn: &Connection) -> Result<(), String> {
             unit_price REAL NOT NULL,
             line_total REAL GENERATED ALWAYS AS (quantity * unit_price) STORED,
             FOREIGN KEY (order_id) REFERENCES food_orders(id) ON DELETE CASCADE,
-            FOREIGN KEY (menu_item_id) REFERENCES menu_items(id)
+            FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE RESTRICT
         );
         
-        -- Expenses table
+        -- Expenses table with created_at
         CREATE TABLE IF NOT EXISTS expenses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             date TEXT NOT NULL,
@@ -112,12 +116,13 @@ fn create_database_schema(conn: &Connection) -> Result<(), String> {
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
         
-        -- Admin settings table
+        -- Admin settings table with updated_at
         CREATE TABLE IF NOT EXISTS admin_settings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             key TEXT NOT NULL UNIQUE,
             value TEXT NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
         
         -- Create indexes for better performance
@@ -125,9 +130,39 @@ fn create_database_schema(conn: &Connection) -> Result<(), String> {
         CREATE INDEX IF NOT EXISTS idx_guests_room ON guests(room_id);
         CREATE INDEX IF NOT EXISTS idx_food_orders_guest ON food_orders(guest_id);
         CREATE INDEX IF NOT EXISTS idx_food_orders_date ON food_orders(order_date);
+        CREATE INDEX IF NOT EXISTS idx_food_orders_paid_at ON food_orders(paid_at);
         CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date);
         CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(category);
         CREATE INDEX IF NOT EXISTS idx_rooms_occupied ON rooms(is_occupied);
+        
+        -- Create triggers for automatic updated_at timestamps
+        CREATE TRIGGER IF NOT EXISTS trigger_rooms_updated_at 
+         AFTER UPDATE ON rooms
+         FOR EACH ROW 
+         BEGIN
+            UPDATE rooms SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+         END;
+        
+        CREATE TRIGGER IF NOT EXISTS trigger_guests_updated_at 
+         AFTER UPDATE ON guests
+         FOR EACH ROW 
+         BEGIN
+            UPDATE guests SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+         END;
+        
+        CREATE TRIGGER IF NOT EXISTS trigger_menu_items_updated_at 
+         AFTER UPDATE ON menu_items
+         FOR EACH ROW 
+         BEGIN
+            UPDATE menu_items SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+         END;
+        
+        CREATE TRIGGER IF NOT EXISTS trigger_admin_settings_updated_at 
+         AFTER UPDATE ON admin_settings
+         FOR EACH ROW 
+         BEGIN
+            UPDATE admin_settings SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+         END;
     "#;
     
     conn.execute_batch(schema_sql).map_err(|e| format!("Failed to create schema: {}", e))?;
@@ -209,25 +244,25 @@ fn insert_seed_data(conn: &Connection) -> Result<(), String> {
           ('Thomas Martinez', '+1-555-0203', 10, '2025-08-05', '2025-08-09', 180.00, 0),
           ('Amanda Rodriguez', '+1-555-0204', 13, '2025-08-01', '2025-08-05', 180.00, 0);
         
-        -- Food orders (mix of paid and unpaid)
-        INSERT INTO food_orders (guest_id, order_date, total_amount, is_paid) VALUES
-          (1, '2025-08-14', 42.50, 1),  -- John Smith - paid
-          (1, '2025-08-15', 58.00, 0),  -- John Smith - unpaid
-          (1, '2025-08-16', 22.50, 0),  -- John Smith - unpaid
-          (2, '2025-08-15', 31.00, 1),  -- Sarah Johnson - paid
-          (2, '2025-08-16', 27.00, 0),  -- Sarah Johnson - unpaid
-          (3, '2025-08-16', 89.50, 0),  -- Michael Chen - unpaid
-          (4, '2025-08-13', 38.00, 1),  -- Emily Davis - paid
-          (4, '2025-08-14', 52.00, 1),  -- Emily Davis - paid
-          (4, '2025-08-16', 29.00, 0),  -- Emily Davis - unpaid
-          (5, '2025-08-15', 95.00, 1),  -- Robert Wilson - paid
-          (5, '2025-08-16', 67.50, 0),  -- Robert Wilson - unpaid
-          (6, '2025-08-16', 34.50, 0),  -- Lisa Anderson - unpaid
-          -- Historical orders (all paid)
-          (7, '2025-08-10', 45.00, 1),
-          (7, '2025-08-12', 52.00, 1),
-          (8, '2025-08-08', 33.00, 1),
-          (8, '2025-08-10', 29.00, 1);
+        -- Food orders (mix of paid and unpaid with paid_at timestamps)
+        INSERT INTO food_orders (guest_id, order_date, total_amount, is_paid, paid_at) VALUES
+          (1, '2025-08-14', 42.50, 1, '2025-08-14 19:30:00'),  -- John Smith - paid
+          (1, '2025-08-15', 58.00, 0, NULL),  -- John Smith - unpaid
+          (1, '2025-08-16', 22.50, 0, NULL),  -- John Smith - unpaid
+          (2, '2025-08-15', 31.00, 1, '2025-08-15 20:15:00'),  -- Sarah Johnson - paid
+          (2, '2025-08-16', 27.00, 0, NULL),  -- Sarah Johnson - unpaid
+          (3, '2025-08-16', 89.50, 0, NULL),  -- Michael Chen - unpaid
+          (4, '2025-08-13', 38.00, 1, '2025-08-13 18:45:00'),  -- Emily Davis - paid
+          (4, '2025-08-14', 52.00, 1, '2025-08-14 12:30:00'),  -- Emily Davis - paid
+          (4, '2025-08-16', 29.00, 0, NULL),  -- Emily Davis - unpaid
+          (5, '2025-08-15', 95.00, 1, '2025-08-15 21:45:00'),  -- Robert Wilson - paid
+          (5, '2025-08-16', 67.50, 0, NULL),  -- Robert Wilson - unpaid
+          (6, '2025-08-16', 34.50, 0, NULL),  -- Lisa Anderson - unpaid
+          -- Historical orders (all paid with timestamps)
+          (7, '2025-08-10', 45.00, 1, '2025-08-10 19:15:00'),
+          (7, '2025-08-12', 52.00, 1, '2025-08-12 20:30:00'),
+          (8, '2025-08-08', 33.00, 1, '2025-08-08 18:45:00'),
+          (8, '2025-08-10', 29.00, 1, '2025-08-10 21:00:00');
         
         -- Food order items (sample detailed items)
         INSERT INTO food_order_items (order_id, menu_item_id, quantity, unit_price) VALUES

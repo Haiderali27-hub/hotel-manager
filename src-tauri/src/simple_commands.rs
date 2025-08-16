@@ -57,6 +57,57 @@ pub fn get_rooms() -> Result<Vec<Room>, String> {
 }
 
 #[command]
+pub fn update_room(room_id: i64, number: Option<String>, daily_rate: Option<f64>) -> Result<String, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    // Build dynamic update query
+    let mut update_parts = Vec::new();
+    let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+    
+    if let Some(ref num) = number {
+        if num.trim().is_empty() {
+            return Err("Room number cannot be empty".to_string());
+        }
+        update_parts.push("number = ?");
+        params.push(Box::new(num.trim().to_string()));
+    }
+    
+    if let Some(rate) = daily_rate {
+        if rate < 0.0 {
+            return Err("Daily rate must be positive".to_string());
+        }
+        update_parts.push("daily_rate = ?");
+        params.push(Box::new(rate));
+    }
+    
+    if update_parts.is_empty() {
+        return Err("No fields to update".to_string());
+    }
+    
+    // Add updated_at timestamp
+    update_parts.push("updated_at = CURRENT_TIMESTAMP");
+    
+    let query = format!("UPDATE rooms SET {} WHERE id = ?", update_parts.join(", "));
+    params.push(Box::new(room_id));
+    
+    let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+    
+    let affected = conn.execute(&query, &*param_refs).map_err(|e| {
+        if e.to_string().contains("UNIQUE constraint failed") {
+            "Room number already exists".to_string()
+        } else {
+            e.to_string()
+        }
+    })?;
+    
+    if affected == 0 {
+        return Err("Room not found".to_string());
+    }
+    
+    Ok("Room updated successfully".to_string())
+}
+
+#[command]
 pub fn delete_room(id: i64) -> Result<String, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
@@ -150,6 +201,65 @@ pub fn get_active_guests() -> Result<Vec<ActiveGuestRow>, String> {
     }
     
     Ok(guests)
+}
+
+#[command]
+pub fn get_all_guests() -> Result<Vec<ActiveGuestRow>, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    let mut stmt = conn.prepare(
+        "SELECT g.id, g.name, r.number, g.check_in, g.daily_rate, g.status
+         FROM guests g 
+         JOIN rooms r ON g.room_id = r.id 
+         ORDER BY g.created_at DESC"
+    ).map_err(|e| e.to_string())?;
+    
+    let guest_iter = stmt.query_map([], |row| {
+        Ok(ActiveGuestRow {
+            guest_id: row.get(0)?,
+            name: row.get(1)?,
+            room_number: row.get(2)?,
+            check_in: row.get(3)?,
+            daily_rate: row.get(4)?,
+        })
+    }).map_err(|e| e.to_string())?;
+    
+    let mut guests = Vec::new();
+    for guest in guest_iter {
+        guests.push(guest.map_err(|e| e.to_string())?);
+    }
+    
+    Ok(guests)
+}
+
+#[command]
+pub fn get_guest(guest_id: i64) -> Result<ActiveGuestRow, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    let result = conn.query_row(
+        "SELECT g.id, g.name, r.number, g.check_in, g.daily_rate 
+         FROM guests g 
+         JOIN rooms r ON g.room_id = r.id 
+         WHERE g.id = ?1",
+        params![guest_id],
+        |row| {
+            Ok(ActiveGuestRow {
+                guest_id: row.get(0)?,
+                name: row.get(1)?,
+                room_number: row.get(2)?,
+                check_in: row.get(3)?,
+                daily_rate: row.get(4)?,
+            })
+        }
+    ).map_err(|e| {
+        if e.to_string().contains("no rows") {
+            "Guest not found".to_string()
+        } else {
+            e.to_string()
+        }
+    })?;
+    
+    Ok(result)
 }
 
 #[command]
@@ -273,6 +383,105 @@ pub fn get_menu_items() -> Result<Vec<MenuItem>, String> {
     }
     
     Ok(items)
+}
+
+#[command]
+pub fn update_menu_item(item_id: i64, name: Option<String>, price: Option<f64>, category: Option<String>, is_available: Option<bool>) -> Result<String, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    // Build dynamic update query
+    let mut update_parts = Vec::new();
+    let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+    
+    if let Some(ref item_name) = name {
+        if item_name.trim().is_empty() {
+            return Err("Menu item name cannot be empty".to_string());
+        }
+        update_parts.push("name = ?");
+        params.push(Box::new(item_name.trim().to_string()));
+    }
+    
+    if let Some(item_price) = price {
+        if item_price < 0.0 {
+            return Err("Price must be positive".to_string());
+        }
+        update_parts.push("price = ?");
+        params.push(Box::new(item_price));
+    }
+    
+    if let Some(ref cat) = category {
+        update_parts.push("category = ?");
+        params.push(Box::new(cat.to_string()));
+    }
+    
+    if let Some(available) = is_available {
+        update_parts.push("is_available = ?");
+        params.push(Box::new(if available { 1 } else { 0 }));
+    }
+    
+    if update_parts.is_empty() {
+        return Err("No fields to update".to_string());
+    }
+    
+    // Add updated_at timestamp
+    update_parts.push("updated_at = CURRENT_TIMESTAMP");
+    
+    let query = format!("UPDATE menu_items SET {} WHERE id = ?", update_parts.join(", "));
+    params.push(Box::new(item_id));
+    
+    let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+    
+    let affected = conn.execute(&query, &*param_refs).map_err(|e| {
+        if e.to_string().contains("UNIQUE constraint failed") {
+            "Menu item name already exists".to_string()
+        } else {
+            e.to_string()
+        }
+    })?;
+    
+    if affected == 0 {
+        return Err("Menu item not found".to_string());
+    }
+    
+    Ok("Menu item updated successfully".to_string())
+}
+
+#[command]
+pub fn delete_menu_item(item_id: i64) -> Result<String, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    // Check if menu item is used in any orders
+    let order_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM food_order_items WHERE menu_item_id = ?1",
+        params![item_id],
+        |row| row.get(0)
+    ).map_err(|e| e.to_string())?;
+    
+    if order_count > 0 {
+        // Soft delete by setting is_available = 0
+        let affected = conn.execute(
+            "UPDATE menu_items SET is_available = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?1",
+            params![item_id],
+        ).map_err(|e| e.to_string())?;
+        
+        if affected == 0 {
+            return Err("Menu item not found".to_string());
+        }
+        
+        Ok("Menu item deactivated (used in existing orders)".to_string())
+    } else {
+        // Hard delete if not used in any orders
+        let affected = conn.execute(
+            "DELETE FROM menu_items WHERE id = ?1",
+            params![item_id],
+        ).map_err(|e| e.to_string())?;
+        
+        if affected == 0 {
+            return Err("Menu item not found".to_string());
+        }
+        
+        Ok("Menu item deleted successfully".to_string())
+    }
 }
 
 // ===== DASHBOARD COMMANDS =====
@@ -414,6 +623,33 @@ pub fn get_food_orders_by_guest(guest_id: i64) -> Result<Vec<FoodOrderSummary>, 
 }
 
 #[command]
+pub fn get_food_orders() -> Result<Vec<FoodOrderSummary>, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    let mut stmt = conn.prepare(
+        "SELECT fo.id, fo.created_at, fo.paid, fo.paid_at, fo.total_amount,
+                GROUP_CONCAT(oi.item_name || ' x' || oi.quantity) as items
+         FROM food_orders fo
+         LEFT JOIN order_items oi ON fo.id = oi.order_id
+         GROUP BY fo.id, fo.created_at, fo.paid, fo.paid_at, fo.total_amount
+         ORDER BY fo.created_at DESC"
+    ).map_err(|e| e.to_string())?;
+    
+    let orders = stmt.query_map([], |row| {
+        Ok(FoodOrderSummary {
+            id: row.get(0)?,
+            created_at: row.get(1)?,
+            paid: row.get::<_, i32>(2)? == 1,
+            paid_at: row.get(3)?,
+            total_amount: row.get(4)?,
+            items: row.get::<_, Option<String>>(5)?.unwrap_or_default(),
+        })
+    }).map_err(|e| e.to_string())?;
+    
+    orders.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+#[command]
 pub fn mark_order_paid(order_id: i64) -> Result<String, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
@@ -489,4 +725,100 @@ pub fn get_expenses(start_date: Option<String>, end_date: Option<String>) -> Res
     }).map_err(|e| e.to_string())?;
     
     expense_iter.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+#[command]
+pub fn get_expenses_by_date_range(start_date: String, end_date: String) -> Result<Vec<ExpenseRecord>, String> {
+    validate_date_format(&start_date)?;
+    validate_date_format(&end_date)?;
+    
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    let mut stmt = conn.prepare(
+        "SELECT id, date, category, description, amount 
+         FROM expenses 
+         WHERE date >= ?1 AND date <= ?2 
+         ORDER BY date DESC"
+    ).map_err(|e| e.to_string())?;
+    
+    let expense_iter = stmt.query_map([&start_date, &end_date], |row| {
+        Ok(ExpenseRecord {
+            id: row.get(0)?,
+            date: row.get(1)?,
+            category: row.get(2)?,
+            description: row.get(3)?,
+            amount: row.get(4)?,
+        })
+    }).map_err(|e| e.to_string())?;
+    
+    expense_iter.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+#[command]
+pub fn update_expense(expense_id: i64, date: Option<String>, category: Option<String>, description: Option<String>, amount: Option<f64>) -> Result<String, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    // Build dynamic update query
+    let mut update_parts = Vec::new();
+    let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+    
+    if let Some(ref exp_date) = date {
+        validate_date_format(exp_date)?;
+        update_parts.push("date = ?");
+        params.push(Box::new(exp_date.clone()));
+    }
+    
+    if let Some(ref cat) = category {
+        if cat.trim().is_empty() {
+            return Err("Category cannot be empty".to_string());
+        }
+        update_parts.push("category = ?");
+        params.push(Box::new(cat.trim().to_string()));
+    }
+    
+    if let Some(ref desc) = description {
+        update_parts.push("description = ?");
+        params.push(Box::new(desc.clone()));
+    }
+    
+    if let Some(exp_amount) = amount {
+        if exp_amount <= 0.0 {
+            return Err("Amount must be positive".to_string());
+        }
+        update_parts.push("amount = ?");
+        params.push(Box::new(exp_amount));
+    }
+    
+    if update_parts.is_empty() {
+        return Err("No fields to update".to_string());
+    }
+    
+    let query = format!("UPDATE expenses SET {} WHERE id = ?", update_parts.join(", "));
+    params.push(Box::new(expense_id));
+    
+    let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+    
+    let affected = conn.execute(&query, &*param_refs).map_err(|e| e.to_string())?;
+    
+    if affected == 0 {
+        return Err("Expense not found".to_string());
+    }
+    
+    Ok("Expense updated successfully".to_string())
+}
+
+#[command]
+pub fn delete_expense(expense_id: i64) -> Result<String, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    let affected = conn.execute(
+        "DELETE FROM expenses WHERE id = ?1",
+        params![expense_id],
+    ).map_err(|e| e.to_string())?;
+    
+    if affected == 0 {
+        return Err("Expense not found".to_string());
+    }
+    
+    Ok("Expense deleted successfully".to_string())
 }

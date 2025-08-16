@@ -71,17 +71,19 @@ pub fn initialize_database() -> SqliteResult<()> {
 }
 
 fn create_initial_schema(conn: &Connection) -> SqliteResult<()> {
-    // Rooms table
+    // Rooms table with created_at/updated_at
     conn.execute(
         "CREATE TABLE IF NOT EXISTS rooms (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             number TEXT UNIQUE NOT NULL,
-            is_active INTEGER NOT NULL DEFAULT 1
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )",
         [],
     )?;
     
-    // Guests table
+    // Guests table with proper foreign key and timestamps
     conn.execute(
         "CREATE TABLE IF NOT EXISTS guests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -92,41 +94,43 @@ fn create_initial_schema(conn: &Connection) -> SqliteResult<()> {
             check_out TEXT,
             daily_rate REAL NOT NULL,
             status TEXT NOT NULL DEFAULT 'active',
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            FOREIGN KEY (room_id) REFERENCES rooms(id)
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE RESTRICT
         )",
         [],
     )?;
     
-    // Menu items table
+    // Menu items table with created_at/updated_at
     conn.execute(
         "CREATE TABLE IF NOT EXISTS menu_items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT UNIQUE NOT NULL,
             price REAL NOT NULL,
-            is_active INTEGER NOT NULL DEFAULT 1
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )",
         [],
     )?;
     
-    // Food orders table
+    // Food orders table with proper foreign key and timestamps
     conn.execute(
         "CREATE TABLE IF NOT EXISTS food_orders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             guest_id INTEGER,
             customer_type TEXT NOT NULL,
             customer_name TEXT,
-            created_at TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             paid INTEGER NOT NULL DEFAULT 0,
-            paid_at TEXT,
+            paid_at DATETIME,
             total_amount REAL NOT NULL,
-            FOREIGN KEY (guest_id) REFERENCES guests(id)
+            FOREIGN KEY (guest_id) REFERENCES guests(id) ON DELETE SET NULL
         )",
         [],
     )?;
     
-    // Order items table
+    // Order items table with proper foreign keys
     conn.execute(
         "CREATE TABLE IF NOT EXISTS order_items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -137,32 +141,33 @@ fn create_initial_schema(conn: &Connection) -> SqliteResult<()> {
             quantity INTEGER NOT NULL,
             line_total REAL NOT NULL,
             FOREIGN KEY (order_id) REFERENCES food_orders(id) ON DELETE CASCADE,
-            FOREIGN KEY (menu_item_id) REFERENCES menu_items(id)
+            FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE SET NULL
         )",
         [],
     )?;
     
-    // Expenses table
+    // Expenses table with created_at
     conn.execute(
         "CREATE TABLE IF NOT EXISTS expenses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             date TEXT NOT NULL,
             category TEXT NOT NULL,
             description TEXT,
-            amount REAL NOT NULL
+            amount REAL NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )",
         [],
     )?;
     
-    // Admin settings table for password storage
+    // Admin settings table for password storage with timestamps
     conn.execute(
         "CREATE TABLE IF NOT EXISTS admin_settings (
             id INTEGER PRIMARY KEY,
             password_hash TEXT NOT NULL,
             security_question TEXT,
             security_answer_hash TEXT,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )",
         [],
     )?;
@@ -170,13 +175,77 @@ fn create_initial_schema(conn: &Connection) -> SqliteResult<()> {
     // Create indexes after all tables are created
     create_indexes(conn)?;
     
+    // Create triggers for automatic updated_at timestamps
+    create_update_triggers(conn)?;
+    
+    Ok(())
+}
+
+fn create_update_triggers(conn: &Connection) -> SqliteResult<()> {
+    // Trigger for rooms table
+    conn.execute(
+        "CREATE TRIGGER IF NOT EXISTS trigger_rooms_updated_at 
+         AFTER UPDATE ON rooms
+         FOR EACH ROW 
+         BEGIN
+            UPDATE rooms SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+         END",
+        [],
+    )?;
+    
+    // Trigger for guests table
+    conn.execute(
+        "CREATE TRIGGER IF NOT EXISTS trigger_guests_updated_at 
+         AFTER UPDATE ON guests
+         FOR EACH ROW 
+         BEGIN
+            UPDATE guests SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+         END",
+        [],
+    )?;
+    
+    // Trigger for menu_items table
+    conn.execute(
+        "CREATE TRIGGER IF NOT EXISTS trigger_menu_items_updated_at 
+         AFTER UPDATE ON menu_items
+         FOR EACH ROW 
+         BEGIN
+            UPDATE menu_items SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+         END",
+        [],
+    )?;
+    
+    // Trigger for admin_settings table
+    conn.execute(
+        "CREATE TRIGGER IF NOT EXISTS trigger_admin_settings_updated_at 
+         AFTER UPDATE ON admin_settings
+         FOR EACH ROW 
+         BEGIN
+            UPDATE admin_settings SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+         END",
+        [],
+    )?;
+    
     Ok(())
 }
 
 fn create_indexes(conn: &Connection) -> SqliteResult<()> {
+    // Primary operational indexes
     conn.execute("CREATE INDEX IF NOT EXISTS idx_guests_status ON guests(status)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_guests_room_id ON guests(room_id)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_food_orders_guest_id ON food_orders(guest_id)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_order_items_menu_item_id ON order_items(menu_item_id)", [])?;
+    
+    // Timestamp indexes for analytics and filtering
     conn.execute("CREATE INDEX IF NOT EXISTS idx_food_orders_created_at ON food_orders(created_at)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_food_orders_paid_at ON food_orders(paid_at)", [])?;
     conn.execute("CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_expenses_created_at ON expenses(created_at)", [])?;
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_guests_created_at ON guests(created_at)", [])?;
+    
+    // Payment status index for financial reports
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_food_orders_paid ON food_orders(paid)", [])?;
     
     Ok(())
 }

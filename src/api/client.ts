@@ -313,7 +313,15 @@ export const getFoodOrders = (): Promise<FoodOrder[]> =>
  * @returns Array of orders for that guest
  */
 export const getGuestOrders = (guestId: number): Promise<FoodOrder[]> => 
-  invoke("get_guest_orders", { guestId });
+  invoke("get_food_orders_by_guest", { guestId });
+
+/**
+ * Alias for getGuestOrders - same functionality
+ * @param guestId - ID of the guest
+ * @returns Array of orders for that guest
+ */
+export const getFoodOrdersByGuest = (guestId: number): Promise<FoodOrder[]> => 
+  getGuestOrders(guestId);
 
 /**
  * Mark a food order as paid
@@ -421,6 +429,22 @@ export const validateAdminSession = (sessionToken: string): Promise<boolean> =>
  */
 export const logoutAdmin = (sessionToken: string): Promise<boolean> => 
   invoke("logout_admin", { sessionToken });
+
+/**
+ * Get security question for password reset
+ * @returns Security question text
+ */
+export const getSecurityQuestion = (): Promise<string> => 
+  invoke("get_security_question");
+
+/**
+ * Reset admin password using security question
+ * @param answer - Answer to security question
+ * @param newPassword - New password to set
+ * @returns Success status
+ */
+export const resetAdminPassword = (answer: string, newPassword: string): Promise<boolean> => 
+  invoke("reset_admin_password", { answer, newPassword });
 
 // Export & Print APIs
 /**

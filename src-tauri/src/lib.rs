@@ -4,6 +4,10 @@ mod commands;
 mod offline_auth;
 mod test;
 mod simple_commands;
+mod database_reset;
+mod export;
+mod print_templates;
+mod validation;
 
 use db::initialize_database;
 use offline_auth::{
@@ -18,6 +22,9 @@ use simple_commands::{
     dashboard_stats, add_food_order, get_food_orders_by_guest, mark_order_paid,
     add_expense, get_expenses
 };
+use database_reset::{reset_database, get_database_path, get_database_stats};
+use export::{export_history_csv, create_database_backup};
+use print_templates::{build_order_receipt_html, build_final_invoice_html};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -58,7 +65,16 @@ pub fn run() {
             add_expense,
             get_expenses,
             // Dashboard
-            dashboard_stats
+            dashboard_stats,
+            // Database management
+            reset_database,
+            get_database_path,
+            get_database_stats,
+            // Export & Print
+            export_history_csv,
+            create_database_backup,
+            build_order_receipt_html,
+            build_final_invoice_html
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

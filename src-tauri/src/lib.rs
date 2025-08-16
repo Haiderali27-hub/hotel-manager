@@ -1,23 +1,42 @@
+mod models;
+mod db;
+mod commands;
 mod offline_auth;
-mod database;
+mod test;
+mod simple_commands;
+mod database_reset;
+mod export;
+mod print_templates;
+mod validation;
 
+use db::initialize_database;
 use offline_auth::{
     login_admin, get_security_question, reset_admin_password,
     validate_admin_session, logout_admin, cleanup_sessions, logout_all_sessions
 };
-
-use database::{
-    get_dashboard_stats, get_all_guests, add_guest, edit_guest, checkout_guest,
-    get_all_rooms, add_room, edit_room, delete_room,
-    get_all_menu_items, add_menu_item, edit_menu_item, delete_menu_item,
-    get_all_orders, add_order, update_order_status,
-    add_revenue, add_expense, get_financial_summary
+use test::test_command;
+use simple_commands::{
+    add_room, get_rooms, update_room, delete_room,
+    add_guest, get_active_guests, get_all_guests, get_guest, checkout_guest,
+    add_menu_item, get_menu_items, update_menu_item, delete_menu_item,
+    dashboard_stats, add_food_order, get_food_orders, get_food_orders_by_guest, mark_order_paid,
+    add_expense, get_expenses, get_expenses_by_date_range, update_expense, delete_expense
 };
+use database_reset::{reset_database, get_database_path, get_database_stats};
+use export::{export_history_csv, create_database_backup};
+use print_templates::{build_order_receipt_html, build_final_invoice_html};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Initialize database on startup
+    if let Err(e) = initialize_database() {
+        eprintln!("Failed to initialize database: {}", e);
+        std::process::exit(1);
+    }
+
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
+            // Authentication
             login_admin,
             get_security_question, 
             reset_admin_password,
@@ -25,25 +44,46 @@ pub fn run() {
             logout_admin,
             cleanup_sessions,
             logout_all_sessions,
-            get_dashboard_stats,
-            get_all_guests,
-            add_guest,
-            edit_guest,
-            checkout_guest,
-            get_all_rooms,
+            // Test
+            test_command,
+            // Room management
             add_room,
-            edit_room,
+            get_rooms,
+            update_room,
             delete_room,
-            get_all_menu_items,
+            // Guest management
+            add_guest,
+            get_active_guests,
+            get_all_guests,
+            get_guest,
+            checkout_guest,
+            // Menu management
             add_menu_item,
-            edit_menu_item,
+            get_menu_items,
+            update_menu_item,
             delete_menu_item,
-            get_all_orders,
-            add_order,
-            update_order_status,
-            add_revenue,
+            // Food orders
+            add_food_order,
+            get_food_orders,
+            get_food_orders_by_guest,
+            mark_order_paid,
+            // Expenses
             add_expense,
-            get_financial_summary
+            get_expenses,
+            get_expenses_by_date_range,
+            update_expense,
+            delete_expense,
+            // Dashboard
+            dashboard_stats,
+            // Database management
+            reset_database,
+            get_database_path,
+            get_database_stats,
+            // Export & Print
+            export_history_csv,
+            create_database_backup,
+            build_order_receipt_html,
+            build_final_invoice_html
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

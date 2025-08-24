@@ -1,11 +1,18 @@
 import React, { useEffect, useState } from 'react';
+import logoImage from '../assets/Logo/logo.jpg';
 import { useAuth } from '../context/SimpleAuthContext';
+import { getGradientColors, useTheme } from '../context/ThemeContext';
 import type { DashboardStats } from '../services/DatabaseService';
 import DatabaseService from '../services/DatabaseService';
+import AddFoodOrder from './AddFoodOrder';
+import AddGuest from './AddGuest';
 
 const Dashboard: React.FC = () => {
   const { logout } = useAuth();
+  const { theme, colors, toggleTheme } = useTheme();
+  const gradients = getGradientColors(theme);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState('dashboard');
   const [dbStats, setDbStats] = useState<DashboardStats | null>(null);
   const [dbError, setDbError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -13,6 +20,46 @@ const Dashboard: React.FC = () => {
 
   const toggleSidebar = () => {
     setSidebarOpen(!sidebarOpen);
+  };
+
+  const handleNavigation = (title: string) => {
+    switch (title) {
+      case 'Add Guest':
+        setCurrentPage('add-guest');
+        break;
+      case 'Add Food Order':
+        setCurrentPage('add-food-order');
+        break;
+      case 'Active Guests':
+        setCurrentPage('active-guests');
+        break;
+      case 'Add Expense':
+        setCurrentPage('add-expense');
+        break;
+      case 'History':
+        setCurrentPage('history');
+        break;
+      case 'Monthly Report':
+        setCurrentPage('monthly-report');
+        break;
+      case 'Manage Menu / Rooms':
+        setCurrentPage('manage-menu-rooms');
+        break;
+      case 'Settings':
+        setCurrentPage('settings');
+        break;
+      default:
+        setCurrentPage('dashboard');
+    }
+    setSidebarOpen(false); // Close sidebar on mobile after selection
+  };
+
+  const goBackToDashboard = () => {
+    setCurrentPage('dashboard');
+  };
+
+  const refreshData = () => {
+    testDatabase();
   };
 
   // Test database connection
@@ -38,15 +85,6 @@ const Dashboard: React.FC = () => {
     testDatabase();
   }, []);
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-PK', {
-      style: 'currency',
-      currency: 'PKR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount).replace('PKR', 'Rs.');
-  };
-
   // Get display stats (real data when available and test mode is on, otherwise sample data)
   const getDisplayStats = () => {
     if (testMode && dbStats) {
@@ -55,7 +93,7 @@ const Dashboard: React.FC = () => {
           title: 'Total Guests This Month', 
           value: dbStats.totalGuests.toString(), 
           icon: '👥', 
-          color: 'linear-gradient(135deg, #3B82F6, #1D4ED8)',
+          color: gradients.primary,
           change: 'Real Data' 
         },
         { 
@@ -63,7 +101,7 @@ const Dashboard: React.FC = () => {
           value: dbStats.totalIncome.toLocaleString(), 
           currency: 'Rs.', 
           icon: '💰', 
-          color: 'linear-gradient(135deg, #22C55E, #16A34A)',
+          color: gradients.success,
           change: 'Real Data' 
         },
         { 
@@ -71,7 +109,7 @@ const Dashboard: React.FC = () => {
           value: dbStats.totalExpenses.toLocaleString(), 
           currency: 'Rs.', 
           icon: '💸', 
-          color: 'linear-gradient(135deg, #EF4444, #DC2626)',
+          color: gradients.error,
           change: 'Real Data' 
         },
         { 
@@ -80,79 +118,76 @@ const Dashboard: React.FC = () => {
           currency: 'Rs.', 
           icon: dbStats.profitLoss >= 0 ? '📈' : '📉', 
           color: dbStats.profitLoss >= 0 
-            ? 'linear-gradient(135deg, #10B981, #059669)'
-            : 'linear-gradient(135deg, #EF4444, #DC2626)',
+            ? gradients.info
+            : gradients.error,
           change: 'Real Data' 
         },
         { 
           title: 'Total Food Orders', 
           value: dbStats.totalFoodOrders.toString(), 
           icon: '🍽️', 
-          color: 'linear-gradient(135deg, #F59E0B, #D97706)',
+          color: gradients.warning,
           change: 'Real Data' 
         },
         { 
           title: 'Active Guests', 
           value: dbStats.activeGuests.toString(), 
           icon: '👥', 
-          color: 'linear-gradient(135deg, #8B5CF6, #7C3AED)',
+          color: gradients.accent,
           change: 'Real Data' 
         }
       ];
     }
-    
-    // Return sample data
-    return stats;
-  };
 
-  // Sample data for stats - Professional hotel management dashboard
-  const stats = [
-    { 
-      title: 'Total Guests This Month', 
-      value: '248', 
-      icon: '👥', 
-      color: 'linear-gradient(135deg, #3B82F6, #1D4ED8)',
-      change: '+18%' 
-    },
-    { 
-      title: 'Total Income', 
-      value: '2,450,000', 
-      currency: 'Rs.', 
-      icon: '💰', 
-      color: 'linear-gradient(135deg, #22C55E, #16A34A)',
-      change: '+25%' 
-    },
-    { 
-      title: 'Total Expenses', 
-      value: '850,000', 
-      currency: 'Rs.', 
-      icon: '💸', 
-      color: 'linear-gradient(135deg, #EF4444, #DC2626)',
-      change: '+8%' 
-    },
-    { 
-      title: 'Profit/Loss', 
-      value: '1,600,000', 
-      currency: 'Rs.', 
-      icon: '📈', 
-      color: 'linear-gradient(135deg, #10B981, #059669)',
-      change: '+35%' 
-    },
-    { 
-      title: 'Total Food Orders', 
-      value: '432', 
-      icon: '🍽️', 
-      color: 'linear-gradient(135deg, #F59E0B, #D97706)',
-      change: '+22%' 
-    },
-    { 
-      title: 'Active Guests', 
-      value: '67', 
-      icon: '👥', 
-      color: 'linear-gradient(135deg, #8B5CF6, #7C3AED)',
-      change: '+12%' 
-    }
-  ];
+    // Sample data fallback
+    return [
+      { 
+        title: 'Total Guests This Month', 
+        value: '42', 
+        icon: '👥', 
+        color: gradients.primary,
+        change: '+12%' 
+      },
+      { 
+        title: 'Total Income', 
+        value: '84,500', 
+        currency: 'Rs.', 
+        icon: '💰', 
+        color: gradients.success,
+        change: '+8%' 
+      },
+      { 
+        title: 'Total Expenses', 
+        value: '12,300', 
+        currency: 'Rs.', 
+        icon: '💸', 
+        color: gradients.error,
+        change: '-4%' 
+      },
+      { 
+        title: 'Profit/Loss', 
+        value: '72,200', 
+        currency: 'Rs.', 
+        icon: '📈', 
+        color: gradients.info,
+        change: '+15%' 
+      },
+      { 
+        title: 'Total Food Orders', 
+        value: '156', 
+        icon: '🍽️', 
+        color: gradients.warning,
+        change: '+23%' 
+      },
+      { 
+        title: 'Active Guests', 
+        value: '8', 
+        icon: '👥', 
+        color: gradients.accent,
+        change: '+5%' 
+      }
+    ];
+  };
 
   const navigationItems = [
     { title: 'Add Guest', icon: '➕' },
@@ -165,195 +200,13 @@ const Dashboard: React.FC = () => {
     { title: 'Settings', icon: '⚙️' }
   ];
 
-  return (
-    <div style={{
-      width: '100vw',
-      height: '100vh',
-      backgroundColor: '#1E1E2E',
-      color: '#FFFFFF',
-      overflow: 'hidden',
-      display: 'flex',
-      flexDirection: 'column'
-    }}>
-      {/* Header */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '1rem 2rem',
-        backgroundColor: '#2D2D44',
-        borderBottom: '1px solid #3D3D5C'
-      }}>
-        {/* Left side - Logo and Menu */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <button
-            onClick={toggleSidebar}
-            style={{
-              backgroundColor: '#F59E0B',
-              border: 'none',
-              color: '#000',
-              padding: '0.5rem',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '1.2rem',
-              width: '40px',
-              height: '40px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-          >
-            ☰
-          </button>
-          <div style={{
-            backgroundColor: '#F59E0B',
-            color: '#000',
-            padding: '0.5rem 1rem',
-            borderRadius: '6px',
-            fontWeight: 'bold',
-            fontSize: '1.1rem'
-          }}>
-            🏨 Hotel Dashboard
-          </div>
-        </div>
-
-        {/* Right side - Date and Logout */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '0.5rem',
-            color: '#A0A0B0' 
-          }}>
-            <span>📅</span>
-            <span>Thursday, August 14, 2025</span>
-          </div>
-          <button
-            onClick={logout}
-            style={{
-              backgroundColor: '#DC2626',
-              border: 'none',
-              color: 'white',
-              padding: '0.5rem 1rem',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '0.9rem',
-              fontWeight: '500',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem'
-            }}
-          >
-            <span>🚪</span>
-            Log Out
-          </button>
-        </div>
-      </div>
-
-      {/* Sidebar Overlay */}
-      {sidebarOpen && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            zIndex: 998
-          }}
-          onClick={toggleSidebar}
-        />
-      )}
-
-      {/* Sidebar */}
-      <div
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: sidebarOpen ? 0 : '-300px',
-          width: '300px',
-          height: '100vh',
-          backgroundColor: '#2D2D44',
-          transition: 'left 0.3s ease-in-out',
-          zIndex: 999,
-          boxShadow: sidebarOpen ? '4px 0 20px rgba(0, 0, 0, 0.3)' : 'none',
-          padding: '2rem'
-        }}
-      >
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: '2rem',
-          paddingBottom: '1rem',
-          borderBottom: '1px solid #3D3D5C'
-        }}>
-          <h2 style={{
-            color: '#F59E0B',
-            fontSize: '1.5rem',
-            fontWeight: 'bold',
-            margin: 0
-          }}>
-            Navigation
-          </h2>
-          <button
-            onClick={toggleSidebar}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#FFFFFF',
-              fontSize: '1.5rem',
-              cursor: 'pointer'
-            }}
-          >
-            ✕
-          </button>
-        </div>
-
-        {navigationItems.map((item, index) => (
-          <button
-            key={index}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '1rem',
-              padding: '1rem',
-              backgroundColor: 'transparent',
-              border: 'none',
-              color: '#FFFFFF',
-              fontSize: '1rem',
-              cursor: 'pointer',
-              borderRadius: '8px',
-              width: '100%',
-              textAlign: 'left',
-              marginBottom: '0.5rem',
-              transition: 'background-color 0.2s'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#3D3D5C';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-            }}
-          >
-            <span style={{ fontSize: '1.2rem' }}>{item.icon}</span>
-            <span>{item.title}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* Main Content */}
-      <div style={{
-        flex: 1,
-        padding: '2rem',
-        backgroundColor: '#F5F5F5',
-        overflow: 'auto'
-      }}>
+  const renderDashboardContent = () => {
+    return (
+      <div style={{ padding: '2rem' }}>
         {/* Page Title */}
         <div style={{ marginBottom: '2rem' }}>
           <h1 style={{
-            color: '#333',
+            color: colors.text,
             fontSize: '2rem',
             fontWeight: 'bold',
             margin: '0 0 0.5rem 0'
@@ -364,15 +217,15 @@ const Dashboard: React.FC = () => {
 
         {/* Database Test Section */}
         <div style={{
-          backgroundColor: '#fff',
+          backgroundColor: colors.card,
           padding: '1.5rem',
           borderRadius: '12px',
           marginBottom: '2rem',
-          border: '1px solid #E5E7EB',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+          border: `1px solid ${colors.border}`,
+          boxShadow: `0 1px 3px ${colors.shadow}`
         }}>
           <h2 style={{ 
-            color: '#333', 
+            color: colors.text, 
             fontSize: '1.2rem', 
             fontWeight: '600', 
             marginBottom: '1rem',
@@ -388,8 +241,8 @@ const Dashboard: React.FC = () => {
               onClick={testDatabase}
               disabled={loading}
               style={{
-                backgroundColor: loading ? '#9CA3AF' : '#3B82F6',
-                color: 'white',
+                backgroundColor: loading ? colors.textMuted : colors.accent,
+                color: loading ? colors.text : (theme === 'dark' ? '#000' : '#FFFFFF'),
                 padding: '0.5rem 1rem',
                 borderRadius: '6px',
                 border: 'none',
@@ -403,8 +256,8 @@ const Dashboard: React.FC = () => {
             <button
               onClick={() => setTestMode(!testMode)}
               style={{
-                backgroundColor: testMode ? '#10B981' : '#6B7280',
-                color: 'white',
+                backgroundColor: testMode ? colors.success : colors.textMuted,
+                color: '#FFFFFF',
                 padding: '0.5rem 1rem',
                 borderRadius: '6px',
                 border: 'none',
@@ -418,40 +271,35 @@ const Dashboard: React.FC = () => {
 
           {dbError && (
             <div style={{
-              backgroundColor: '#FEF2F2',
-              border: '1px solid #FECACA',
-              color: '#DC2626',
-              padding: '0.75rem',
+              marginTop: '1rem',
+              padding: '1rem',
+              backgroundColor: colors.errorBg,
+              border: `1px solid ${colors.error}`,
               borderRadius: '6px',
-              marginTop: '1rem'
+              color: colors.error
             }}>
-              ❌ Error: {dbError}
+              ❌ {dbError}
             </div>
           )}
 
-          {dbStats && (
+          {dbStats && testMode && (
             <div style={{
-              backgroundColor: '#F0FDF4',
-              border: '1px solid #BBF7D0',
-              color: '#16A34A',
-              padding: '0.75rem',
+              marginTop: '1rem',
+              padding: '1rem',
+              backgroundColor: colors.successBg,
+              border: `1px solid ${colors.success}`,
               borderRadius: '6px',
-              marginTop: '1rem'
+              color: colors.success
             }}>
-              ✅ Database Connected! 
-              <br />
-              <small>
-                Real Data: {dbStats.totalGuests} guests, {formatCurrency(dbStats.totalIncome)} income, 
-                {formatCurrency(dbStats.totalExpenses)} expenses, {dbStats.totalFoodOrders} orders
-              </small>
+              ✅ Database connected successfully! Real data loaded.
             </div>
           )}
         </div>
 
-        {/* Stats Cards */}
+        {/* Stats Grid */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
           gap: '1.5rem',
           marginBottom: '2rem'
         }}>
@@ -460,121 +308,327 @@ const Dashboard: React.FC = () => {
               key={index}
               style={{
                 background: stat.color,
-                padding: '2rem',
-                borderRadius: '12px',
                 color: 'white',
+                padding: '1.5rem',
+                borderRadius: '12px',
+                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
                 position: 'relative',
-                minHeight: '120px',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between'
+                overflow: 'hidden'
               }}
             >
               <div style={{
                 display: 'flex',
-                alignItems: 'center',
                 justifyContent: 'space-between',
-                marginBottom: '1rem'
+                alignItems: 'flex-start',
+                marginBottom: '0.5rem'
               }}>
-                <span style={{ fontSize: '2rem' }}>{stat.icon}</span>
-                <div style={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.2)',
-                  padding: '0.25rem 0.5rem',
-                  borderRadius: '12px',
-                  fontSize: '0.8rem',
-                  fontWeight: 'bold'
-                }}>
-                  {stat.change}
+                <div>
+                  <h3 style={{
+                    fontSize: '0.875rem',
+                    fontWeight: '500',
+                    margin: '0 0 0.5rem 0',
+                    opacity: 0.9
+                  }}>
+                    {stat.title}
+                  </h3>
+                  <p style={{
+                    fontSize: '2rem',
+                    fontWeight: 'bold',
+                    margin: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}>
+                    {stat.currency && <span style={{ fontSize: '1.2rem' }}>{stat.currency}</span>}
+                    {stat.value}
+                  </p>
                 </div>
+                <span style={{ fontSize: '2rem', opacity: 0.8 }}>{stat.icon}</span>
               </div>
-              
-              <div>
-                <h3 style={{
-                  fontSize: '0.9rem',
-                  margin: '0 0 0.5rem 0',
-                  opacity: 0.9,
-                  fontWeight: '500'
-                }}>
-                  {stat.title}
-                </h3>
-                
-                <p style={{
-                  fontSize: '2.5rem',
-                  fontWeight: 'bold',
-                  margin: 0,
-                  lineHeight: 1
-                }}>
-                  {stat.value}
-                  {stat.currency && (
-                    <span style={{ 
-                      fontSize: '1rem', 
-                      marginLeft: '0.5rem',
-                      opacity: 0.8 
-                    }}>
-                      {stat.currency}
-                    </span>
-                  )}
-                </p>
-              </div>
+              <p style={{
+                fontSize: '0.875rem',
+                margin: 0,
+                opacity: 0.8
+              }}>
+                {stat.change}
+              </p>
             </div>
           ))}
         </div>
 
-        {/* Bottom Charts Section */}
+        {/* Charts Section */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
-          gap: '2rem'
+          gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
+          gap: '1.5rem'
         }}>
-          {/* Revenue Chart */}
           <div style={{
-            backgroundColor: 'white',
+            backgroundColor: colors.card,
             padding: '2rem',
             borderRadius: '12px',
-            boxShadow: '0 2px 10px rgba(0, 0, 0, 0.1)'
+            boxShadow: `0 2px 10px ${colors.shadow}`,
+            border: `1px solid ${colors.border}`
           }}>
-            <h3 style={{ color: '#333', marginBottom: '1rem' }}>Revenue</h3>
-            <div style={{
-              fontSize: '2rem',
-              fontWeight: 'bold',
-              color: '#333',
-              marginBottom: '1rem'
-            }}>
-              5,987.34
-            </div>
+            <h3 style={{ color: colors.text, marginBottom: '1rem' }}>Occupancy</h3>
             <div style={{
               height: '200px',
-              backgroundColor: '#F8F9FA',
+              backgroundColor: colors.secondary,
               borderRadius: '8px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#666'
+              color: colors.textMuted
             }}>
-              📊 Revenue Chart
+              📊 Occupancy Chart
             </div>
           </div>
 
-          {/* Revenue Statistics */}
           <div style={{
-            backgroundColor: 'white',
+            backgroundColor: colors.card,
             padding: '2rem',
             borderRadius: '12px',
-            boxShadow: '0 2px 10px rgba(0, 0, 0, 0.1)'
+            boxShadow: `0 2px 10px ${colors.shadow}`,
+            border: `1px solid ${colors.border}`
           }}>
-            <h3 style={{ color: '#333', marginBottom: '1rem' }}>Revenue Statistics</h3>
+            <h3 style={{ color: colors.text, marginBottom: '1rem' }}>Revenue</h3>
             <div style={{
               height: '200px',
-              backgroundColor: '#F8F9FA',
+              backgroundColor: colors.secondary,
               borderRadius: '8px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#666'
+              color: colors.textMuted
             }}>
               📈 Statistics Chart
             </div>
           </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div style={{
+      width: '100vw',
+      height: '100vh',
+      backgroundColor: colors.primary,
+      color: colors.text,
+      overflow: 'hidden',
+      display: 'flex',
+      flexDirection: 'column'
+    }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '1rem 2rem',
+        backgroundColor: '#0a1920',
+        borderBottom: `1px solid ${colors.border}`
+      }}>
+        {/* Left side - Menu */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <button
+            onClick={toggleSidebar}
+            style={{
+              backgroundColor: colors.accent,
+              border: 'none',
+              color: theme === 'dark' ? '#000' : '#FFFFFF',
+              padding: '0.5rem',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '1.2rem',
+              width: '40px',
+              height: '40px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            ☰
+          </button>
+        </div>
+
+        {/* Center - Logo */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flex: 1
+        }}>
+          <img 
+            src={logoImage} 
+            alt="Hotel Logo"
+            style={{
+              height: '50px',
+              width: 'auto',
+              objectFit: 'contain'
+            }}
+          />
+        </div>
+
+        {/* Right side - Theme toggle, User info and logout */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <button
+            onClick={toggleTheme}
+            style={{
+              backgroundColor: colors.surface,
+              border: `1px solid ${colors.border}`,
+              color: colors.text,
+              padding: '0.5rem',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '1.2rem',
+              width: '40px',
+              height: '40px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
+          <span style={{ color: colors.textMuted }}>Admin</span>
+          <button
+            onClick={logout}
+            style={{
+              backgroundColor: colors.error,
+              border: 'none',
+              color: '#FFFFFF',
+              padding: '0.5rem 1rem',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '0.875rem',
+              fontWeight: '500'
+            }}
+          >
+            Logout
+          </button>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        {/* Sidebar */}
+        <div style={{
+          width: sidebarOpen ? '250px' : '0',
+          backgroundColor: colors.secondary,
+          transition: 'width 0.3s ease',
+          overflow: 'hidden',
+          borderRight: `1px solid ${colors.border}`
+        }}>
+          <div style={{ padding: '1rem', width: '250px' }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '1rem',
+              paddingBottom: '1rem',
+              borderBottom: `1px solid ${colors.border}`
+            }}>
+              <h3 style={{
+                color: colors.accent,
+                fontSize: '1.1rem',
+                fontWeight: '600',
+                margin: 0
+              }}>
+                Navigation
+              </h3>
+              <button
+                onClick={toggleSidebar}
+                style={{
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  color: colors.textMuted,
+                  fontSize: '1.2rem',
+                  cursor: 'pointer'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {navigationItems.map((item, index) => (
+              <button
+                key={index}
+                onClick={() => handleNavigation(item.title)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '1rem',
+                  padding: '1rem',
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  color: colors.text,
+                  fontSize: '1rem',
+                  cursor: 'pointer',
+                  borderRadius: '8px',
+                  width: '100%',
+                  textAlign: 'left',
+                  marginBottom: '0.5rem',
+                  transition: 'background-color 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = colors.surface;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                }}
+              >
+                <span style={{ fontSize: '1.2rem' }}>{item.icon}</span>
+                <span>{item.title}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div style={{
+          flex: 1,
+          backgroundColor: currentPage === 'dashboard' ? (theme === 'light' ? '#F5F5F5' : colors.primary) : colors.primary,
+          overflow: 'auto'
+        }}>
+          {currentPage === 'dashboard' && renderDashboardContent()}
+          {currentPage === 'add-guest' && (
+            <AddGuest 
+              onBack={goBackToDashboard} 
+              onGuestAdded={refreshData}
+            />
+          )}
+          {currentPage === 'add-food-order' && (
+            <AddFoodOrder 
+              onBack={goBackToDashboard} 
+              onOrderAdded={refreshData}
+            />
+          )}
+          {/* TODO: Add other page components */}
+          {currentPage !== 'dashboard' && currentPage !== 'add-guest' && currentPage !== 'add-food-order' && (
+            <div style={{
+              padding: '2rem',
+              color: colors.text,
+              textAlign: 'center'
+            }}>
+              <h1>Coming Soon</h1>
+              <p style={{ color: colors.textSecondary }}>This feature is under development.</p>
+              <button
+                onClick={goBackToDashboard}
+                style={{
+                  backgroundColor: colors.accent,
+                  color: theme === 'dark' ? '#000' : '#FFFFFF',
+                  border: 'none',
+                  padding: '0.75rem 1.5rem',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '1rem',
+                  fontWeight: '600',
+                  marginTop: '1rem'
+                }}
+              >
+                Back to Dashboard
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

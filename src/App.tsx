@@ -4,6 +4,7 @@ import './App.css';
 import Dashboard from './components/Dashboard';
 import OfflineLoginPage from './components/OfflineLoginPage';
 import { AuthProvider, useAuth } from './context/SimpleAuthContext';
+import { ThemeProvider } from './context/ThemeContext';
 
 const AppContent: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -48,9 +49,11 @@ const AppContent: React.FC = () => {
 function App() {
   console.log('🚀 App component rendering');
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 

@@ -192,7 +192,7 @@ pub fn delete_room(id: i64) -> Result<String, String> {
 // ===== GUEST COMMANDS =====
 
 #[command]
-pub fn add_guest(name: String, phone: Option<String>, room_id: i64, check_in: String, check_out: Option<String>, daily_rate: f64) -> Result<i64, String> {
+pub fn add_guest(name: String, phone: Option<String>, room_id: Option<i64>, check_in: String, check_out: Option<String>, daily_rate: f64) -> Result<i64, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     // Validate inputs
@@ -206,15 +206,29 @@ pub fn add_guest(name: String, phone: Option<String>, room_id: i64, check_in: St
         return Err("Guest name cannot be empty".to_string());
     }
     
-    // Validate room exists and is active
-    let room_exists: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM rooms WHERE id = ?1 AND is_active = 1",
-        params![room_id],
-        |row| row.get(0)
-    ).map_err(|e| e.to_string())?;
-    
-    if room_exists == 0 {
-        return Err("Room not found or inactive".to_string());
+    // For walk-in customers (no room), room_id will be None
+    if let Some(room_id_val) = room_id {
+        // Validate room exists and is active
+        let room_exists: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM rooms WHERE id = ?1 AND is_active = 1",
+            params![room_id_val],
+            |row| row.get(0)
+        ).map_err(|e| e.to_string())?;
+        
+        if room_exists == 0 {
+            return Err("Room not found or inactive".to_string());
+        }
+        
+        // Check if room is already occupied
+        let room_occupied: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM rooms WHERE id = ?1 AND is_occupied = 1",
+            params![room_id_val],
+            |row| row.get(0)
+        ).map_err(|e| e.to_string())?;
+        
+        if room_occupied > 0 {
+            return Err("Room is already occupied".to_string());
+        }
     }
     
     let now = get_current_timestamp();
@@ -231,11 +245,13 @@ pub fn add_guest(name: String, phone: Option<String>, room_id: i64, check_in: St
     
     let guest_id = tx.last_insert_rowid();
     
-    // Update room status to occupied
-    tx.execute(
-        "UPDATE rooms SET is_occupied = 1 WHERE id = ?1",
-        params![room_id],
-    ).map_err(|e| e.to_string())?;
+    // Update room status to occupied only if room_id is provided
+    if let Some(room_id_val) = room_id {
+        tx.execute(
+            "UPDATE rooms SET is_occupied = 1, guest_id = ?1 WHERE id = ?2",
+            params![guest_id, room_id_val],
+        ).map_err(|e| e.to_string())?;
+    }
     
     // Commit the transaction
     tx.commit().map_err(|e| e.to_string())?;
@@ -248,11 +264,14 @@ pub fn get_active_guests() -> Result<Vec<ActiveGuestRow>, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     let mut stmt = conn.prepare(
-        "SELECT g.id, g.name, r.number, g.check_in, g.check_out, g.daily_rate 
+        "SELECT g.id, g.name, r.number, g.check_in, g.check_out, g.daily_rate, 
+                CASE WHEN g.room_id IS NULL THEN 1 ELSE 0 END as is_walkin
          FROM guests g 
-         JOIN rooms r ON g.room_id = r.id 
+         LEFT JOIN rooms r ON g.room_id = r.id 
          WHERE g.status = 'active'
-         ORDER BY r.number"
+         ORDER BY 
+            CASE WHEN g.room_id IS NULL THEN 1 ELSE 0 END,  -- Walk-ins first
+            r.number"
     ).map_err(|e| e.to_string())?;
     
     let guest_iter = stmt.query_map([], |row| {
@@ -263,69 +282,13 @@ pub fn get_active_guests() -> Result<Vec<ActiveGuestRow>, String> {
             check_in: row.get(3)?,
             check_out: row.get(4)?,
             daily_rate: row.get(5)?,
+            is_walkin: row.get::<_, i32>(6)? == 1,
         })
     }).map_err(|e| e.to_string())?;
     
     let mut guests = Vec::new();
     for guest in guest_iter {
         guests.push(guest.map_err(|e| e.to_string())?);
-    }
-    
-    Ok(guests)
-}
-
-#[command]
-pub fn get_active_guests_with_walkins() -> Result<Vec<ActiveGuestRow>, String> {
-    let conn = get_db_connection().map_err(|e| e.to_string())?;
-    
-    // Get regular guests
-    let mut stmt = conn.prepare(
-        "SELECT g.id, g.name, r.number, g.check_in, g.check_out, g.daily_rate 
-         FROM guests g 
-         JOIN rooms r ON g.room_id = r.id 
-         WHERE g.status = 'active'
-         ORDER BY r.number"
-    ).map_err(|e| e.to_string())?;
-    
-    let guest_iter = stmt.query_map([], |row| {
-        Ok(ActiveGuestRow {
-            guest_id: row.get(0)?,
-            name: row.get(1)?,
-            room_number: row.get(2)?,
-            check_in: row.get(3)?,
-            check_out: row.get(4)?,
-            daily_rate: row.get(5)?,
-        })
-    }).map_err(|e| e.to_string())?;
-    
-    let mut guests = Vec::new();
-    for guest in guest_iter {
-        guests.push(guest.map_err(|e| e.to_string())?);
-    }
-    
-    // Get walk-in customers who have unpaid orders
-    let mut walkin_stmt = conn.prepare(
-        "SELECT DISTINCT -1 as id, customer_name, 'Walk-in' as room_number, 
-                DATE('now') as check_in, NULL as check_out, 0 as daily_rate
-         FROM food_orders 
-         WHERE customer_type = 'walk-in' AND customer_name IS NOT NULL 
-         AND paid = 0
-         ORDER BY customer_name"
-    ).map_err(|e| e.to_string())?;
-    
-    let walkin_iter = walkin_stmt.query_map([], |row| {
-        Ok(ActiveGuestRow {
-            guest_id: row.get(0)?,
-            name: row.get(1)?,
-            room_number: row.get(2)?,
-            check_in: row.get(3)?,
-            check_out: row.get(4)?,
-            daily_rate: row.get(5)?,
-        })
-    }).map_err(|e| e.to_string())?;
-    
-    for walkin in walkin_iter {
-        guests.push(walkin.map_err(|e| e.to_string())?);
     }
     
     Ok(guests)
@@ -336,9 +299,11 @@ pub fn get_all_guests() -> Result<Vec<ActiveGuestRow>, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     let mut stmt = conn.prepare(
-        "SELECT g.id, g.name, r.number, g.check_in, g.check_out, g.daily_rate, g.status
+        "SELECT g.id, g.name, r.number, g.check_in, g.check_out, g.daily_rate, 
+                CASE WHEN g.room_id IS NULL THEN 1 ELSE 0 END as is_walkin
          FROM guests g 
-         JOIN rooms r ON g.room_id = r.id 
+         LEFT JOIN rooms r ON g.room_id = r.id 
+         WHERE g.status = 'active'
          ORDER BY g.created_at DESC"
     ).map_err(|e| e.to_string())?;
     
@@ -350,6 +315,7 @@ pub fn get_all_guests() -> Result<Vec<ActiveGuestRow>, String> {
             check_in: row.get(3)?,
             check_out: row.get(4)?,
             daily_rate: row.get(5)?,
+            is_walkin: row.get::<_, i32>(6)? == 1,
         })
     }).map_err(|e| e.to_string())?;
     
@@ -366,9 +332,10 @@ pub fn get_guest(guest_id: i64) -> Result<ActiveGuestRow, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     let result = conn.query_row(
-        "SELECT g.id, g.name, r.number, g.check_in, g.check_out, g.daily_rate 
+        "SELECT g.id, g.name, r.number, g.check_in, g.check_out, g.daily_rate,
+                CASE WHEN g.room_id IS NULL THEN 1 ELSE 0 END as is_walkin
          FROM guests g 
-         JOIN rooms r ON g.room_id = r.id 
+         LEFT JOIN rooms r ON g.room_id = r.id 
          WHERE g.id = ?1",
         params![guest_id],
         |row| {
@@ -379,6 +346,7 @@ pub fn get_guest(guest_id: i64) -> Result<ActiveGuestRow, String> {
                 check_in: row.get(3)?,
                 check_out: row.get(4)?,
                 daily_rate: row.get(5)?,
+                is_walkin: row.get::<_, i32>(6)? == 1,
             })
         }
     ).map_err(|e| {
@@ -835,32 +803,15 @@ pub fn add_food_order(guest_id: Option<i64>, customer_type: String, customer_nam
         return Err("Order must have at least one item".to_string());
     }
     
-    // Validate customer information
-    if customer_type == "walk-in" {
-        if customer_name.is_none() || customer_name.as_ref().unwrap().trim().is_empty() {
-            return Err("Walk-in customer name is required".to_string());
-        }
-    } else if customer_type == "guest" {
-        if guest_id.is_none() {
-            return Err("Guest must be selected for guest orders".to_string());
-        }
-    }
-    
     // Calculate total
     let total_amount: f64 = items.iter().map(|item| item.unit_price * item.quantity as f64).sum();
     
-    // For walk-in customers, explicitly set guest_id to NULL
-    let final_guest_id = if customer_type == "walk-in" { None } else { guest_id };
-    
-    // Insert order with proper NULL handling for walk-in customers
+    // Insert order
     let _rows_affected = conn.execute(
         "INSERT INTO food_orders (guest_id, customer_type, customer_name, created_at, paid, total_amount) 
          VALUES (?1, ?2, ?3, ?4, 0, ?5)",
-        params![final_guest_id, customer_type, customer_name, get_current_timestamp(), total_amount],
-    ).map_err(|e| {
-        eprintln!("Database error: {}", e);
-        format!("Failed to create food order: {}", e)
-    })?;
+        params![guest_id, customer_type, customer_name, get_current_timestamp(), total_amount],
+    ).map_err(|e| e.to_string())?;
     
     let order_id = conn.last_insert_rowid();
     
@@ -871,7 +822,7 @@ pub fn add_food_order(guest_id: Option<i64>, customer_type: String, customer_nam
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![order_id, item.menu_item_id, item.item_name, item.unit_price, item.quantity, 
                    item.unit_price * item.quantity as f64],
-        ).map_err(|e| format!("Failed to add order item: {}", e))?;
+        ).map_err(|e| e.to_string())?;
     }
     
     Ok(order_id)
@@ -920,34 +871,6 @@ pub fn get_food_orders() -> Result<Vec<FoodOrderSummary>, String> {
     ).map_err(|e| e.to_string())?;
     
     let orders = stmt.query_map([], |row| {
-        Ok(FoodOrderSummary {
-            id: row.get(0)?,
-            created_at: row.get(1)?,
-            paid: row.get::<_, i32>(2)? == 1,
-            paid_at: row.get(3)?,
-            total_amount: row.get(4)?,
-            items: row.get::<_, Option<String>>(5)?.unwrap_or_default(),
-        })
-    }).map_err(|e| e.to_string())?;
-    
-    orders.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
-}
-
-#[command]
-pub fn get_food_orders_by_walkin(customer_name: String) -> Result<Vec<FoodOrderSummary>, String> {
-    let conn = get_db_connection().map_err(|e| e.to_string())?;
-    
-    let mut stmt = conn.prepare(
-        "SELECT fo.id, fo.created_at, fo.paid, fo.paid_at, fo.total_amount,
-                GROUP_CONCAT(oi.item_name || ' x' || oi.quantity) as items
-         FROM food_orders fo
-         LEFT JOIN order_items oi ON fo.id = oi.order_id
-         WHERE fo.customer_type = 'walk-in' AND fo.customer_name = ?1
-         GROUP BY fo.id, fo.created_at, fo.paid, fo.paid_at, fo.total_amount
-         ORDER BY fo.created_at DESC"
-    ).map_err(|e| e.to_string())?;
-    
-    let orders = stmt.query_map([customer_name], |row| {
         Ok(FoodOrderSummary {
             id: row.get(0)?,
             created_at: row.get(1)?,

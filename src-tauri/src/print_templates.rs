@@ -84,28 +84,30 @@ pub fn build_order_receipt_html(orderId: i64) -> Result<String, String> {
     let order_id = orderId;
     let conn = crate::db::get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
     
-    // Get order details
+    // Get order details with optional guest information
     let mut stmt = conn.prepare(
-        "SELECT fo.id, fo.created_at, fo.total_amount, fo.paid,
+        "SELECT fo.id, fo.created_at, fo.total_amount, fo.paid, fo.customer_type, fo.customer_name,
                 g.name as guest_name, r.number as room_number
          FROM food_orders fo
-         JOIN guests g ON fo.guest_id = g.id
-         JOIN rooms r ON g.room_id = r.id
+         LEFT JOIN guests g ON fo.guest_id = g.id
+         LEFT JOIN rooms r ON g.room_id = r.id
          WHERE fo.id = ?"
     ).map_err(|e| format!("Failed to prepare order query: {}", e))?;
     
     let order_row = stmt.query_row([order_id], |row| {
         Ok((
-            row.get::<_, i64>(0)?,       // id
-            row.get::<_, String>(1)?,    // created_at
-            row.get::<_, f64>(2)?,       // total_amount
-            row.get::<_, i64>(3)?,       // paid (INTEGER, not bool)
-            row.get::<_, String>(4)?,    // guest_name
-            row.get::<_, String>(5)?,    // room_number
+            row.get::<_, i64>(0)?,                          // id
+            row.get::<_, String>(1)?,                       // created_at
+            row.get::<_, f64>(2)?,                          // total_amount
+            row.get::<_, i64>(3)?,                          // paid (INTEGER, not bool)
+            row.get::<_, String>(4)?,                       // customer_type
+            row.get::<_, Option<String>>(5)?,               // customer_name
+            row.get::<_, Option<String>>(6)?,               // guest_name (from guests table)
+            row.get::<_, Option<String>>(7)?,               // room_number
         ))
     }).map_err(|e| format!("Order not found: {}", e))?;
     
-    let (_id, created_at, total_amount, paid_status, guest_name, room_number) = order_row;
+    let (_id, created_at, total_amount, paid_status, customer_type, customer_name, guest_name, room_number) = order_row;
     let is_paid = paid_status != 0;
     
     // Get logo as base64
@@ -148,6 +150,22 @@ pub fn build_order_receipt_html(orderId: i64) -> Result<String, String> {
     let payment_status = if is_paid { "✓ PAID" } else { "⚠ UNPAID" };
     let payment_color = if is_paid { "#28a745" } else { "#dc3545" };
     
+    // Determine customer display information
+    let customer_display = match customer_type.as_str() {
+        "walk_in" => {
+            customer_name.unwrap_or_else(|| "Walk-in Customer".to_string())
+        },
+        _ => {
+            guest_name.unwrap_or_else(|| "Guest".to_string())
+        }
+    };
+    
+    let room_display = if customer_type == "walk_in" {
+        "Walk-in".to_string()
+    } else {
+        room_number.unwrap_or_else(|| "N/A".to_string())
+    };
+
     let html = format!(r#"<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -278,7 +296,7 @@ pub fn build_order_receipt_html(orderId: i64) -> Result<String, String> {
             <span>{}</span>
         </div>
         <div class="info-row">
-            <span class="info-label">Guest:</span>
+            <span class="info-label">Customer:</span>
             <span>{}</span>
         </div>
         <div class="info-row">
@@ -322,8 +340,8 @@ pub fn build_order_receipt_html(orderId: i64) -> Result<String, String> {
         logo_base64,
         order_id,
         formatted_date,
-        html_escape(&guest_name),
-        html_escape(&room_number),
+        html_escape(&customer_display),
+        html_escape(&room_display),
         payment_status,
         items_html,
         total_amount,

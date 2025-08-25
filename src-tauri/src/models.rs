@@ -17,7 +17,7 @@ pub struct Room {
 pub struct NewGuest {
     pub name: String,
     pub phone: Option<String>,
-    pub room_id: i64,
+    pub room_id: Option<i64>,  // Changed to Option to support walk-in customers
     pub check_in: String, // YYYY-MM-DD format
     pub check_out: Option<String>, // YYYY-MM-DD format
     pub daily_rate: f64,
@@ -28,7 +28,7 @@ pub struct Guest {
     pub id: i64,
     pub name: String,
     pub phone: Option<String>,
-    pub room_id: i64,
+    pub room_id: Option<i64>,  // Changed to Option to support walk-in customers
     pub check_in: String,
     pub check_out: Option<String>,
     pub daily_rate: f64,
@@ -41,10 +41,11 @@ pub struct Guest {
 pub struct ActiveGuestRow {
     pub guest_id: i64,
     pub name: String,
-    pub room_number: String,
+    pub room_number: Option<String>,  // Changed to Option for walk-in customers
     pub check_in: String,
     pub check_out: Option<String>,
     pub daily_rate: f64,
+    pub is_walkin: bool,  // New field to identify walk-in customers
 }
 
 #[derive(Debug, Serialize, Deserialize)]

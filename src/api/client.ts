@@ -61,16 +61,17 @@ export interface Guest {
 export interface ActiveGuestRow {
   guest_id: number;
   name: string;
-  room_number: string;
+  room_number?: string;  // Optional for walk-in customers
   check_in: string;
   check_out?: string;
   daily_rate: number;
+  is_walkin: boolean;  // New field to identify walk-in customers
 }
 
 export interface NewGuest {
   name: string;
   phone?: string;
-  room_id: number;
+  room_id?: number;  // Optional for walk-in customers
   check_in: string;
   check_out?: string;
   daily_rate: number;
@@ -143,7 +144,7 @@ export interface FoodOrderDetails {
 }
 
 export interface NewFoodOrder {
-  guest_id: number;
+  guest_id: number | null;  // Allow null for walk-in customers
   items: OrderItem[];
 }
 
@@ -301,7 +302,7 @@ export const addGuest = (guest: NewGuest): Promise<number> =>
   invoke("add_guest", { 
     name: guest.name,
     phone: guest.phone,
-    roomId: guest.room_id,
+    roomId: guest.room_id || null,  // Pass null for walk-in customers
     checkIn: guest.check_in,
     checkOut: guest.check_out,
     dailyRate: guest.daily_rate
@@ -313,18 +314,6 @@ export const addGuest = (guest: NewGuest): Promise<number> =>
  */
 export const getActiveGuests = (): Promise<ActiveGuestRow[]> => 
   invoke("get_active_guests");
-
-/**
- * Get active guests including walk-in customers with unpaid orders
- * @returns Array of active guests and walk-in customers
- * @example
- * ```ts
- * const allActiveCustomers = await getActiveGuestsWithWalkins();
- * console.log(`Found ${allActiveCustomers.length} active customers`);
- * ```
- */
-export const getActiveGuestsWithWalkins = (): Promise<ActiveGuestRow[]> => 
-  invoke("get_active_guests_with_walkins");
 
 /**
  * Get all guests (active and checked out)
@@ -470,14 +459,6 @@ export const getGuestOrders = (guestId: number): Promise<FoodOrder[]> =>
  */
 export const getFoodOrdersByGuest = (guestId: number): Promise<FoodOrderSummary[]> => 
   invoke("get_food_orders_by_guest", { guestId });
-
-/**
- * Get food orders for a walk-in customer by name
- * @param customerName - Name of the walk-in customer
- * @returns Array of food orders for the walk-in customer
- */
-export const getFoodOrdersByWalkin = (customerName: string): Promise<FoodOrderSummary[]> => 
-  invoke("get_food_orders_by_walkin", { customerName });
 
 /**
  * Mark a food order as paid

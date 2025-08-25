@@ -4,10 +4,8 @@ import {
     checkoutGuest,
     deleteFoodOrder,
     getActiveGuests,
-    getActiveGuestsWithWalkins,
     getAvailableRoomsForGuest,
     getFoodOrdersByGuest,
-    getFoodOrdersByWalkin,
     printOrderReceipt,
     toggleFoodOrderPayment,
     updateGuest
@@ -50,6 +48,10 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
   const [editRoomId, setEditRoomId] = useState<number>(0);
   const [editDailyRate, setEditDailyRate] = useState('');
 
+  // Separate guests by type
+  const roomGuests = guests.filter(guest => !guest.is_walkin);
+  const walkinGuests = guests.filter(guest => guest.is_walkin);
+
   useEffect(() => {
     loadActiveGuests();
   }, []);
@@ -79,22 +81,6 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
   };
 
   const calculateGuestTotals = (guest: ActiveGuestRow, foodOrders: FoodOrderSummary[]) => {
-    // For walk-in customers (guest_id === -1), no room charges
-    if (guest.guest_id === -1) {
-      const unpaidFoodTotal = foodOrders
-        .filter(order => !order.paid)
-        .reduce((sum, order) => sum + order.total_amount, 0);
-      
-      return {
-        stayDays: 0,
-        roomCharges: 0,
-        unpaidFoodTotal,
-        totalAmountDue: unpaidFoodTotal,
-        totalFoodOrders: foodOrders.length,
-        foodOrders
-      };
-    }
-    
     // Calculate stay days: if checkout date exists, use it; otherwise use today's date
     const endDate = guest.check_out ? new Date(guest.check_out) : new Date();
     const startDate = new Date(guest.check_in);
@@ -119,16 +105,14 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
   const loadActiveGuests = async () => {
     try {
       setLoading(true);
-      const response = await getActiveGuestsWithWalkins();
+      const response = await getActiveGuests();
       
       // Transform response to include required properties and load food orders
       const guestsWithOrders: ActiveGuestWithOrders[] = await Promise.all(
         response.map(async (guest: ActiveGuestRow) => {
           try {
-            // Load food orders for each guest (or walk-in customer)
-            const foodOrders = guest.guest_id === -1 
-              ? await getFoodOrdersByWalkin(guest.name) // Walk-in customers
-              : await getFoodOrdersByGuest(guest.guest_id); // Regular guests
+            // Load food orders for each guest
+            const foodOrders = await getFoodOrdersByGuest(guest.guest_id);
             const totals = calculateGuestTotals(guest, foodOrders);
             
             return {
@@ -396,237 +380,417 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
             No active guests found
           </div>
         ) : (
-          guests.map((guest) => (
-            <React.Fragment key={guest.guest_id}>
-              {/* Main Guest Row */}
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '180px 100px 160px 80px 120px 120px 250px',
-                  padding: '1rem',
-                  borderBottom: `1px solid ${colors.border}`,
-                  alignItems: 'center',
-                  gap: '1rem'
-                }}
-              >
-                <div style={{ fontWeight: '500' }}>{guest.name}</div>
-                <div>{guest.guest_id === -1 ? 'Walk-in Customer' : `Room ${guest.room_number}`}</div>
-                <div style={{ fontSize: '0.875rem', color: colors.textSecondary }}>
-                  {guest.guest_id === -1 ? (
-                    <div>Walk-in Customer</div>
-                  ) : (
-                    <>
-                      <div>{formatDate(guest.check_in)}</div>
-                      <div>{guest.check_out ? formatDate(guest.check_out) : 'Open'}</div>
-                    </>
-                  )}
-                </div>
-                <div style={{ textAlign: 'center' }}>{guest.guest_id === -1 ? '-' : guest.stayDays}</div>
-                <div style={{ textAlign: 'center' }}>
-                  <button
-                    onClick={() => handleToggleGuestOrders(guest.guest_id)}
-                    style={{
-                      backgroundColor: guest.totalFoodOrders > 0 ? colors.accent : colors.textMuted,
-                      color: '#FFFFFF',
-                      border: 'none',
-                      padding: '0.5rem 1rem',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontSize: '0.875rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.5rem'
-                    }}
-                  >
-                    {guest.totalFoodOrders} Orders
-                    {guest.totalFoodOrders > 0 && (
-                      <span style={{ fontSize: '0.75rem' }}>
-                        {expandedGuest === guest.guest_id ? '▲' : '▼'}
-                      </span>
-                    )}
-                  </button>
-                </div>
-                <div style={{ 
-                  textAlign: 'center', 
-                  fontWeight: '600', 
-                  color: colors.accent,
-                  fontSize: '0.95rem'
-                }}>
-                  RS {guest.totalAmountDue.toLocaleString()}
-                </div>
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  {guest.guest_id !== -1 && (
-                    <button
-                      onClick={() => handleEditGuest(guest)}
-                      style={{
-                        backgroundColor: colors.warning,
-                        color: '#FFFFFF',
-                        border: 'none',
-                        padding: '0.5rem 1rem',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontSize: '0.875rem'
-                      }}
-                    >
-                      Edit
-                    </button>
-                  )}
-                  <button
-                    onClick={() => onAddOrder(guest.guest_id)}
-                    style={{
-                      backgroundColor: colors.accent,
-                      color: '#FFFFFF',
-                      border: 'none',
-                      padding: '0.5rem 1rem',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontSize: '0.875rem'
-                    }}
-                  >
-                    Add Order
-                  </button>
-                  {guest.guest_id !== -1 && (
-                    <button
-                      onClick={() => handleCheckoutGuest(guest.guest_id, guest.name)}
-                      style={{
-                        backgroundColor: colors.success,
-                        color: '#FFFFFF',
-                        border: 'none',
-                        padding: '0.5rem 1rem',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontSize: '0.875rem'
-                      }}
-                    >
-                      Checkout
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Expanded Food Orders */}
-              {expandedGuest === guest.guest_id && (
+          <>
+            {/* Room Guests Section */}
+            {roomGuests.length > 0 && (
+              <>
                 <div style={{
                   backgroundColor: colors.secondary,
-                  padding: '1rem',
-                  borderBottom: `1px solid ${colors.border}`
+                  padding: '0.75rem 1rem',
+                  fontWeight: '600',
+                  fontSize: '1.1rem',
+                  color: colors.accent,
+                  borderBottom: `2px solid ${colors.accent}`
                 }}>
-                  <h4 style={{ margin: '0 0 1rem 0', color: colors.accent }}>
-                    Food Orders for {guest.name}
-                  </h4>
-                  {guest.foodOrders && guest.foodOrders.length > 0 ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                      {guest.foodOrders.map((order) => (
-                      <div
-                        key={order.id}
-                        style={{
-                          backgroundColor: colors.surface,
-                          padding: '1rem',
-                          borderRadius: '8px',
-                          border: `1px solid ${colors.border}`,
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center'
-                        }}
-                      >
-                        <div style={{ flex: 1 }}>
-                          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                            <div style={{ fontWeight: '500' }}>
-                              Order #{order.id}
-                            </div>
-                            <div style={{ 
-                              fontSize: '0.875rem', 
-                              color: colors.textSecondary 
-                            }}>
-                              {formatDateTime(order.created_at)}
-                            </div>
-                            <div style={{
-                              padding: '0.25rem 0.5rem',
-                              borderRadius: '4px',
-                              fontSize: '0.75rem',
-                              fontWeight: '500',
-                              backgroundColor: order.paid ? '#22C55E' : '#F59E0B',
-                              color: '#FFFFFF'
-                            }}>
-                              {order.paid ? 'PAID' : 'UNPAID'}
-                            </div>
-                          </div>
-                          <div style={{ 
-                            fontSize: '0.875rem', 
-                            color: colors.textSecondary,
-                            marginTop: '0.25rem'
-                          }}>
-                            Items: {order.items || 'No items listed'}
-                          </div>
-                          <div style={{ 
-                            fontWeight: '500',
-                            color: colors.accent,
-                            marginTop: '0.25rem'
-                          }}>
-                            Total: {formatCurrency(order.total_amount)}
-                          </div>
-                        </div>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <button
-                            onClick={() => handlePrintReceipt(order.id)}
-                            style={{
-                              backgroundColor: '#3B82F6',
-                              color: '#FFFFFF',
-                              border: 'none',
-                              padding: '0.5rem',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                              fontSize: '0.75rem'
-                            }}
-                          >
-                            Print
-                          </button>
-                          <button
-                            onClick={() => handleTogglePayment(order.id)}
-                            style={{
-                              backgroundColor: order.paid ? '#EF4444' : '#22C55E',
-                              color: '#FFFFFF',
-                              border: 'none',
-                              padding: '0.5rem',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                              fontSize: '0.75rem'
-                            }}
-                          >
-                            {order.paid ? 'Mark Unpaid' : 'Mark Paid'}
-                          </button>
-                          <button
-                            onClick={() => handleDeleteOrder(order.id)}
-                            style={{
-                              backgroundColor: '#EF4444',
-                              color: '#FFFFFF',
-                              border: 'none',
-                              padding: '0.5rem',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                              fontSize: '0.75rem'
-                            }}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                    </div>
-                  ) : (
-                    <div style={{ 
-                      textAlign: 'center', 
-                      color: colors.textMuted,
-                      fontSize: '0.875rem',
-                      padding: '1rem'
-                    }}>
-                      No food orders found for this guest.
-                    </div>
-                  )}
+                  🏨 Room Guests ({roomGuests.length})
                 </div>
-              )}
-            </React.Fragment>
-          ))
+                {roomGuests.map((guest) => (
+                  <React.Fragment key={guest.guest_id}>
+                    {/* Main Guest Row */}
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '180px 100px 160px 80px 120px 120px 250px',
+                        backgroundColor: colors.surface,
+                        padding: '1rem',
+                        borderBottom: `1px solid ${colors.border}`,
+                        alignItems: 'center',
+                        gap: '1rem'
+                      }}
+                    >
+                      <div style={{ fontWeight: '500' }}>{guest.name}</div>
+                      <div>Room {guest.room_number}</div>
+                      <div style={{ fontSize: '0.875rem', color: colors.textSecondary }}>
+                        <div>{formatDate(guest.check_in)}</div>
+                        <div>{guest.check_out ? formatDate(guest.check_out) : 'Open'}</div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>{guest.stayDays}</div>
+                      <div style={{ textAlign: 'center' }}>
+                        {formatCurrency(guest.unpaidFoodTotal)}
+                        {guest.totalFoodOrders > 0 && (
+                          <div style={{ fontSize: '0.75rem', color: colors.textMuted }}>
+                            {guest.totalFoodOrders} orders
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ fontWeight: '600', color: colors.accent }}>
+                        {formatCurrency(guest.totalAmountDue)}
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <button
+                          onClick={() => handleEditGuest(guest)}
+                          style={{
+                            backgroundColor: colors.warning,
+                            color: '#FFFFFF',
+                            border: 'none',
+                            padding: '0.4rem 0.8rem',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '0.75rem'
+                          }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => onAddOrder(guest.guest_id)}
+                          style={{
+                            backgroundColor: colors.accent,
+                            color: '#FFFFFF',
+                            border: 'none',
+                            padding: '0.4rem 0.8rem',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '0.75rem'
+                          }}
+                        >
+                          Add Order
+                        </button>
+                        <button
+                          onClick={() => setExpandedGuest(expandedGuest === guest.guest_id ? null : guest.guest_id)}
+                          style={{
+                            backgroundColor: colors.accent,
+                            color: '#FFFFFF',
+                            border: 'none',
+                            padding: '0.4rem 0.8rem',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '0.75rem'
+                          }}
+                        >
+                          {expandedGuest === guest.guest_id ? 'Hide' : 'Orders'}
+                        </button>
+                        <button
+                          onClick={() => handleCheckoutGuest(guest.guest_id, guest.name)}
+                          style={{
+                            backgroundColor: colors.success,
+                            color: '#FFFFFF',
+                            border: 'none',
+                            padding: '0.4rem 0.8rem',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '0.75rem'
+                          }}
+                        >
+                          Checkout
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Expanded Food Orders */}
+                    {expandedGuest === guest.guest_id && guest.foodOrders && (
+                      <div style={{
+                        backgroundColor: colors.secondary,
+                        padding: '1rem',
+                        borderBottom: `1px solid ${colors.border}`
+                      }}>
+                        <h4 style={{ margin: '0 0 1rem 0', color: colors.accent }}>
+                          Food Orders for {guest.name}
+                        </h4>
+                        {guest.foodOrders && guest.foodOrders.length > 0 ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            {guest.foodOrders.map((order) => (
+                            <div
+                              key={order.id}
+                              style={{
+                                backgroundColor: colors.surface,
+                                padding: '1rem',
+                                borderRadius: '8px',
+                                border: `1px solid ${colors.border}`,
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center'
+                              }}
+                            >
+                              <div style={{ flex: 1 }}>
+                                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                  <span style={{ fontWeight: '500' }}>Order #{order.id}</span>
+                                  <span style={{
+                                    padding: '0.25rem 0.5rem',
+                                    borderRadius: '4px',
+                                    fontSize: '0.75rem',
+                                    backgroundColor: order.paid ? colors.success : colors.warning,
+                                    color: '#FFFFFF'
+                                  }}>
+                                    {order.paid ? 'PAID' : 'UNPAID'}
+                                  </span>
+                                </div>
+                                <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: colors.textMuted }}>
+                                  {formatDateTime(order.created_at)} • Total: {formatCurrency(order.total_amount)}
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <button
+                                  onClick={() => handleTogglePayment(order.id)}
+                                  style={{
+                                    backgroundColor: order.paid ? colors.warning : colors.success,
+                                    color: '#FFFFFF',
+                                    border: 'none',
+                                    padding: '0.4rem 0.8rem',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontSize: '0.75rem'
+                                  }}
+                                >
+                                  {order.paid ? 'Mark Unpaid' : 'Mark Paid'}
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteOrder(order.id)}
+                                  style={{
+                                    backgroundColor: colors.error,
+                                    color: '#FFFFFF',
+                                    border: 'none',
+                                    padding: '0.4rem 0.8rem',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontSize: '0.75rem'
+                                  }}
+                                >
+                                  Delete
+                                </button>
+                                <button
+                                  onClick={() => printOrderReceipt(order.id)}
+                                  style={{
+                                    backgroundColor: colors.accent,
+                                    color: '#FFFFFF',
+                                    border: 'none',
+                                    padding: '0.4rem 0.8rem',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontSize: '0.75rem'
+                                  }}
+                                >
+                                  Print
+                                </button>
+                              </div>
+                            </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={{ textAlign: 'center', color: colors.textMuted, padding: '2rem' }}>
+                            No food orders found for this guest
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </React.Fragment>
+                ))}
+              </>
+            )}
+
+            {/* Walk-in Customers Section */}
+            {walkinGuests.length > 0 && (
+              <>
+                <div style={{
+                  backgroundColor: colors.secondary,
+                  padding: '0.75rem 1rem',
+                  fontWeight: '600',
+                  fontSize: '1.1rem',
+                  color: colors.accent,
+                  borderBottom: `2px solid ${colors.accent}`,
+                  marginTop: roomGuests.length > 0 ? '2rem' : '0'
+                }}>
+                  🚶 Walk-in Customers ({walkinGuests.length})
+                </div>
+                {walkinGuests.map((guest) => (
+                  <React.Fragment key={guest.guest_id}>
+                    {/* Main Guest Row */}
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '180px 100px 160px 80px 120px 120px 250px',
+                        backgroundColor: colors.surface,
+                        padding: '1rem',
+                        borderBottom: `1px solid ${colors.border}`,
+                        alignItems: 'center',
+                        gap: '1rem'
+                      }}
+                    >
+                      <div style={{ fontWeight: '500' }}>{guest.name}</div>
+                      <div>
+                        <span style={{ 
+                          color: colors.accent, 
+                          fontWeight: '500',
+                          fontSize: '0.875rem',
+                          padding: '0.25rem 0.5rem',
+                          backgroundColor: `${colors.accent}20`,
+                          borderRadius: '4px'
+                        }}>
+                          Walk-in
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.875rem', color: colors.textSecondary }}>
+                        <div>{formatDate(guest.check_in)}</div>
+                        <div>{guest.check_out ? formatDate(guest.check_out) : 'Open'}</div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>{guest.stayDays || '—'}</div>
+                      <div style={{ textAlign: 'center' }}>
+                        {formatCurrency(guest.unpaidFoodTotal)}
+                        {guest.totalFoodOrders > 0 && (
+                          <div style={{ fontSize: '0.75rem', color: colors.textMuted }}>
+                            {guest.totalFoodOrders} orders
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ fontWeight: '600', color: colors.accent }}>
+                        {formatCurrency(guest.totalAmountDue)}
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <button
+                          onClick={() => handleEditGuest(guest)}
+                          style={{
+                            backgroundColor: colors.warning,
+                            color: '#FFFFFF',
+                            border: 'none',
+                            padding: '0.4rem 0.8rem',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '0.75rem'
+                          }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => onAddOrder(guest.guest_id)}
+                          style={{
+                            backgroundColor: colors.accent,
+                            color: '#FFFFFF',
+                            border: 'none',
+                            padding: '0.4rem 0.8rem',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '0.75rem'
+                          }}
+                        >
+                          Add Order
+                        </button>
+                        <button
+                          onClick={() => setExpandedGuest(expandedGuest === guest.guest_id ? null : guest.guest_id)}
+                          style={{
+                            backgroundColor: colors.accent,
+                            color: '#FFFFFF',
+                            border: 'none',
+                            padding: '0.4rem 0.8rem',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '0.75rem'
+                          }}
+                        >
+                          {expandedGuest === guest.guest_id ? 'Hide' : 'Orders'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Expanded Food Orders */}
+                    {expandedGuest === guest.guest_id && guest.foodOrders && (
+                      <div style={{
+                        backgroundColor: colors.secondary,
+                        padding: '1rem',
+                        borderBottom: `1px solid ${colors.border}`
+                      }}>
+                        <h4 style={{ margin: '0 0 1rem 0', color: colors.accent }}>
+                          Food Orders for {guest.name} (Walk-in Customer)
+                        </h4>
+                        {guest.foodOrders && guest.foodOrders.length > 0 ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            {guest.foodOrders.map((order) => (
+                            <div
+                              key={order.id}
+                              style={{
+                                backgroundColor: colors.surface,
+                                padding: '1rem',
+                                borderRadius: '8px',
+                                border: `1px solid ${colors.border}`,
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center'
+                              }}
+                            >
+                              <div style={{ flex: 1 }}>
+                                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                  <span style={{ fontWeight: '500' }}>Order #{order.id}</span>
+                                  <span style={{
+                                    padding: '0.25rem 0.5rem',
+                                    borderRadius: '4px',
+                                    fontSize: '0.75rem',
+                                    backgroundColor: order.paid ? colors.success : colors.warning,
+                                    color: '#FFFFFF'
+                                  }}>
+                                    {order.paid ? 'PAID' : 'UNPAID'}
+                                  </span>
+                                </div>
+                                <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: colors.textMuted }}>
+                                  {formatDateTime(order.created_at)} • Total: {formatCurrency(order.total_amount)}
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <button
+                                  onClick={() => handleTogglePayment(order.id)}
+                                  style={{
+                                    backgroundColor: order.paid ? colors.warning : colors.success,
+                                    color: '#FFFFFF',
+                                    border: 'none',
+                                    padding: '0.4rem 0.8rem',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontSize: '0.75rem'
+                                  }}
+                                >
+                                  {order.paid ? 'Mark Unpaid' : 'Mark Paid'}
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteOrder(order.id)}
+                                  style={{
+                                    backgroundColor: colors.error,
+                                    color: '#FFFFFF',
+                                    border: 'none',
+                                    padding: '0.4rem 0.8rem',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontSize: '0.75rem'
+                                  }}
+                                >
+                                  Delete
+                                </button>
+                                <button
+                                  onClick={() => printOrderReceipt(order.id)}
+                                  style={{
+                                    backgroundColor: colors.accent,
+                                    color: '#FFFFFF',
+                                    border: 'none',
+                                    padding: '0.4rem 0.8rem',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontSize: '0.75rem'
+                                  }}
+                                >
+                                  Print
+                                </button>
+                              </div>
+                            </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={{ textAlign: 'center', color: colors.textMuted, padding: '2rem' }}>
+                            No food orders found for this customer
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </React.Fragment>
+                ))}
+              </>
+            )}
+          </>
         )}
       </div>
 

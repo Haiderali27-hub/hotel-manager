@@ -124,14 +124,12 @@ const AddFoodOrder: React.FC<AddFoodOrderProps> = ({ onBack, onOrderAdded }) => 
         throw new Error('Please add at least one item to the order');
       }
 
-      // For walk-in customers, we'll need to create a temporary guest or handle differently
-      // Based on your backend, we might need to modify this logic
-      let guestId = selectedGuestId;
+      // For walk-in customers, we'll use null instead of 0
+      let guestId: number | null = selectedGuestId;
       
       if (customerType === 'walkin') {
-        // For walk-in customers, we can use a special guest_id of 0 or -1
-        // or create a temporary guest. Let's use 0 for now and handle in backend
-        guestId = 0; // This will need backend support for walk-in orders
+        // For walk-in customers, use null to indicate no specific guest
+        guestId = null;
       }
 
       const newOrder: NewFoodOrder = {
@@ -156,6 +154,7 @@ const AddFoodOrder: React.FC<AddFoodOrderProps> = ({ onBack, onOrderAdded }) => 
       setWalkinCustomerName('Walk-in');
       setSelectedMenuItemId(0);
       setQuantity(1);
+      setCustomerType('active');
 
       onOrderAdded();
     } catch (err) {

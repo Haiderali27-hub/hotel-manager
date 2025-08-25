@@ -22,6 +22,7 @@ const AddGuest: React.FC<AddGuestProps> = ({ onBack, onGuestAdded, refreshTrigge
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isWalkIn, setIsWalkIn] = useState(false);  // New state for walk-in toggle
 
   // Load available rooms on component mount and when refresh is triggered
   useEffect(() => {
@@ -97,22 +98,22 @@ const AddGuest: React.FC<AddGuestProps> = ({ onBack, onGuestAdded, refreshTrigge
       if (!formData.name.trim()) {
         throw new Error('Guest name is required');
       }
-      if (formData.room_id === 0) {
-        throw new Error('Please select a room');
+      if (!isWalkIn && formData.room_id === 0) {
+        throw new Error('Please select a room or choose walk-in customer');
       }
       if (!formData.check_in) {
         throw new Error('Check-in date is required');
       }
-      if (!formData.check_out) {
-        throw new Error('Check-out date is required');
+      if (!isWalkIn && !formData.check_out) {
+        throw new Error('Check-out date is required for room guests');
       }
 
       const newGuest: NewGuest = {
         name: formData.name.trim(),
         phone: formData.phone.trim() || undefined,
-        room_id: formData.room_id,
+        room_id: isWalkIn ? undefined : formData.room_id,  // Don't assign room for walk-in
         check_in: formData.check_in,
-        check_out: formData.check_out,
+        check_out: formData.check_out || undefined,
         daily_rate: formData.daily_rate
       };
 
@@ -128,6 +129,7 @@ const AddGuest: React.FC<AddGuestProps> = ({ onBack, onGuestAdded, refreshTrigge
         check_out: '',
         daily_rate: 0
       });
+      setIsWalkIn(false);
 
       onGuestAdded();
       onBack();
@@ -180,6 +182,50 @@ const AddGuest: React.FC<AddGuestProps> = ({ onBack, onGuestAdded, refreshTrigge
         }}>
           Add New Guest
         </h1>
+      </div>
+
+      {/* Walk-in Customer Toggle */}
+      <div style={{ 
+        marginBottom: '2rem',
+        backgroundColor: colors.surface,
+        padding: '1rem',
+        borderRadius: '8px',
+        border: `1px solid ${colors.border}`
+      }}>
+        <label style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '0.5rem',
+          cursor: 'pointer',
+          fontWeight: '500',
+          color: colors.text
+        }}>
+          <input
+            type="checkbox"
+            checked={isWalkIn}
+            onChange={(e) => {
+              setIsWalkIn(e.target.checked);
+              if (e.target.checked) {
+                // Reset room selection for walk-in customers
+                setFormData(prev => ({ ...prev, room_id: 0, check_out: '' }));
+              }
+            }}
+            style={{ 
+              marginRight: '0.5rem',
+              transform: 'scale(1.2)'
+            }}
+          />
+          <span>Walk-in Customer (No room assignment)</span>
+        </label>
+        {isWalkIn && (
+          <p style={{ 
+            margin: '0.5rem 0 0 1.7rem',
+            color: colors.textMuted,
+            fontSize: '0.875rem'
+          }}>
+            Walk-in customers can order food and use hotel services without a room.
+          </p>
+        )}
       </div>
 
       {/* Form */}
@@ -241,40 +287,47 @@ const AddGuest: React.FC<AddGuestProps> = ({ onBack, onGuestAdded, refreshTrigge
           />
         </div>
 
-        {/* Room Number */}
-        <div style={{ marginBottom: '1.5rem' }}>
-          <label style={{
-            display: 'block',
-            marginBottom: '0.5rem',
-            fontWeight: '500',
-            color: colors.text
-          }}>
-            Room Number
-          </label>
-          <select
-            name="room_id"
-            value={formData.room_id}
-            onChange={handleInputChange}
-            required
-            style={{
-              width: '100%',
-              padding: '0.75rem',
-              backgroundColor: colors.surface,
-              border: `1px solid ${colors.border}`,
-              borderRadius: '8px',
-              color: colors.text,
-              fontSize: '1rem',
-              cursor: 'pointer'
-            }}
-          >
-            <option value={0}>Select a room</option>
-            {rooms.map(room => (
-              <option key={room.id} value={room.id}>
-                Room {room.number} - Rs.{room.daily_rate}/day
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Room Number - Only for non-walk-in customers */}
+        {!isWalkIn && (
+          <div style={{ marginBottom: '1.5rem' }}>
+            <label style={{
+              display: 'block',
+              marginBottom: '0.5rem',
+              fontWeight: '500',
+              color: colors.text
+            }}>
+              Room Number (required)
+            </label>
+            <select
+              name="room_id"
+              value={formData.room_id}
+              onChange={handleInputChange}
+              required
+              style={{
+                width: '100%',
+                padding: '0.75rem',
+                backgroundColor: colors.surface,
+                border: `1px solid ${colors.border}`,
+                borderRadius: '8px',
+                color: colors.text,
+                fontSize: '1rem',
+                cursor: 'pointer'
+              }}
+            >
+              <option value={0}>Select a room</option>
+              {rooms.map(room => (
+                <option key={room.id} value={room.id}>
+                  Room {room.number} - Rs.{room.daily_rate}/day
+                </option>
+              ))}
+            </select>
+            {rooms.length === 0 && (
+              <p style={{ color: colors.error, fontSize: '0.875rem', marginTop: '0.5rem' }}>
+                No available rooms found
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Check-in Date */}
         <div style={{ marginBottom: '1.5rem' }}>
@@ -304,7 +357,7 @@ const AddGuest: React.FC<AddGuestProps> = ({ onBack, onGuestAdded, refreshTrigge
           />
         </div>
 
-        {/* Check-out Date */}
+        {/* Check-out Date - Optional for walk-in customers */}
         <div style={{ marginBottom: '1.5rem' }}>
           <label style={{
             display: 'block',
@@ -312,14 +365,19 @@ const AddGuest: React.FC<AddGuestProps> = ({ onBack, onGuestAdded, refreshTrigge
             fontWeight: '500',
             color: colors.text
           }}>
-            Check-out Date
+            Check-out Date {!isWalkIn && '(required)'}
+            {isWalkIn && (
+              <span style={{ color: colors.textMuted, fontSize: '0.875rem' }}>
+                {' '}(optional for walk-in customers)
+              </span>
+            )}
           </label>
           <input
             type="date"
             name="check_out"
             value={formData.check_out}
             onChange={handleInputChange}
-            required
+            required={!isWalkIn}
             style={{
               width: '100%',
               padding: '0.75rem',
@@ -332,7 +390,7 @@ const AddGuest: React.FC<AddGuestProps> = ({ onBack, onGuestAdded, refreshTrigge
           />
         </div>
 
-        {/* Daily Room Rate */}
+        {/* Daily Rate */}
         <div style={{ marginBottom: '1.5rem' }}>
           <label style={{
             display: 'block',
@@ -340,7 +398,7 @@ const AddGuest: React.FC<AddGuestProps> = ({ onBack, onGuestAdded, refreshTrigge
             fontWeight: '500',
             color: colors.text
           }}>
-            Daily Room Rate
+            {isWalkIn ? 'Daily Service Rate (optional)' : 'Daily Room Rate'}
           </label>
           <input
             type="number"
@@ -349,16 +407,18 @@ const AddGuest: React.FC<AddGuestProps> = ({ onBack, onGuestAdded, refreshTrigge
             onChange={handleInputChange}
             min="0"
             step="0.01"
+            readOnly={!isWalkIn && formData.room_id > 0}
             style={{
               width: '100%',
               padding: '0.75rem',
-              backgroundColor: colors.surface,
+              backgroundColor: (!isWalkIn && formData.room_id > 0) ? colors.secondary : colors.surface,
               border: `1px solid ${colors.border}`,
               borderRadius: '8px',
               color: colors.text,
-              fontSize: '1rem'
+              fontSize: '1rem',
+              cursor: (!isWalkIn && formData.room_id > 0) ? 'not-allowed' : 'text'
             }}
-            placeholder="Daily rate"
+            placeholder={isWalkIn ? "Enter daily service rate (optional)" : "Rate will be auto-filled when room is selected"}
           />
         </div>
 

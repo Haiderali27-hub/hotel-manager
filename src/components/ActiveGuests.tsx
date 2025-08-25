@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import type { ActiveGuestRow } from '../api/client';
+import type { ActiveGuestRow, FoodOrderSummary } from '../api/client';
 import {
     checkoutGuest,
+    deleteFoodOrder,
     getActiveGuests,
-    getFoodOrdersByGuest
+    getFoodOrdersByGuest,
+    printOrderReceipt,
+    toggleFoodOrderPayment
 } from '../api/client';
 import { useTheme } from '../context/ThemeContext';
 
@@ -15,6 +18,7 @@ interface ActiveGuestsProps {
 interface ActiveGuestWithOrders extends ActiveGuestRow {
   totalFoodOrders: number;
   stayDays: number;
+  foodOrders?: FoodOrderSummary[];
 }
 
 const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
@@ -24,6 +28,7 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
   const [error, setError] = useState<string | null>(null);
   const [editingGuest, setEditingGuest] = useState<ActiveGuestRow | null>(null);
   const [showEditForm, setShowEditForm] = useState(false);
+  const [expandedGuest, setExpandedGuest] = useState<number | null>(null);
   
   // Edit form states
   const [editCheckoutDate, setEditCheckoutDate] = useState('');
@@ -35,40 +40,38 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
   }, []);
 
   const loadActiveGuests = async () => {
-    setLoading(true);
     try {
-      const activeGuests = await getActiveGuests();
+      setLoading(true);
+      const response = await getActiveGuests();
       
-      // Calculate additional data for each guest
-      const guestsWithOrders = await Promise.all(
-        activeGuests.map(async (guest) => {
-          // Get food orders count
-          let totalFoodOrders = 0;
+      // Transform response to include required properties and load food orders
+      const guestsWithOrders: ActiveGuestWithOrders[] = await Promise.all(
+        response.map(async (guest: ActiveGuestRow) => {
           try {
-            const orders = await getFoodOrdersByGuest(guest.guest_id);
-            totalFoodOrders = orders.length;
-          } catch (err) {
-            console.error('Error fetching food orders for guest:', guest.guest_id, err);
+            // Load food orders for each guest
+            const foodOrders = await getFoodOrdersByGuest(guest.guest_id);
+            return {
+              ...guest,
+              totalFoodOrders: foodOrders.length,
+              stayDays: Math.ceil((new Date().getTime() - new Date(guest.check_in).getTime()) / (1000 * 3600 * 24)),
+              foodOrders: foodOrders
+            };
+          } catch (error) {
+            console.error(`Error loading orders for guest ${guest.guest_id}:`, error);
+            return {
+              ...guest,
+              totalFoodOrders: 0,
+              stayDays: Math.ceil((new Date().getTime() - new Date(guest.check_in).getTime()) / (1000 * 3600 * 24)),
+              foodOrders: []
+            };
           }
-
-          // Calculate stay days
-          const checkInDate = new Date(guest.check_in);
-          const today = new Date();
-          const stayDays = Math.ceil((today.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
-
-          return {
-            ...guest,
-            totalFoodOrders,
-            stayDays: Math.max(1, stayDays) // Minimum 1 day
-          };
         })
       );
-
+      
       setGuests(guestsWithOrders);
-      setError(null);
-    } catch (err) {
-      setError('Failed to load active guests');
-      console.error(err);
+    } catch (error) {
+      console.error("Error loading active guests:", error);
+      setError("Failed to load active guests");
     } finally {
       setLoading(false);
     }
@@ -140,6 +143,56 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
     return new Date(dateString).toLocaleDateString();
   };
 
+  const handleToggleGuestOrders = (guestId: number) => {
+    setExpandedGuest(expandedGuest === guestId ? null : guestId);
+  };
+
+  const handlePrintReceipt = async (orderId: number) => {
+    try {
+      setError(null); // Clear any previous errors
+      await printOrderReceipt(orderId);
+      // Receipt will be printed automatically
+      console.log(`Receipt printed for order ${orderId}`);
+    } catch (err) {
+      setError('Failed to print receipt');
+      console.error('Print error:', err);
+    }
+  };
+
+  const handleTogglePayment = async (orderId: number) => {
+    try {
+      setError(null); // Clear any previous errors
+      const result = await toggleFoodOrderPayment(orderId);
+      console.log('Payment toggle result:', result);
+      // Reload the guests to update the payment status
+      await loadActiveGuests();
+    } catch (err) {
+      setError('Failed to toggle payment status');
+      console.error('Toggle payment error:', err);
+    }
+  };
+
+  const handleDeleteOrder = async (orderId: number) => {
+    if (confirm('Are you sure you want to delete this food order? This action cannot be undone.')) {
+      try {
+        await deleteFoodOrder(orderId);
+        // Reload the guests to update the orders list
+        loadActiveGuests();
+      } catch (err) {
+        setError('Failed to delete order');
+        console.error(err);
+      }
+    }
+  };
+
+  const formatCurrency = (amount: number) => {
+    return `Rs ${amount.toFixed(2)}`;
+  };
+
+  const formatDateTime = (dateString: string) => {
+    return new Date(dateString).toLocaleString();
+  };
+
   return (
     <div style={{
       padding: '2rem',
@@ -196,7 +249,7 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
         {/* Table Header */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: '200px 100px 200px 100px 150px 300px',
+          gridTemplateColumns: '200px 100px 180px 80px 120px 250px',
           backgroundColor: colors.secondary,
           padding: '1rem',
           fontWeight: '600',
@@ -207,7 +260,7 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
           <div>Room No.</div>
           <div>Check-in / Check-out</div>
           <div>Stay Days</div>
-          <div>Total Food Orders</div>
+          <div>Food Orders</div>
           <div>Actions</div>
         </div>
 
@@ -221,71 +274,218 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
             No active guests found
           </div>
         ) : (
-          guests.map((guest, index) => (
-            <div
-              key={guest.guest_id}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '200px 100px 200px 100px 150px 300px',
-                padding: '1rem',
-                borderBottom: index < guests.length - 1 ? `1px solid ${colors.border}` : 'none',
-                alignItems: 'center',
-                gap: '1rem'
-              }}
-            >
-              <div style={{ fontWeight: '500' }}>{guest.name}</div>
-              <div>Room {guest.room_number}</div>
-              <div style={{ fontSize: '0.875rem', color: colors.textSecondary }}>
-                <div>{formatDate(guest.check_in)}</div>
-                <div>Open</div>
+          guests.map((guest) => (
+            <React.Fragment key={guest.guest_id}>
+              {/* Main Guest Row */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '200px 100px 180px 80px 120px 250px',
+                  padding: '1rem',
+                  borderBottom: `1px solid ${colors.border}`,
+                  alignItems: 'center',
+                  gap: '1rem'
+                }}
+              >
+                <div style={{ fontWeight: '500' }}>{guest.name}</div>
+                <div>Room {guest.room_number}</div>
+                <div style={{ fontSize: '0.875rem', color: colors.textSecondary }}>
+                  <div>{formatDate(guest.check_in)}</div>
+                  <div>Open</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>{guest.stayDays}</div>
+                <div style={{ textAlign: 'center' }}>
+                  <button
+                    onClick={() => handleToggleGuestOrders(guest.guest_id)}
+                    style={{
+                      backgroundColor: guest.totalFoodOrders > 0 ? colors.accent : colors.textMuted,
+                      color: '#FFFFFF',
+                      border: 'none',
+                      padding: '0.5rem 1rem',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '0.875rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem'
+                    }}
+                  >
+                    {guest.totalFoodOrders} Orders
+                    {guest.totalFoodOrders > 0 && (
+                      <span style={{ fontSize: '0.75rem' }}>
+                        {expandedGuest === guest.guest_id ? '▲' : '▼'}
+                      </span>
+                    )}
+                  </button>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => handleEditGuest(guest)}
+                    style={{
+                      backgroundColor: colors.warning,
+                      color: '#FFFFFF',
+                      border: 'none',
+                      padding: '0.5rem 1rem',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '0.875rem'
+                    }}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => onAddOrder(guest.guest_id)}
+                    style={{
+                      backgroundColor: colors.accent,
+                      color: '#FFFFFF',
+                      border: 'none',
+                      padding: '0.5rem 1rem',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '0.875rem'
+                    }}
+                  >
+                    Add Order
+                  </button>
+                  <button
+                    onClick={() => handleCheckoutGuest(guest.guest_id, guest.name)}
+                    style={{
+                      backgroundColor: colors.success,
+                      color: '#FFFFFF',
+                      border: 'none',
+                      padding: '0.5rem 1rem',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '0.875rem'
+                    }}
+                  >
+                    Checkout
+                  </button>
+                </div>
               </div>
-              <div style={{ textAlign: 'center' }}>{guest.stayDays}</div>
-              <div style={{ textAlign: 'center' }}>{guest.totalFoodOrders}</div>
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                <button
-                  onClick={() => handleEditGuest(guest)}
-                  style={{
-                    backgroundColor: colors.warning,
-                    color: '#FFFFFF',
-                    border: 'none',
-                    padding: '0.5rem 1rem',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: '0.875rem'
-                  }}
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => onAddOrder(guest.guest_id)}
-                  style={{
-                    backgroundColor: colors.accent,
-                    color: '#FFFFFF',
-                    border: 'none',
-                    padding: '0.5rem 1rem',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: '0.875rem'
-                  }}
-                >
-                  Add Order
-                </button>
-                <button
-                  onClick={() => handleCheckoutGuest(guest.guest_id, guest.name)}
-                  style={{
-                    backgroundColor: colors.success,
-                    color: '#FFFFFF',
-                    border: 'none',
-                    padding: '0.5rem 1rem',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: '0.875rem'
-                  }}
-                >
-                  Checkout
-                </button>
-              </div>
-            </div>
+
+              {/* Expanded Food Orders */}
+              {expandedGuest === guest.guest_id && (
+                <div style={{
+                  backgroundColor: colors.secondary,
+                  padding: '1rem',
+                  borderBottom: `1px solid ${colors.border}`
+                }}>
+                  <h4 style={{ margin: '0 0 1rem 0', color: colors.accent }}>
+                    Food Orders for {guest.name}
+                  </h4>
+                  {guest.foodOrders && guest.foodOrders.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      {guest.foodOrders.map((order) => (
+                      <div
+                        key={order.id}
+                        style={{
+                          backgroundColor: colors.surface,
+                          padding: '1rem',
+                          borderRadius: '8px',
+                          border: `1px solid ${colors.border}`,
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center'
+                        }}
+                      >
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                            <div style={{ fontWeight: '500' }}>
+                              Order #{order.id}
+                            </div>
+                            <div style={{ 
+                              fontSize: '0.875rem', 
+                              color: colors.textSecondary 
+                            }}>
+                              {formatDateTime(order.created_at)}
+                            </div>
+                            <div style={{
+                              padding: '0.25rem 0.5rem',
+                              borderRadius: '4px',
+                              fontSize: '0.75rem',
+                              fontWeight: '500',
+                              backgroundColor: order.paid ? '#22C55E' : '#F59E0B',
+                              color: '#FFFFFF'
+                            }}>
+                              {order.paid ? 'PAID' : 'UNPAID'}
+                            </div>
+                          </div>
+                          <div style={{ 
+                            fontSize: '0.875rem', 
+                            color: colors.textSecondary,
+                            marginTop: '0.25rem'
+                          }}>
+                            Items: {order.items || 'No items listed'}
+                          </div>
+                          <div style={{ 
+                            fontWeight: '500',
+                            color: colors.accent,
+                            marginTop: '0.25rem'
+                          }}>
+                            Total: {formatCurrency(order.total_amount)}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <button
+                            onClick={() => handlePrintReceipt(order.id)}
+                            style={{
+                              backgroundColor: '#3B82F6',
+                              color: '#FFFFFF',
+                              border: 'none',
+                              padding: '0.5rem',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '0.75rem'
+                            }}
+                          >
+                            Print
+                          </button>
+                          <button
+                            onClick={() => handleTogglePayment(order.id)}
+                            style={{
+                              backgroundColor: order.paid ? '#EF4444' : '#22C55E',
+                              color: '#FFFFFF',
+                              border: 'none',
+                              padding: '0.5rem',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '0.75rem'
+                            }}
+                          >
+                            {order.paid ? 'Mark Unpaid' : 'Mark Paid'}
+                          </button>
+                          <button
+                            onClick={() => handleDeleteOrder(order.id)}
+                            style={{
+                              backgroundColor: '#EF4444',
+                              color: '#FFFFFF',
+                              border: 'none',
+                              padding: '0.5rem',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '0.75rem'
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    </div>
+                  ) : (
+                    <div style={{ 
+                      textAlign: 'center', 
+                      color: colors.textMuted,
+                      fontSize: '0.875rem',
+                      padding: '1rem'
+                    }}>
+                      No food orders found for this guest.
+                    </div>
+                  )}
+                </div>
+              )}
+            </React.Fragment>
           ))
         )}
       </div>

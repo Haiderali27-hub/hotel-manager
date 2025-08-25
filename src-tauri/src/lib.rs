@@ -22,11 +22,11 @@ use simple_commands::{
     add_menu_item, get_menu_items, update_menu_item, delete_menu_item,
     dashboard_stats, add_food_order, get_food_orders, get_food_orders_by_guest, mark_order_paid,
     add_expense, get_expenses, get_expenses_by_date_range, update_expense, delete_expense,
-    toggle_food_order_payment
+    toggle_food_order_payment, delete_food_order, get_order_details
 };
 use database_reset::{reset_database, get_database_path, get_database_stats};
 use export::{export_history_csv, create_database_backup};
-use print_templates::{build_order_receipt_html, build_final_invoice_html};
+use print_templates::{build_order_receipt_html, build_final_invoice_html, print_order_receipt};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -78,6 +78,8 @@ pub fn run() {
             get_food_orders_by_guest,
             mark_order_paid,
             toggle_food_order_payment,
+            delete_food_order,
+            get_order_details,
             // Expenses
             add_expense,
             get_expenses,
@@ -94,7 +96,8 @@ pub fn run() {
             export_history_csv,
             create_database_backup,
             build_order_receipt_html,
-            build_final_invoice_html
+            build_final_invoice_html,
+            print_order_receipt
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

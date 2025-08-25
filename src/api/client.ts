@@ -15,7 +15,17 @@ if (!isTauri) {
 }
 
 // ============================================================================
-// TYPE DEFINITIONS - IPC Contract Types
+// TYPE DEFINITIONS - IPC Contract
+// ============================================================================
+
+/**
+ * Print a receipt for a food order
+ * @param orderId - ID of the order to print receipt for
+ * @returns Success message
+ */
+export const printOrderReceipt = (orderId: number): Promise<string> => 
+  invoke("print_order_receipt", { orderId });
+
 // ============================================================================
 
 // Room Management
@@ -95,6 +105,40 @@ export interface FoodOrder {
   total_amount: number;
   is_paid: boolean;
   items: OrderItem[];
+}
+
+export interface FoodOrderSummary {
+  id: number;
+  created_at: string;
+  paid: boolean;
+  paid_at?: string;
+  total_amount: number;
+  items: string; // comma-separated list like "Pizza x2, Burger x1"
+}
+
+export interface FoodOrderInfo {
+  id: number;
+  guest_id?: number;
+  customer_type: string;
+  customer_name?: string;
+  created_at: string;
+  paid: boolean;
+  paid_at?: string;
+  total_amount: number;
+}
+
+export interface OrderItemDetail {
+  id: number;
+  menu_item_id?: number;
+  item_name: string;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+}
+
+export interface FoodOrderDetails {
+  order: FoodOrderInfo;
+  items: OrderItemDetail[];
 }
 
 export interface NewFoodOrder {
@@ -390,8 +434,8 @@ export const getGuestOrders = (guestId: number): Promise<FoodOrder[]> =>
  * @param guestId - ID of the guest
  * @returns Array of orders for that guest
  */
-export const getFoodOrdersByGuest = (guestId: number): Promise<FoodOrder[]> => 
-  getGuestOrders(guestId);
+export const getFoodOrdersByGuest = (guestId: number): Promise<FoodOrderSummary[]> => 
+  invoke("get_food_orders_by_guest", { guestId });
 
 /**
  * Mark a food order as paid
@@ -410,12 +454,20 @@ export const toggleFoodOrderPayment = (orderId: number): Promise<string> =>
   invoke("toggle_food_order_payment", { orderId });
 
 /**
- * Generate and print receipt for a food order
- * @param orderId - ID of the order to print receipt for
- * @returns HTML content of the receipt
+ * Delete a food order and all its items
+ * @param orderId - ID of the order to delete
+ * @returns Success message
  */
-export const printOrderReceipt = (orderId: number): Promise<string> => 
-  invoke("build_order_receipt_html", { orderId });
+export const deleteFoodOrder = (orderId: number): Promise<string> => 
+  invoke("delete_food_order", { orderId });
+
+/**
+ * Get detailed information about a food order including all items
+ * @param orderId - ID of the order to get details for
+ * @returns Order details with items
+ */
+export const getOrderDetails = (orderId: number): Promise<FoodOrderDetails> => 
+  invoke("get_order_details", { orderId });
 
 // Expense Management APIs
 /**

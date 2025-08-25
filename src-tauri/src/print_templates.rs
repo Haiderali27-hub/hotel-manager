@@ -23,6 +23,61 @@ fn get_logo_base64() -> String {
     String::new()
 }
 
+/// Print a food order receipt
+#[tauri::command]
+pub fn print_order_receipt(orderId: i64) -> Result<String, String> {
+    // Generate the HTML receipt
+    let mut html = build_order_receipt_html(orderId)?;
+    
+    // Add auto-print JavaScript before the closing </head> tag
+    let auto_print_script = String::from(r#"
+    <script>
+        window.addEventListener('load', function() {
+            setTimeout(function() {
+                window.print();
+            }, 500);
+        });
+    </script>
+"#);
+    
+    html = html.replace("</head>", &(auto_print_script + "</head>"));
+    
+    // Create a temporary HTML file
+    let temp_dir = std::env::temp_dir();
+    let file_path = temp_dir.join(format!("receipt_{}.html", orderId));
+    
+    // Write HTML to file
+    std::fs::write(&file_path, html)
+        .map_err(|e| format!("Failed to write receipt file: {}", e))?;
+    
+    // Open the file with the default application (browser)
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", &file_path.to_string_lossy()])
+            .spawn()
+            .map_err(|e| format!("Failed to open receipt: {}", e))?;
+    }
+    
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&file_path)
+            .spawn()
+            .map_err(|e| format!("Failed to open receipt: {}", e))?;
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&file_path)
+            .spawn()
+            .map_err(|e| format!("Failed to open receipt: {}", e))?;
+    }
+    
+    Ok("Receipt opened in browser - print dialog will appear automatically".to_string())
+}
+
 /// Generate HTML receipt for a food order
 #[tauri::command]
 pub fn build_order_receipt_html(orderId: i64) -> Result<String, String> {

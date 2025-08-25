@@ -648,8 +648,9 @@ pub fn add_food_order(guest_id: Option<i64>, customer_type: String, customer_nam
     Ok(order_id)
 }
 
-#[command]
-pub fn get_food_orders_by_guest(guest_id: i64) -> Result<Vec<FoodOrderSummary>, String> {
+#[tauri::command]
+pub fn get_food_orders_by_guest(guestId: i64) -> Result<Vec<FoodOrderSummary>, String> {
+    let guest_id = guestId;
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     let mut stmt = conn.prepare(
@@ -911,4 +912,88 @@ pub fn toggle_food_order_payment(orderId: i64) -> Result<String, String> {
     
     let status = if new_paid == 1 { "paid" } else { "unpaid" };
     Ok(format!("Food order marked as {}", status))
+}
+
+#[tauri::command]
+pub fn delete_food_order(orderId: i64) -> Result<String, String> {
+    let order_id = orderId;
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    // Start a transaction
+    conn.execute("BEGIN TRANSACTION", []).map_err(|e| e.to_string())?;
+    
+    // Delete order items first (foreign key constraint)
+    conn.execute(
+        "DELETE FROM order_items WHERE order_id = ?1",
+        params![order_id],
+    ).map_err(|e| {
+        let _ = conn.execute("ROLLBACK", []);
+        e.to_string()
+    })?;
+    
+    // Delete the food order
+    let rows_affected = conn.execute(
+        "DELETE FROM food_orders WHERE id = ?1",
+        params![order_id],
+    ).map_err(|e| {
+        let _ = conn.execute("ROLLBACK", []);
+        e.to_string()
+    })?;
+    
+    if rows_affected == 0 {
+        let _ = conn.execute("ROLLBACK", []);
+        return Err("Food order not found".to_string());
+    }
+    
+    // Commit the transaction
+    conn.execute("COMMIT", []).map_err(|e| e.to_string())?;
+    
+    Ok("Food order deleted successfully".to_string())
+}
+
+#[tauri::command]
+pub fn get_order_details(orderId: i64) -> Result<FoodOrderDetails, String> {
+    let order_id = orderId;
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    // Get order details
+    let order = conn.query_row(
+        "SELECT id, guest_id, customer_type, customer_name, created_at, paid, paid_at, total_amount
+         FROM food_orders WHERE id = ?1",
+        params![order_id],
+        |row| Ok(FoodOrderInfo {
+            id: row.get(0)?,
+            guest_id: row.get(1)?,
+            customer_type: row.get(2)?,
+            customer_name: row.get(3)?,
+            created_at: row.get(4)?,
+            paid: row.get::<_, i32>(5)? == 1,
+            paid_at: row.get(6)?,
+            total_amount: row.get(7)?,
+        })
+    ).map_err(|e| e.to_string())?;
+    
+    // Get order items
+    let mut stmt = conn.prepare(
+        "SELECT id, menu_item_id, item_name, quantity, unit_price, total_price
+         FROM order_items WHERE order_id = ?1"
+    ).map_err(|e| e.to_string())?;
+    
+    let items = stmt.query_map([order_id], |row| {
+        Ok(OrderItemDetail {
+            id: row.get(0)?,
+            menu_item_id: row.get(1)?,
+            item_name: row.get(2)?,
+            quantity: row.get(3)?,
+            unit_price: row.get(4)?,
+            total_price: row.get(5)?,
+        })
+    }).map_err(|e| e.to_string())?
+    .collect::<Result<Vec<_>, _>>()
+    .map_err(|e| e.to_string())?;
+    
+    Ok(FoodOrderDetails {
+        order: order,
+        items: items,
+    })
 }

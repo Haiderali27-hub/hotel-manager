@@ -175,6 +175,34 @@ pub struct FoodOrderSummary {
     pub items: String, // comma-separated list
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FoodOrderInfo {
+    pub id: i64,
+    pub guest_id: Option<i64>,
+    pub customer_type: String,
+    pub customer_name: Option<String>,
+    pub created_at: String,
+    pub paid: bool,
+    pub paid_at: Option<String>,
+    pub total_amount: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OrderItemDetail {
+    pub id: i64,
+    pub menu_item_id: Option<i64>,
+    pub item_name: String,
+    pub quantity: i64,
+    pub unit_price: f64,
+    pub total_price: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FoodOrderDetails {
+    pub order: FoodOrderInfo,
+    pub items: Vec<OrderItemDetail>,
+}
+
 // ===== EXPENSE MODELS =====
 
 #[derive(Debug, Serialize, Deserialize)]

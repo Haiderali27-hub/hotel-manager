@@ -43,6 +43,7 @@ pub struct ActiveGuestRow {
     pub name: String,
     pub room_number: String,
     pub check_in: String,
+    pub check_out: Option<String>,
     pub daily_rate: f64,
 }
 

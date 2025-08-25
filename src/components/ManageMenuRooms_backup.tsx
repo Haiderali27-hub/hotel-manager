@@ -15,7 +15,7 @@ interface ManageMenuRoomsProps {
   onBack: () => void;
 }
 
-function ManageMenuRooms({ onBack }: ManageMenuRoomsProps) {
+const ManageMenuRooms: React.FC<ManageMenuRoomsProps> = ({ onBack }) => {
   const { colors } = useTheme();
   const [activeTab, setActiveTab] = useState<'menu' | 'rooms'>('menu');
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);

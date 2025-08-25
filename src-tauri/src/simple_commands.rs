@@ -71,6 +71,46 @@ pub fn get_rooms() -> Result<Vec<Room>, String> {
 }
 
 #[command]
+pub fn get_available_rooms_for_guest(guest_id: Option<i64>) -> Result<Vec<Room>, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    let mut query = String::from(
+        "SELECT r.id, r.number, r.room_type, r.daily_rate, r.is_occupied, r.guest_id, g.name as guest_name 
+         FROM rooms r 
+         LEFT JOIN guests g ON r.guest_id = g.id AND g.status = 'active'
+         WHERE r.is_active = 1 AND (r.is_occupied = 0"
+    );
+    
+    // If editing an existing guest, also include their current room
+    if let Some(gid) = guest_id {
+        query.push_str(&format!(" OR r.guest_id = {}", gid));
+    }
+    
+    query.push_str(") ORDER BY r.number");
+    
+    let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
+    
+    let room_iter = stmt.query_map([], |row| {
+        Ok(Room {
+            id: row.get(0)?,
+            number: row.get(1)?,
+            room_type: row.get(2)?,
+            daily_rate: row.get(3)?,
+            is_occupied: row.get::<_, i32>(4)? == 1,
+            guest_id: row.get(5)?,
+            guest_name: row.get(6)?,
+        })
+    }).map_err(|e| e.to_string())?;
+    
+    let mut rooms = Vec::new();
+    for room in room_iter {
+        rooms.push(room.map_err(|e| e.to_string())?);
+    }
+    
+    Ok(rooms)
+}
+
+#[command]
 pub fn update_room(room_id: i64, number: Option<String>, daily_rate: Option<f64>) -> Result<String, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
@@ -208,7 +248,7 @@ pub fn get_active_guests() -> Result<Vec<ActiveGuestRow>, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     let mut stmt = conn.prepare(
-        "SELECT g.id, g.name, r.number, g.check_in, g.daily_rate 
+        "SELECT g.id, g.name, r.number, g.check_in, g.check_out, g.daily_rate 
          FROM guests g 
          JOIN rooms r ON g.room_id = r.id 
          WHERE g.status = 'active'
@@ -221,7 +261,8 @@ pub fn get_active_guests() -> Result<Vec<ActiveGuestRow>, String> {
             name: row.get(1)?,
             room_number: row.get(2)?,
             check_in: row.get(3)?,
-            daily_rate: row.get(4)?,
+            check_out: row.get(4)?,
+            daily_rate: row.get(5)?,
         })
     }).map_err(|e| e.to_string())?;
     
@@ -234,11 +275,68 @@ pub fn get_active_guests() -> Result<Vec<ActiveGuestRow>, String> {
 }
 
 #[command]
+pub fn get_active_guests_with_walkins() -> Result<Vec<ActiveGuestRow>, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    // Get regular guests
+    let mut stmt = conn.prepare(
+        "SELECT g.id, g.name, r.number, g.check_in, g.check_out, g.daily_rate 
+         FROM guests g 
+         JOIN rooms r ON g.room_id = r.id 
+         WHERE g.status = 'active'
+         ORDER BY r.number"
+    ).map_err(|e| e.to_string())?;
+    
+    let guest_iter = stmt.query_map([], |row| {
+        Ok(ActiveGuestRow {
+            guest_id: row.get(0)?,
+            name: row.get(1)?,
+            room_number: row.get(2)?,
+            check_in: row.get(3)?,
+            check_out: row.get(4)?,
+            daily_rate: row.get(5)?,
+        })
+    }).map_err(|e| e.to_string())?;
+    
+    let mut guests = Vec::new();
+    for guest in guest_iter {
+        guests.push(guest.map_err(|e| e.to_string())?);
+    }
+    
+    // Get walk-in customers who have unpaid orders
+    let mut walkin_stmt = conn.prepare(
+        "SELECT DISTINCT -1 as id, customer_name, 'Walk-in' as room_number, 
+                DATE('now') as check_in, NULL as check_out, 0 as daily_rate
+         FROM food_orders 
+         WHERE customer_type = 'walk-in' AND customer_name IS NOT NULL 
+         AND paid = 0
+         ORDER BY customer_name"
+    ).map_err(|e| e.to_string())?;
+    
+    let walkin_iter = walkin_stmt.query_map([], |row| {
+        Ok(ActiveGuestRow {
+            guest_id: row.get(0)?,
+            name: row.get(1)?,
+            room_number: row.get(2)?,
+            check_in: row.get(3)?,
+            check_out: row.get(4)?,
+            daily_rate: row.get(5)?,
+        })
+    }).map_err(|e| e.to_string())?;
+    
+    for walkin in walkin_iter {
+        guests.push(walkin.map_err(|e| e.to_string())?);
+    }
+    
+    Ok(guests)
+}
+
+#[command]
 pub fn get_all_guests() -> Result<Vec<ActiveGuestRow>, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     let mut stmt = conn.prepare(
-        "SELECT g.id, g.name, r.number, g.check_in, g.daily_rate, g.status
+        "SELECT g.id, g.name, r.number, g.check_in, g.check_out, g.daily_rate, g.status
          FROM guests g 
          JOIN rooms r ON g.room_id = r.id 
          ORDER BY g.created_at DESC"
@@ -250,7 +348,8 @@ pub fn get_all_guests() -> Result<Vec<ActiveGuestRow>, String> {
             name: row.get(1)?,
             room_number: row.get(2)?,
             check_in: row.get(3)?,
-            daily_rate: row.get(4)?,
+            check_out: row.get(4)?,
+            daily_rate: row.get(5)?,
         })
     }).map_err(|e| e.to_string())?;
     
@@ -267,7 +366,7 @@ pub fn get_guest(guest_id: i64) -> Result<ActiveGuestRow, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     let result = conn.query_row(
-        "SELECT g.id, g.name, r.number, g.check_in, g.daily_rate 
+        "SELECT g.id, g.name, r.number, g.check_in, g.check_out, g.daily_rate 
          FROM guests g 
          JOIN rooms r ON g.room_id = r.id 
          WHERE g.id = ?1",
@@ -278,7 +377,8 @@ pub fn get_guest(guest_id: i64) -> Result<ActiveGuestRow, String> {
                 name: row.get(1)?,
                 room_number: row.get(2)?,
                 check_in: row.get(3)?,
-                daily_rate: row.get(4)?,
+                check_out: row.get(4)?,
+                daily_rate: row.get(5)?,
             })
         }
     ).map_err(|e| {
@@ -379,6 +479,118 @@ pub fn checkout_guest(guest_id: i64, discount_flat: Option<f64>, discount_pct: O
         grand_total,
         stay_days,
     })
+}
+
+#[command]
+pub fn update_guest(guest_id: i64, name: Option<String>, phone: Option<String>, room_id: Option<i64>, check_in: Option<String>, check_out: Option<String>, daily_rate: Option<f64>) -> Result<bool, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    // Check if guest exists
+    let guest_exists: bool = conn.query_row(
+        "SELECT 1 FROM guests WHERE id = ?1 AND status = 'active'",
+        params![guest_id],
+        |_| Ok(true)
+    ).unwrap_or(false);
+    
+    if !guest_exists {
+        return Err("Guest not found or not active".to_string());
+    }
+    
+    // If room_id is being updated, check room availability
+    if let Some(new_room_id) = room_id {
+        // Check if the new room is available (not occupied by another guest)
+        let room_occupied: bool = conn.query_row(
+            "SELECT 1 FROM guests WHERE room_id = ?1 AND status = 'active' AND id != ?2",
+            params![new_room_id, guest_id],
+            |_| Ok(true)
+        ).unwrap_or(false);
+        
+        if room_occupied {
+            return Err("Room is already occupied by another guest".to_string());
+        }
+        
+        // Check if room exists
+        let room_exists: bool = conn.query_row(
+            "SELECT 1 FROM rooms WHERE id = ?1",
+            params![new_room_id],
+            |_| Ok(true)
+        ).unwrap_or(false);
+        
+        if !room_exists {
+            return Err("Room not found".to_string());
+        }
+    }
+    
+    // Validate daily_rate if provided
+    if let Some(rate) = daily_rate {
+        if rate <= 0.0 {
+            return Err("Daily rate must be positive".to_string());
+        }
+    }
+    
+    // Validate name if provided
+    if let Some(ref guest_name) = name {
+        if guest_name.trim().is_empty() {
+            return Err("Guest name cannot be empty".to_string());
+        }
+    }
+    
+    // Build dynamic update query
+    let mut update_fields = Vec::new();
+    let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+    
+    if let Some(guest_name) = name {
+        update_fields.push("name = ?");
+        params_vec.push(Box::new(guest_name));
+    }
+    
+    if let Some(guest_phone) = phone {
+        update_fields.push("phone = ?");
+        params_vec.push(Box::new(guest_phone));
+    }
+    
+    if let Some(new_room_id) = room_id {
+        update_fields.push("room_id = ?");
+        params_vec.push(Box::new(new_room_id));
+    }
+    
+    if let Some(checkin) = check_in {
+        update_fields.push("check_in = ?");
+        params_vec.push(Box::new(checkin));
+    }
+    
+    if let Some(checkout) = check_out {
+        update_fields.push("check_out = ?");
+        params_vec.push(Box::new(checkout));
+    }
+    
+    if let Some(rate) = daily_rate {
+        update_fields.push("daily_rate = ?");
+        params_vec.push(Box::new(rate));
+    }
+    
+    if update_fields.is_empty() {
+        return Ok(true); // No changes to make
+    }
+    
+    // Add updated_at field
+    update_fields.push("updated_at = ?");
+    params_vec.push(Box::new(chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string()));
+    
+    // Add guest_id for WHERE clause
+    params_vec.push(Box::new(guest_id));
+    
+    let query = format!(
+        "UPDATE guests SET {} WHERE id = ?",
+        update_fields.join(", ")
+    );
+    
+    let params_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+    
+    conn.execute(&query, params_refs.as_slice())
+        .map_err(|e| e.to_string())?;
+    
+    Ok(true)
 }
 
 // ===== MENU COMMANDS =====
@@ -623,15 +835,32 @@ pub fn add_food_order(guest_id: Option<i64>, customer_type: String, customer_nam
         return Err("Order must have at least one item".to_string());
     }
     
+    // Validate customer information
+    if customer_type == "walk-in" {
+        if customer_name.is_none() || customer_name.as_ref().unwrap().trim().is_empty() {
+            return Err("Walk-in customer name is required".to_string());
+        }
+    } else if customer_type == "guest" {
+        if guest_id.is_none() {
+            return Err("Guest must be selected for guest orders".to_string());
+        }
+    }
+    
     // Calculate total
     let total_amount: f64 = items.iter().map(|item| item.unit_price * item.quantity as f64).sum();
     
-    // Insert order
+    // For walk-in customers, explicitly set guest_id to NULL
+    let final_guest_id = if customer_type == "walk-in" { None } else { guest_id };
+    
+    // Insert order with proper NULL handling for walk-in customers
     let _rows_affected = conn.execute(
         "INSERT INTO food_orders (guest_id, customer_type, customer_name, created_at, paid, total_amount) 
          VALUES (?1, ?2, ?3, ?4, 0, ?5)",
-        params![guest_id, customer_type, customer_name, get_current_timestamp(), total_amount],
-    ).map_err(|e| e.to_string())?;
+        params![final_guest_id, customer_type, customer_name, get_current_timestamp(), total_amount],
+    ).map_err(|e| {
+        eprintln!("Database error: {}", e);
+        format!("Failed to create food order: {}", e)
+    })?;
     
     let order_id = conn.last_insert_rowid();
     
@@ -642,7 +871,7 @@ pub fn add_food_order(guest_id: Option<i64>, customer_type: String, customer_nam
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![order_id, item.menu_item_id, item.item_name, item.unit_price, item.quantity, 
                    item.unit_price * item.quantity as f64],
-        ).map_err(|e| e.to_string())?;
+        ).map_err(|e| format!("Failed to add order item: {}", e))?;
     }
     
     Ok(order_id)
@@ -691,6 +920,34 @@ pub fn get_food_orders() -> Result<Vec<FoodOrderSummary>, String> {
     ).map_err(|e| e.to_string())?;
     
     let orders = stmt.query_map([], |row| {
+        Ok(FoodOrderSummary {
+            id: row.get(0)?,
+            created_at: row.get(1)?,
+            paid: row.get::<_, i32>(2)? == 1,
+            paid_at: row.get(3)?,
+            total_amount: row.get(4)?,
+            items: row.get::<_, Option<String>>(5)?.unwrap_or_default(),
+        })
+    }).map_err(|e| e.to_string())?;
+    
+    orders.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+#[command]
+pub fn get_food_orders_by_walkin(customer_name: String) -> Result<Vec<FoodOrderSummary>, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    let mut stmt = conn.prepare(
+        "SELECT fo.id, fo.created_at, fo.paid, fo.paid_at, fo.total_amount,
+                GROUP_CONCAT(oi.item_name || ' x' || oi.quantity) as items
+         FROM food_orders fo
+         LEFT JOIN order_items oi ON fo.id = oi.order_id
+         WHERE fo.customer_type = 'walk-in' AND fo.customer_name = ?1
+         GROUP BY fo.id, fo.created_at, fo.paid, fo.paid_at, fo.total_amount
+         ORDER BY fo.created_at DESC"
+    ).map_err(|e| e.to_string())?;
+    
+    let orders = stmt.query_map([customer_name], |row| {
         Ok(FoodOrderSummary {
             id: row.get(0)?,
             created_at: row.get(1)?,

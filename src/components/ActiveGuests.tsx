@@ -1,12 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import type { ActiveGuestRow, FoodOrderSummary } from '../api/client';
+import type { ActiveGuestRow, FoodOrderSummary, Room } from '../api/client';
 import {
     checkoutGuest,
     deleteFoodOrder,
     getActiveGuests,
+    getActiveGuestsWithWalkins,
+    getAvailableRoomsForGuest,
     getFoodOrdersByGuest,
+    getFoodOrdersByWalkin,
     printOrderReceipt,
-    toggleFoodOrderPayment
+    toggleFoodOrderPayment,
+    updateGuest
 } from '../api/client';
 import { useTheme } from '../context/ThemeContext';
 
@@ -19,6 +23,9 @@ interface ActiveGuestWithOrders extends ActiveGuestRow {
   totalFoodOrders: number;
   stayDays: number;
   foodOrders?: FoodOrderSummary[];
+  totalAmountDue: number;
+  roomCharges: number;
+  unpaidFoodTotal: number;
 }
 
 const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
@@ -29,40 +36,115 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
   const [editingGuest, setEditingGuest] = useState<ActiveGuestRow | null>(null);
   const [showEditForm, setShowEditForm] = useState(false);
   const [expandedGuest, setExpandedGuest] = useState<number | null>(null);
+  const [availableRooms, setAvailableRooms] = useState<Room[]>([]);
+  
+  // User feedback states
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [isLoadingRooms, setIsLoadingRooms] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   
   // Edit form states
+  const [editName, setEditName] = useState('');
+  const [editCheckinDate, setEditCheckinDate] = useState('');
   const [editCheckoutDate, setEditCheckoutDate] = useState('');
-  const [editRoomNumber, setEditRoomNumber] = useState('');
+  const [editRoomId, setEditRoomId] = useState<number>(0);
   const [editDailyRate, setEditDailyRate] = useState('');
 
   useEffect(() => {
     loadActiveGuests();
   }, []);
 
+  // Auto-clear success/error messages after 3 seconds
+  useEffect(() => {
+    if (successMessage || error) {
+      const timer = setTimeout(() => {
+        setSuccessMessage(null);
+        setError(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMessage, error]);
+
+  const loadAvailableRoomsForEdit = async (guestId?: number) => {
+    setIsLoadingRooms(true);
+    try {
+      const rooms = await getAvailableRoomsForGuest(guestId);
+      setAvailableRooms(rooms);
+    } catch (error) {
+      console.error("Error loading available rooms:", error);
+      setError("Failed to load available rooms");
+    } finally {
+      setIsLoadingRooms(false);
+    }
+  };
+
+  const calculateGuestTotals = (guest: ActiveGuestRow, foodOrders: FoodOrderSummary[]) => {
+    // For walk-in customers (guest_id === -1), no room charges
+    if (guest.guest_id === -1) {
+      const unpaidFoodTotal = foodOrders
+        .filter(order => !order.paid)
+        .reduce((sum, order) => sum + order.total_amount, 0);
+      
+      return {
+        stayDays: 0,
+        roomCharges: 0,
+        unpaidFoodTotal,
+        totalAmountDue: unpaidFoodTotal,
+        totalFoodOrders: foodOrders.length,
+        foodOrders
+      };
+    }
+    
+    // Calculate stay days: if checkout date exists, use it; otherwise use today's date
+    const endDate = guest.check_out ? new Date(guest.check_out) : new Date();
+    const startDate = new Date(guest.check_in);
+    const stayDays = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 3600 * 24)));
+    const roomCharges = guest.daily_rate * stayDays;
+    
+    // Calculate unpaid food orders total
+    const unpaidFoodTotal = foodOrders
+      .filter(order => !order.paid)
+      .reduce((sum, order) => sum + order.total_amount, 0);
+    
+    const totalAmountDue = roomCharges + unpaidFoodTotal;
+    
+    return {
+      stayDays,
+      roomCharges,
+      unpaidFoodTotal,
+      totalAmountDue
+    };
+  };
+
   const loadActiveGuests = async () => {
     try {
       setLoading(true);
-      const response = await getActiveGuests();
+      const response = await getActiveGuestsWithWalkins();
       
       // Transform response to include required properties and load food orders
       const guestsWithOrders: ActiveGuestWithOrders[] = await Promise.all(
         response.map(async (guest: ActiveGuestRow) => {
           try {
-            // Load food orders for each guest
-            const foodOrders = await getFoodOrdersByGuest(guest.guest_id);
+            // Load food orders for each guest (or walk-in customer)
+            const foodOrders = guest.guest_id === -1 
+              ? await getFoodOrdersByWalkin(guest.name) // Walk-in customers
+              : await getFoodOrdersByGuest(guest.guest_id); // Regular guests
+            const totals = calculateGuestTotals(guest, foodOrders);
+            
             return {
               ...guest,
               totalFoodOrders: foodOrders.length,
-              stayDays: Math.ceil((new Date().getTime() - new Date(guest.check_in).getTime()) / (1000 * 3600 * 24)),
-              foodOrders: foodOrders
+              foodOrders: foodOrders,
+              ...totals
             };
           } catch (error) {
             console.error(`Error loading orders for guest ${guest.guest_id}:`, error);
+            const totals = calculateGuestTotals(guest, []);
             return {
               ...guest,
               totalFoodOrders: 0,
-              stayDays: Math.ceil((new Date().getTime() - new Date(guest.check_in).getTime()) / (1000 * 3600 * 24)),
-              foodOrders: []
+              foodOrders: [],
+              ...totals
             };
           }
         })
@@ -77,55 +159,71 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
     }
   };
 
-  const handleEditGuest = (_guest: ActiveGuestRow) => {
-    // For now, disable editing until we have full guest details
-    setError('Edit functionality will be implemented in next update');
-    return;
+  const handleEditGuest = async (guest: ActiveGuestRow) => {
+    setEditingGuest(guest);
+    setEditName(guest.name);
+    setEditCheckinDate(guest.check_in);
+    setEditCheckoutDate(guest.check_out || ''); // Set existing checkout date or empty if none
+    setEditRoomId(0); // Will be set after rooms load
+    setEditDailyRate(guest.daily_rate.toString());
+    setError(null);
+    setSuccessMessage(null);
     
-    // setEditingGuest(guest);
-    // setEditCheckoutDate(''); 
-    // setEditRoomNumber(guest.room_number);
-    // setEditDailyRate(guest.daily_rate.toString());
-    // setShowEditForm(true);
+    // Load available rooms for this guest (includes their current room)
+    await loadAvailableRoomsForEdit(guest.guest_id);
+    
+    // Find and set the current room ID after rooms are loaded
+    setTimeout(() => {
+      const currentRoom = availableRooms.find(room => room.number === guest.room_number);
+      if (currentRoom) {
+        setEditRoomId(currentRoom.id);
+      }
+    }, 100); // Small delay to ensure rooms are loaded
+    
+    setShowEditForm(true);
   };
 
   const handleUpdateGuest = async () => {
-    // Disabled for now
-    setError('Edit functionality will be implemented in next update');
-    return;
+    if (!editingGuest || !editName || !editCheckinDate || !editDailyRate || !editRoomId) {
+      setError('Please fill in all required fields');
+      return;
+    }
+
+    setIsUpdating(true);
+    setError(null);
     
-    // if (!editingGuest || !editCheckoutDate || !editRoomNumber || !editDailyRate) {
-    //   setError('Please fill in all fields');
-    //   return;
-    // }
+    try {
+      const updates = {
+        name: editName,
+        room_id: editRoomId,
+        check_in: editCheckinDate,
+        check_out: editCheckoutDate.trim() === '' ? undefined : editCheckoutDate,
+        daily_rate: parseFloat(editDailyRate)
+      };
 
-    // try {
-    //   await updateGuest(editingGuest.id, {
-    //     name: editingGuest.name,
-    //     phone: editingGuest.phone,
-    //     room_id: parseInt(editRoomNumber),
-    //     check_in: editingGuest.check_in,
-    //     check_out: editCheckoutDate,
-    //     daily_rate: parseFloat(editDailyRate)
-    //   });
-
-    //   setShowEditForm(false);
-    //   setEditingGuest(null);
-    //   loadActiveGuests();
-    // } catch (err) {
-    //   setError('Failed to update guest');
-    //   console.error(err);
-    // }
+      await updateGuest(editingGuest.guest_id, updates);
+      setSuccessMessage(`Guest ${editName} updated successfully!`);
+      setShowEditForm(false);
+      setEditingGuest(null);
+      loadActiveGuests();
+    } catch (err) {
+      setError(`Failed to update guest: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      console.error(err);
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
   const handleCheckoutGuest = async (guestId: number, guestName: string) => {
     if (confirm(`Are you sure you want to checkout ${guestName}?`)) {
+      setError(null);
       try {
         const today = new Date().toISOString().split('T')[0]; // Current date in YYYY-MM-DD format
         await checkoutGuest(guestId, today);
+        setSuccessMessage(`${guestName} has been checked out successfully!`);
         loadActiveGuests();
       } catch (err) {
-        setError('Failed to checkout guest');
+        setError(`Failed to checkout ${guestName}: ${err instanceof Error ? err.message : 'Unknown error'}`);
         console.error(err);
       }
     }
@@ -133,8 +231,10 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
 
   const resetEditForm = () => {
     setEditingGuest(null);
+    setEditName('');
+    setEditCheckinDate('');
     setEditCheckoutDate('');
-    setEditRoomNumber('');
+    setEditRoomId(0);
     setEditDailyRate('');
     setShowEditForm(false);
   };
@@ -160,26 +260,29 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
   };
 
   const handleTogglePayment = async (orderId: number) => {
+    setError(null);
     try {
-      setError(null); // Clear any previous errors
       const result = await toggleFoodOrderPayment(orderId);
+      setSuccessMessage('Payment status updated successfully!');
       console.log('Payment toggle result:', result);
       // Reload the guests to update the payment status
       await loadActiveGuests();
     } catch (err) {
-      setError('Failed to toggle payment status');
+      setError(`Failed to toggle payment status: ${err instanceof Error ? err.message : 'Unknown error'}`);
       console.error('Toggle payment error:', err);
     }
   };
 
   const handleDeleteOrder = async (orderId: number) => {
     if (confirm('Are you sure you want to delete this food order? This action cannot be undone.')) {
+      setError(null);
       try {
         await deleteFoodOrder(orderId);
+        setSuccessMessage('Food order deleted successfully!');
         // Reload the guests to update the orders list
         loadActiveGuests();
       } catch (err) {
-        setError('Failed to delete order');
+        setError(`Failed to delete food order: ${err instanceof Error ? err.message : 'Unknown error'}`);
         console.error(err);
       }
     }
@@ -226,6 +329,24 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
         </h1>
       </div>
 
+      {/* Success Message */}
+      {successMessage && (
+        <div style={{
+          backgroundColor: '#d4edda',
+          color: '#155724',
+          border: '1px solid #c3e6cb',
+          padding: '1rem',
+          borderRadius: '8px',
+          marginBottom: '1rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem'
+        }}>
+          <span>✅</span>
+          <span>{successMessage}</span>
+        </div>
+      )}
+
       {/* Error Message */}
       {error && (
         <div style={{
@@ -249,7 +370,7 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
         {/* Table Header */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: '200px 100px 180px 80px 120px 250px',
+          gridTemplateColumns: '180px 100px 160px 80px 120px 120px 250px',
           backgroundColor: colors.secondary,
           padding: '1rem',
           fontWeight: '600',
@@ -261,6 +382,7 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
           <div>Check-in / Check-out</div>
           <div>Stay Days</div>
           <div>Food Orders</div>
+          <div>Total Amount Due</div>
           <div>Actions</div>
         </div>
 
@@ -280,7 +402,7 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '200px 100px 180px 80px 120px 250px',
+                  gridTemplateColumns: '180px 100px 160px 80px 120px 120px 250px',
                   padding: '1rem',
                   borderBottom: `1px solid ${colors.border}`,
                   alignItems: 'center',
@@ -288,12 +410,18 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
                 }}
               >
                 <div style={{ fontWeight: '500' }}>{guest.name}</div>
-                <div>Room {guest.room_number}</div>
+                <div>{guest.guest_id === -1 ? 'Walk-in Customer' : `Room ${guest.room_number}`}</div>
                 <div style={{ fontSize: '0.875rem', color: colors.textSecondary }}>
-                  <div>{formatDate(guest.check_in)}</div>
-                  <div>Open</div>
+                  {guest.guest_id === -1 ? (
+                    <div>Walk-in Customer</div>
+                  ) : (
+                    <>
+                      <div>{formatDate(guest.check_in)}</div>
+                      <div>{guest.check_out ? formatDate(guest.check_out) : 'Open'}</div>
+                    </>
+                  )}
                 </div>
-                <div style={{ textAlign: 'center' }}>{guest.stayDays}</div>
+                <div style={{ textAlign: 'center' }}>{guest.guest_id === -1 ? '-' : guest.stayDays}</div>
                 <div style={{ textAlign: 'center' }}>
                   <button
                     onClick={() => handleToggleGuestOrders(guest.guest_id)}
@@ -318,21 +446,31 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
                     )}
                   </button>
                 </div>
+                <div style={{ 
+                  textAlign: 'center', 
+                  fontWeight: '600', 
+                  color: colors.accent,
+                  fontSize: '0.95rem'
+                }}>
+                  RS {guest.totalAmountDue.toLocaleString()}
+                </div>
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  <button
-                    onClick={() => handleEditGuest(guest)}
-                    style={{
-                      backgroundColor: colors.warning,
-                      color: '#FFFFFF',
-                      border: 'none',
-                      padding: '0.5rem 1rem',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontSize: '0.875rem'
-                    }}
-                  >
-                    Edit
-                  </button>
+                  {guest.guest_id !== -1 && (
+                    <button
+                      onClick={() => handleEditGuest(guest)}
+                      style={{
+                        backgroundColor: colors.warning,
+                        color: '#FFFFFF',
+                        border: 'none',
+                        padding: '0.5rem 1rem',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '0.875rem'
+                      }}
+                    >
+                      Edit
+                    </button>
+                  )}
                   <button
                     onClick={() => onAddOrder(guest.guest_id)}
                     style={{
@@ -347,20 +485,22 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
                   >
                     Add Order
                   </button>
-                  <button
-                    onClick={() => handleCheckoutGuest(guest.guest_id, guest.name)}
-                    style={{
-                      backgroundColor: colors.success,
-                      color: '#FFFFFF',
-                      border: 'none',
-                      padding: '0.5rem 1rem',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontSize: '0.875rem'
-                    }}
-                  >
-                    Checkout
-                  </button>
+                  {guest.guest_id !== -1 && (
+                    <button
+                      onClick={() => handleCheckoutGuest(guest.guest_id, guest.name)}
+                      style={{
+                        backgroundColor: colors.success,
+                        color: '#FFFFFF',
+                        border: 'none',
+                        padding: '0.5rem 1rem',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '0.875rem'
+                      }}
+                    >
+                      Checkout
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -518,6 +658,47 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
             
             <div style={{ marginBottom: '1rem' }}>
               <label style={{ display: 'block', marginBottom: '0.5rem', color: colors.text }}>
+                Guest Name
+              </label>
+              <input
+                type="text"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  backgroundColor: colors.surface,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '8px',
+                  color: colors.text,
+                  fontSize: '1rem'
+                }}
+                placeholder="Guest name"
+              />
+            </div>
+
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', color: colors.text }}>
+                Check-in Date
+              </label>
+              <input
+                type="date"
+                value={editCheckinDate}
+                onChange={(e) => setEditCheckinDate(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  backgroundColor: colors.surface,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '8px',
+                  color: colors.text,
+                  fontSize: '1rem'
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', color: colors.text }}>
                 Check-out Date
               </label>
               <input
@@ -538,12 +719,12 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
 
             <div style={{ marginBottom: '1rem' }}>
               <label style={{ display: 'block', marginBottom: '0.5rem', color: colors.text }}>
-                Room Number
+                Room
               </label>
-              <input
-                type="number"
-                value={editRoomNumber}
-                onChange={(e) => setEditRoomNumber(e.target.value)}
+              <select
+                value={editRoomId}
+                onChange={(e) => setEditRoomId(Number(e.target.value))}
+                disabled={isLoadingRooms}
                 style={{
                   width: '100%',
                   padding: '0.75rem',
@@ -551,10 +732,29 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
                   border: `1px solid ${colors.border}`,
                   borderRadius: '8px',
                   color: colors.text,
-                  fontSize: '1rem'
+                  fontSize: '1rem',
+                  opacity: isLoadingRooms ? 0.6 : 1
                 }}
-                placeholder="Room number"
-              />
+              >
+                <option value="">
+                  {isLoadingRooms ? 'Loading available rooms...' : 'Select a room'}
+                </option>
+                {availableRooms.map((room) => (
+                  <option key={room.id} value={room.id}>
+                    Room {room.number} - {room.room_type} (RS {room.daily_rate}/day)
+                    {room.is_occupied && room.guest_id === editingGuest?.guest_id ? ' (Current)' : ''}
+                  </option>
+                ))}
+              </select>
+              {availableRooms.length === 0 && !isLoadingRooms && (
+                <div style={{ 
+                  color: '#dc3545', 
+                  fontSize: '0.875rem', 
+                  marginTop: '0.5rem' 
+                }}>
+                  No available rooms found. All rooms are currently occupied.
+                </div>
+              )}
             </div>
 
             <div style={{ marginBottom: '1.5rem' }}>
@@ -595,17 +795,19 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
               </button>
               <button
                 onClick={handleUpdateGuest}
+                disabled={isUpdating || isLoadingRooms}
                 style={{
-                  backgroundColor: colors.success,
+                  backgroundColor: isUpdating ? colors.textMuted : colors.success,
                   color: '#FFFFFF',
                   border: 'none',
                   padding: '0.75rem 1.5rem',
                   borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '1rem'
+                  cursor: isUpdating || isLoadingRooms ? 'not-allowed' : 'pointer',
+                  fontSize: '1rem',
+                  opacity: isUpdating || isLoadingRooms ? 0.6 : 1
                 }}
               >
-                Update
+                {isUpdating ? 'Updating...' : 'Update'}
               </button>
             </div>
           </div>

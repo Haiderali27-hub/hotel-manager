@@ -17,10 +17,10 @@ use offline_auth::{
 };
 use test::test_command;
 use simple_commands::{
-    add_room, get_rooms, update_room, delete_room,
-    add_guest, get_active_guests, get_all_guests, get_guest, checkout_guest,
+    add_room, get_rooms, get_available_rooms_for_guest, update_room, delete_room,
+    add_guest, get_active_guests, get_active_guests_with_walkins, get_all_guests, get_guest, checkout_guest, update_guest,
     add_menu_item, get_menu_items, update_menu_item, delete_menu_item,
-    dashboard_stats, add_food_order, get_food_orders, get_food_orders_by_guest, mark_order_paid,
+    dashboard_stats, add_food_order, get_food_orders, get_food_orders_by_guest, get_food_orders_by_walkin, mark_order_paid,
     add_expense, get_expenses, get_expenses_by_date_range, update_expense, delete_expense,
     toggle_food_order_payment, delete_food_order, get_order_details
 };
@@ -59,14 +59,17 @@ pub fn run() {
             // Room management
             add_room,
             get_rooms,
+            get_available_rooms_for_guest,
             update_room,
             delete_room,
             // Guest management
             add_guest,
             get_active_guests,
+            get_active_guests_with_walkins,
             get_all_guests,
             get_guest,
             checkout_guest,
+            update_guest,
             // Menu management
             add_menu_item,
             get_menu_items,
@@ -76,6 +79,7 @@ pub fn run() {
             add_food_order,
             get_food_orders,
             get_food_orders_by_guest,
+            get_food_orders_by_walkin,
             mark_order_paid,
             toggle_food_order_payment,
             delete_food_order,

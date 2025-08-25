@@ -178,7 +178,11 @@ export interface DatabaseStats {
  * ```
  */
 export const addRoom = (room: NewRoom): Promise<number> => 
-  invoke("add_room", { number: room.number, dailyRate: room.daily_rate });
+  invoke("add_room", { 
+    number: room.number, 
+    roomType: room.room_type, 
+    dailyRate: room.daily_rate 
+  });
 
 /**
  * Get all rooms in the hotel
@@ -207,7 +211,7 @@ export const updateRoom = (roomId: number, updates: Partial<NewRoom>): Promise<b
  * @returns Success status
  */
 export const deleteRoom = (roomId: number): Promise<boolean> => 
-  invoke("delete_room", { roomId });
+  invoke("delete_room", { id: roomId });
 
 // Guest Management APIs
 /**
@@ -295,7 +299,12 @@ export const getMenuItems = (): Promise<MenuItem[]> =>
  * ```
  */
 export const addMenuItem = (item: NewMenuItem): Promise<number> => 
-  invoke("add_menu_item", { ...item });
+  invoke("add_menu_item", { 
+    name: item.name, 
+    price: item.price, 
+    category: item.category, 
+    isAvailable: item.is_available 
+  });
 
 /**
  * Update menu item details
@@ -304,7 +313,13 @@ export const addMenuItem = (item: NewMenuItem): Promise<number> =>
  * @returns Success status
  */
 export const updateMenuItem = (itemId: number, updates: Partial<NewMenuItem>): Promise<boolean> => 
-  invoke("update_menu_item", { itemId, ...updates });
+  invoke("update_menu_item", { 
+    itemId: itemId,
+    name: updates.name,
+    price: updates.price,
+    category: updates.category,
+    isAvailable: updates.is_available
+  });
 
 /**
  * Delete a menu item
@@ -312,7 +327,7 @@ export const updateMenuItem = (itemId: number, updates: Partial<NewMenuItem>): P
  * @returns Success status
  */
 export const deleteMenuItem = (itemId: number): Promise<boolean> => 
-  invoke("delete_menu_item", { itemId });
+  invoke("delete_menu_item", { itemId: itemId });
 
 // Food Order APIs
 /**

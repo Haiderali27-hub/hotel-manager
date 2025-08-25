@@ -468,7 +468,7 @@ pub fn delete_menu_item(item_id: i64) -> Result<String, String> {
     
     // Check if menu item is used in any orders
     let order_count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM food_order_items WHERE menu_item_id = ?1",
+        "SELECT COUNT(*) FROM order_items WHERE menu_item_id = ?1",
         params![item_id],
         |row| row.get(0)
     ).map_err(|e| e.to_string())?;

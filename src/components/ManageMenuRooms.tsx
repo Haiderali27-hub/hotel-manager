@@ -226,6 +226,113 @@ const ManageMenuRooms: React.FC<ManageMenuRoomsProps> = ({ onBack }) => {
         </div>
       )}
 
+      {/* Debug Test Buttons */}
+      <div style={{ marginBottom: '1rem', display: 'flex', gap: '1rem' }}>
+        <button
+          onClick={async () => {
+            try {
+              console.log('🔍 Testing getRooms...');
+              const rooms = await getRooms();
+              console.log('✅ getRooms success:', rooms);
+              alert(`Rooms: ${JSON.stringify(rooms, null, 2)}`);
+            } catch (error) {
+              console.error('❌ getRooms error:', error);
+              alert(`Error: ${error}`);
+            }
+          }}
+          style={{
+            backgroundColor: '#007bff',
+            color: 'white',
+            padding: '0.5rem 1rem',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer'
+          }}
+        >
+          Test getRooms
+        </button>
+        <button
+          onClick={async () => {
+            try {
+              console.log('🔍 Testing getMenuItems...');
+              const items = await getMenuItems();
+              console.log('✅ getMenuItems success:', items);
+              alert(`Menu Items: ${JSON.stringify(items, null, 2)}`);
+            } catch (error) {
+              console.error('❌ getMenuItems error:', error);
+              alert(`Error: ${error}`);
+            }
+          }}
+          style={{
+            backgroundColor: '#28a745',
+            color: 'white',
+            padding: '0.5rem 1rem',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer'
+          }}
+        >
+          Test getMenuItems
+        </button>
+        <button
+          onClick={async () => {
+            try {
+              console.log('🔍 Testing addRoom...');
+              const result = await addRoom({
+                number: 'TEST-123',
+                room_type: 'Test Room',
+                daily_rate: 100.0
+              });
+              console.log('✅ addRoom success:', result);
+              alert(`Add Room Success: ${result}`);
+              loadData(); // Refresh data
+            } catch (error) {
+              console.error('❌ addRoom error:', error);
+              alert(`Add Room Error: ${error}`);
+            }
+          }}
+          style={{
+            backgroundColor: '#17a2b8',
+            color: 'white',
+            padding: '0.5rem 1rem',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer'
+          }}
+        >
+          Test addRoom
+        </button>
+        <button
+          onClick={async () => {
+            try {
+              console.log('🔍 Testing deleteMenuItem...');
+              // Try to delete the first menu item if any exist
+              if (menuItems.length > 0) {
+                const result = await deleteMenuItem(menuItems[0].id);
+                console.log('✅ deleteMenuItem success:', result);
+                alert(`Delete Menu Item Success: ${result}`);
+                loadData(); // Refresh data
+              } else {
+                alert('No menu items to delete');
+              }
+            } catch (error) {
+              console.error('❌ deleteMenuItem error:', error);
+              alert(`Delete Menu Item Error: ${error}`);
+            }
+          }}
+          style={{
+            backgroundColor: '#dc3545',
+            color: 'white',
+            padding: '0.5rem 1rem',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer'
+          }}
+        >
+          Test deleteMenuItem
+        </button>
+      </div>
+
       {/* Tab Navigation */}
       <div style={{
         display: 'flex',

@@ -26,14 +26,12 @@ export interface Guest {
 }
 
 export interface Room {
-  id?: number;
-  room_number: string;
-  room_type: string; // "single", "double", "suite", "deluxe"
-  price_per_night: number;
-  status: string; // "available", "occupied", "maintenance", "reserved"
-  max_occupancy: number;
-  amenities?: string; // JSON string
-  description?: string;
+  id: number;
+  number: string;
+  room_type: string;
+  daily_rate: number;
+  is_occupied: boolean;
+  guest_id?: number;
 }
 
 export interface MenuItem {
@@ -164,7 +162,11 @@ class DatabaseService {
 
   static async addRoom(roomData: Room): Promise<string> {
     try {
-      const result = await invoke('add_room', { roomData });
+      const result = await invoke('add_room', { 
+        number: roomData.number, 
+        room_type: roomData.room_type, 
+        daily_rate: roomData.daily_rate 
+      });
       return result as string;
     } catch (error) {
       console.error('Error adding room:', error);
@@ -174,7 +176,7 @@ class DatabaseService {
 
   static async deleteRoom(roomId: number): Promise<string> {
     try {
-      const result = await invoke('delete_room', { roomId });
+      const result = await invoke('delete_room', { id: roomId });
       return result as string;
     } catch (error) {
       console.error('Error deleting room:', error);
@@ -195,7 +197,12 @@ class DatabaseService {
 
   static async addMenuItem(menuData: MenuItem): Promise<string> {
     try {
-      const result = await invoke('add_menu_item', { menuData });
+      const result = await invoke('add_menu_item', { 
+        name: menuData.name,
+        price: menuData.price,
+        category: menuData.category,
+        is_available: menuData.is_available
+      });
       return result as string;
     } catch (error) {
       console.error('Error adding menu item:', error);
@@ -205,7 +212,7 @@ class DatabaseService {
 
   static async deleteMenuItem(itemId: number): Promise<string> {
     try {
-      const result = await invoke('delete_menu_item', { itemId });
+      const result = await invoke('delete_menu_item', { item_id: itemId });
       return result as string;
     } catch (error) {
       console.error('Error deleting menu item:', error);

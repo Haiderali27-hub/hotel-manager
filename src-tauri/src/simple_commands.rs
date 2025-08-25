@@ -7,17 +7,23 @@ use chrono::{NaiveDate, Utc, Datelike};
 // ===== ROOM COMMANDS =====
 
 #[command]
-pub fn add_room(number: String) -> Result<String, String> {
+pub fn add_room(number: String, room_type: String, daily_rate: f64) -> Result<String, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     // Validate input
     if number.trim().is_empty() {
         return Err("Room number cannot be empty".to_string());
     }
+    if room_type.trim().is_empty() {
+        return Err("Room type cannot be empty".to_string());
+    }
+    if daily_rate <= 0.0 {
+        return Err("Daily rate must be greater than 0".to_string());
+    }
     
     let result = conn.execute(
-        "INSERT INTO rooms (number, is_active) VALUES (?1, 1)",
-        params![number.trim()],
+        "INSERT INTO rooms (number, room_type, daily_rate, is_occupied, is_active) VALUES (?1, ?2, ?3, 0, 1)",
+        params![number.trim(), room_type.trim(), daily_rate],
     );
     
     match result {
@@ -37,14 +43,17 @@ pub fn get_rooms() -> Result<Vec<Room>, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     let mut stmt = conn.prepare(
-        "SELECT id, number, is_active FROM rooms ORDER BY number"
+        "SELECT id, number, room_type, daily_rate, is_occupied, guest_id FROM rooms WHERE is_active = 1 ORDER BY number"
     ).map_err(|e| e.to_string())?;
     
     let room_iter = stmt.query_map([], |row| {
         Ok(Room {
             id: row.get(0)?,
             number: row.get(1)?,
-            is_active: row.get::<_, i32>(2)? == 1,
+            room_type: row.get(2)?,
+            daily_rate: row.get(3)?,
+            is_occupied: row.get::<_, i32>(4)? == 1,
+            guest_id: row.get(5)?,
         })
     }).map_err(|e| e.to_string())?;
     
@@ -334,7 +343,7 @@ pub fn checkout_guest(guest_id: i64, discount_flat: Option<f64>, discount_pct: O
 // ===== MENU COMMANDS =====
 
 #[command]
-pub fn add_menu_item(name: String, price: f64) -> Result<i64, String> {
+pub fn add_menu_item(name: String, price: f64, category: String, is_available: Option<bool>) -> Result<i64, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     validate_positive_amount(price, "price")?;
@@ -343,9 +352,15 @@ pub fn add_menu_item(name: String, price: f64) -> Result<i64, String> {
         return Err("Menu item name cannot be empty".to_string());
     }
     
+    if category.trim().is_empty() {
+        return Err("Menu item category cannot be empty".to_string());
+    }
+    
+    let available = is_available.unwrap_or(true);
+    
     let result = conn.execute(
-        "INSERT INTO menu_items (name, price, is_active) VALUES (?1, ?2, 1)",
-        params![name.trim(), price],
+        "INSERT INTO menu_items (name, price, category, is_available, is_active) VALUES (?1, ?2, ?3, ?4, 1)",
+        params![name.trim(), price, category.trim(), if available { 1 } else { 0 }],
     );
     
     match result {
@@ -365,7 +380,7 @@ pub fn get_menu_items() -> Result<Vec<MenuItem>, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     let mut stmt = conn.prepare(
-        "SELECT id, name, price, is_active FROM menu_items ORDER BY name"
+        "SELECT id, name, price, category, is_available FROM menu_items WHERE is_active = 1 ORDER BY name"
     ).map_err(|e| e.to_string())?;
     
     let item_iter = stmt.query_map([], |row| {
@@ -373,7 +388,8 @@ pub fn get_menu_items() -> Result<Vec<MenuItem>, String> {
             id: row.get(0)?,
             name: row.get(1)?,
             price: row.get(2)?,
-            is_active: row.get::<_, i32>(3)? == 1,
+            category: row.get(3)?,
+            is_available: row.get::<_, i32>(4)? == 1,
         })
     }).map_err(|e| e.to_string())?;
     

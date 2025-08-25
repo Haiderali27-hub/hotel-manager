@@ -1,5 +1,19 @@
 import { invoke } from "@tauri-apps/api/core";
 
+// Extend Window interface for Tauri
+declare global {
+  interface Window {
+    __TAURI__?: any;
+  }
+}
+
+// Check if Tauri is available
+const isTauri = typeof window !== 'undefined' && window.__TAURI__;
+
+if (!isTauri) {
+  console.warn('Tauri APIs not available - running in web mode');
+}
+
 // ============================================================================
 // TYPE DEFINITIONS - IPC Contract Types
 // ============================================================================
@@ -8,6 +22,7 @@ import { invoke } from "@tauri-apps/api/core";
 export interface Room {
   id: number;
   number: string;
+  room_type: string;
   daily_rate: number;
   is_occupied: boolean;
   guest_id?: number;
@@ -15,6 +30,7 @@ export interface Room {
 
 export interface NewRoom {
   number: string;
+  room_type: string;
   daily_rate: number;
 }
 
@@ -74,6 +90,14 @@ export interface FoodOrder {
 export interface NewFoodOrder {
   guest_id: number;
   items: OrderItem[];
+}
+
+// Guest with orders for display purposes
+export interface GuestWithOrders extends Guest {
+  food_orders?: FoodOrder[];
+  room_number?: number;
+  check_in_date?: string;
+  check_out_date?: string;
 }
 
 // Expenses
@@ -239,6 +263,15 @@ export const getGuest = (guestId: number): Promise<Guest> =>
  */
 export const checkoutGuest = (guestId: number, checkOutDate: string): Promise<number> => 
   invoke("checkout_guest", { guestId, checkOutDate });
+
+/**
+ * Update guest information
+ * @param guestId - ID of the guest to update
+ * @param updates - Fields to update
+ * @returns Success status
+ */
+export const updateGuest = (guestId: number, updates: Partial<NewGuest>): Promise<boolean> => 
+  invoke("update_guest", { guestId, ...updates });
 
 // Menu Management APIs
 /**
@@ -529,6 +562,7 @@ export const getDatabaseStats = (): Promise<DatabaseStats> =>
 
 export const mockRoom: NewRoom = {
   number: "101",
+  room_type: "Single Room",
   daily_rate: 150.0
 };
 

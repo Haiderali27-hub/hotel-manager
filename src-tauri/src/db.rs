@@ -76,9 +76,14 @@ fn create_initial_schema(conn: &Connection) -> SqliteResult<()> {
         "CREATE TABLE IF NOT EXISTS rooms (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             number TEXT UNIQUE NOT NULL,
+            room_type TEXT NOT NULL DEFAULT 'Single Room',
+            daily_rate REAL NOT NULL DEFAULT 100.0,
+            is_occupied INTEGER NOT NULL DEFAULT 0,
+            guest_id INTEGER,
             is_active INTEGER NOT NULL DEFAULT 1,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (guest_id) REFERENCES guests(id)
         )",
         [],
     )?;
@@ -177,6 +182,9 @@ fn create_initial_schema(conn: &Connection) -> SqliteResult<()> {
     
     // Create triggers for automatic updated_at timestamps
     create_update_triggers(conn)?;
+    
+    // Run migrations for existing databases
+    migrate_database(conn)?;
     
     Ok(())
 }
@@ -321,4 +329,44 @@ pub fn is_room_available(room_id: i64) -> SqliteResult<bool> {
     )?;
     
     Ok(count == 0)
+}
+
+fn migrate_database(conn: &Connection) -> SqliteResult<()> {
+    // Add room_type column if it doesn't exist
+    let _ = conn.execute(
+        "ALTER TABLE rooms ADD COLUMN room_type TEXT NOT NULL DEFAULT 'Single Room'",
+        [],
+    );
+    
+    // Add daily_rate column if it doesn't exist
+    let _ = conn.execute(
+        "ALTER TABLE rooms ADD COLUMN daily_rate REAL NOT NULL DEFAULT 100.0",
+        [],
+    );
+    
+    // Add is_occupied column if it doesn't exist
+    let _ = conn.execute(
+        "ALTER TABLE rooms ADD COLUMN is_occupied INTEGER NOT NULL DEFAULT 0",
+        [],
+    );
+    
+    // Add guest_id column if it doesn't exist
+    let _ = conn.execute(
+        "ALTER TABLE rooms ADD COLUMN guest_id INTEGER",
+        [],
+    );
+    
+    // Add category column to menu_items if it doesn't exist
+    let _ = conn.execute(
+        "ALTER TABLE menu_items ADD COLUMN category TEXT NOT NULL DEFAULT 'Main Course'",
+        [],
+    );
+    
+    // Add is_available column to menu_items if it doesn't exist
+    let _ = conn.execute(
+        "ALTER TABLE menu_items ADD COLUMN is_available INTEGER NOT NULL DEFAULT 1",
+        [],
+    );
+    
+    Ok(())
 }

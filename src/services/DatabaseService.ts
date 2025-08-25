@@ -3,13 +3,12 @@ import { invoke } from '@tauri-apps/api/core';
 // ===== TYPE DEFINITIONS =====
 
 export interface DashboardStats {
-  totalGuests: number;
-  activeGuests: number;
-  totalIncome: number;
-  totalExpenses: number;
-  profitLoss: number;
-  totalFoodOrders: number;
-  currency: string;
+  total_guests_this_month: number;
+  active_guests: number;
+  total_income: number;
+  total_expenses: number;
+  profit_loss: number;
+  total_food_orders: number;
 }
 
 export interface Guest {
@@ -93,7 +92,7 @@ class DatabaseService {
   // Get dashboard statistics
   static async getDashboardStats(): Promise<DashboardStats> {
     try {
-      const stats = await invoke('get_dashboard_stats');
+      const stats = await invoke('dashboard_stats');
       return stats as DashboardStats;
     } catch (error) {
       console.error('Error fetching dashboard stats:', error);

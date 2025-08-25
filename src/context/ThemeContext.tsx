@@ -119,7 +119,7 @@ interface ThemeProviderProps {
 }
 
 export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
-  const [theme, setTheme] = useState<ThemeType>('dark');
+  const [theme, setTheme] = useState<ThemeType>('light');
 
   // Load theme from localStorage on mount
   useEffect(() => {
@@ -132,6 +132,8 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
   // Save theme to localStorage when it changes
   useEffect(() => {
     localStorage.setItem('hotel-app-theme', theme);
+    // Set data-theme attribute on document for CSS styling
+    document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
   const toggleTheme = () => {

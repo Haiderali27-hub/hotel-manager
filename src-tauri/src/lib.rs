@@ -9,6 +9,7 @@ mod export;
 mod print_templates;
 mod validation;
 
+use tauri::Manager;
 use db::initialize_database;
 use offline_auth::{
     login_admin, get_security_question, reset_admin_password,
@@ -35,6 +36,14 @@ pub fn run() {
     }
 
     tauri::Builder::default()
+        .setup(|app| {
+            #[cfg(debug_assertions)]
+            {
+                let window = app.get_webview_window("main").unwrap();
+                window.open_devtools();
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             // Authentication
             login_admin,

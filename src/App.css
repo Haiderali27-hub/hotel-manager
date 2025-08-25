@@ -79,3 +79,20 @@ button {
     height: 32px;
   }
 }
+
+/* Fix calendar icon visibility in light theme */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: none !important;
+  opacity: 1 !important;
+  cursor: pointer;
+}
+
+/* Light theme specific styles */
+[data-theme="light"] input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.8) !important;
+}
+
+/* Dark theme specific styles */
+[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) !important;
+}

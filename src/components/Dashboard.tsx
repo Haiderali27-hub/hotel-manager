@@ -4,8 +4,10 @@ import { useAuth } from '../context/SimpleAuthContext';
 import { getGradientColors, useTheme } from '../context/ThemeContext';
 import type { DashboardStats } from '../services/DatabaseService';
 import DatabaseService from '../services/DatabaseService';
+import ActiveGuests from './ActiveGuests';
 import AddFoodOrder from './AddFoodOrder';
 import AddGuest from './AddGuest';
+import ManageMenuRooms from './ManageMenuRooms';
 
 const Dashboard: React.FC = () => {
   const { logout } = useAuth();
@@ -91,14 +93,14 @@ const Dashboard: React.FC = () => {
       return [
         { 
           title: 'Total Guests This Month', 
-          value: dbStats.totalGuests.toString(), 
+          value: dbStats.total_guests_this_month.toString(), 
           icon: '👥', 
           color: gradients.primary,
           change: 'Real Data' 
         },
         { 
           title: 'Total Income', 
-          value: dbStats.totalIncome.toLocaleString(), 
+          value: dbStats.total_income.toLocaleString(), 
           currency: 'Rs.', 
           icon: '💰', 
           color: gradients.success,
@@ -106,7 +108,7 @@ const Dashboard: React.FC = () => {
         },
         { 
           title: 'Total Expenses', 
-          value: dbStats.totalExpenses.toLocaleString(), 
+          value: dbStats.total_expenses.toLocaleString(), 
           currency: 'Rs.', 
           icon: '💸', 
           color: gradients.error,
@@ -114,24 +116,24 @@ const Dashboard: React.FC = () => {
         },
         { 
           title: 'Profit/Loss', 
-          value: dbStats.profitLoss.toLocaleString(), 
+          value: dbStats.profit_loss.toLocaleString(), 
           currency: 'Rs.', 
-          icon: dbStats.profitLoss >= 0 ? '📈' : '📉', 
-          color: dbStats.profitLoss >= 0 
+          icon: dbStats.profit_loss >= 0 ? '📈' : '📉', 
+          color: dbStats.profit_loss >= 0 
             ? gradients.info
             : gradients.error,
           change: 'Real Data' 
         },
         { 
           title: 'Total Food Orders', 
-          value: dbStats.totalFoodOrders.toString(), 
+          value: dbStats.total_food_orders.toString(), 
           icon: '🍽️', 
           color: gradients.warning,
           change: 'Real Data' 
         },
         { 
           title: 'Active Guests', 
-          value: dbStats.activeGuests.toString(), 
+          value: dbStats.active_guests.toString(), 
           icon: '👥', 
           color: gradients.accent,
           change: 'Real Data' 
@@ -602,8 +604,28 @@ const Dashboard: React.FC = () => {
               onOrderAdded={refreshData}
             />
           )}
+          {currentPage === 'active-guests' && (
+            <ActiveGuests 
+              onBack={goBackToDashboard}
+              onAddOrder={() => {
+                setCurrentPage('add-food-order');
+              }}
+            />
+          )}
+          {currentPage === 'manage-menu-rooms' && (
+            <ManageMenuRooms 
+              onBack={() => {
+                goBackToDashboard();
+                refreshData();
+              }}
+            />
+          )}
           {/* TODO: Add other page components */}
-          {currentPage !== 'dashboard' && currentPage !== 'add-guest' && currentPage !== 'add-food-order' && (
+          {currentPage !== 'dashboard' && 
+           currentPage !== 'add-guest' && 
+           currentPage !== 'add-food-order' && 
+           currentPage !== 'active-guests' && 
+           currentPage !== 'manage-menu-rooms' && (
             <div style={{
               padding: '2rem',
               color: colors.text,

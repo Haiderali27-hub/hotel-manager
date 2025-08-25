@@ -6,7 +6,10 @@ use serde::{Deserialize, Serialize};
 pub struct Room {
     pub id: i64,
     pub number: String,
-    pub is_active: bool,
+    pub room_type: String,
+    pub daily_rate: f64,
+    pub is_occupied: bool,
+    pub guest_id: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -47,7 +50,8 @@ pub struct MenuItem {
     pub id: i64,
     pub name: String,
     pub price: f64,
-    pub is_active: bool,
+    pub category: String,
+    pub is_available: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

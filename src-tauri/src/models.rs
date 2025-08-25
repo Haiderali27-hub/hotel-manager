@@ -10,6 +10,7 @@ pub struct Room {
     pub daily_rate: f64,
     pub is_occupied: bool,
     pub guest_id: Option<i64>,
+    pub guest_name: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

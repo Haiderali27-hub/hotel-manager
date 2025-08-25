@@ -509,7 +509,7 @@ const ManageMenuRooms: React.FC<ManageMenuRoomsProps> = ({ onBack }) => {
             {/* Table Header */}
             <div style={{
               display: 'grid',
-              gridTemplateColumns: '50px 150px 120px 120px 120px',
+              gridTemplateColumns: '50px 150px 120px 120px 150px 120px',
               backgroundColor: colors.secondary,
               padding: '1rem',
               fontWeight: '600',
@@ -519,6 +519,7 @@ const ManageMenuRooms: React.FC<ManageMenuRoomsProps> = ({ onBack }) => {
               <div>Room Number</div>
               <div>Type</div>
               <div>Daily Rate</div>
+              <div>Status</div>
               <div>Action</div>
             </div>
 
@@ -537,7 +538,7 @@ const ManageMenuRooms: React.FC<ManageMenuRoomsProps> = ({ onBack }) => {
                   key={room.id}
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: '50px 150px 120px 120px 120px',
+                    gridTemplateColumns: '50px 150px 120px 120px 150px 120px',
                     padding: '1rem',
                     borderBottom: index < rooms.length - 1 ? `1px solid ${colors.border}` : 'none',
                     alignItems: 'center'
@@ -548,17 +549,50 @@ const ManageMenuRooms: React.FC<ManageMenuRoomsProps> = ({ onBack }) => {
                   <div>{room.room_type}</div>
                   <div>${room.daily_rate}/night</div>
                   <div>
+                    {room.is_occupied ? (
+                      <span style={{
+                        color: colors.error,
+                        fontWeight: 'bold',
+                        backgroundColor: colors.error + '20',
+                        padding: '0.25rem 0.5rem',
+                        borderRadius: '4px',
+                        fontSize: '0.75rem'
+                      }}>
+                        ASSIGNED
+                        {room.guest_name && (
+                          <div style={{ fontSize: '0.7rem', fontWeight: 'normal', marginTop: '2px' }}>
+                            to {room.guest_name}
+                          </div>
+                        )}
+                      </span>
+                    ) : (
+                      <span style={{
+                        color: '#28a745',
+                        fontWeight: 'bold',
+                        backgroundColor: '#28a745' + '20',
+                        padding: '0.25rem 0.5rem',
+                        borderRadius: '4px',
+                        fontSize: '0.75rem'
+                      }}>
+                        AVAILABLE
+                      </span>
+                    )}
+                  </div>
+                  <div>
                     <button
                       onClick={() => handleDeleteRoom(room.id)}
+                      disabled={room.is_occupied}
                       style={{
-                        backgroundColor: colors.error,
+                        backgroundColor: room.is_occupied ? colors.textMuted : colors.error,
                         color: '#FFFFFF',
                         border: 'none',
                         padding: '0.5rem 1rem',
                         borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontSize: '0.875rem'
+                        cursor: room.is_occupied ? 'not-allowed' : 'pointer',
+                        fontSize: '0.875rem',
+                        opacity: room.is_occupied ? 0.5 : 1
                       }}
+                      title={room.is_occupied ? 'Cannot delete assigned room' : 'Delete room'}
                     >
                       Delete
                     </button>

@@ -3,12 +3,11 @@ use rusqlite::Connection;
 /// Generate HTML receipt for a food order
 #[tauri::command]
 pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
-    let db_path = crate::database_reset::get_database_path()?;
-    let conn = Connection::open(&db_path).map_err(|e| format!("Failed to open database: {}", e))?;
+    let conn = crate::db::get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
     
     // Get order details
     let mut stmt = conn.prepare(
-        "SELECT fo.id, fo.order_date, fo.total_amount, fo.is_paid,
+        "SELECT fo.id, fo.created_at, fo.total_amount, fo.paid,
                 g.name as guest_name, r.number as room_number
          FROM food_orders fo
          JOIN guests g ON fo.guest_id = g.id
@@ -19,28 +18,28 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
     let order_row = stmt.query_row([order_id], |row| {
         Ok((
             row.get::<_, i64>(0)?,       // id
-            row.get::<_, String>(1)?,    // order_date
+            row.get::<_, String>(1)?,    // created_at
             row.get::<_, f64>(2)?,       // total_amount
-            row.get::<_, bool>(3)?,      // is_paid
+            row.get::<_, i64>(3)?,       // paid (INTEGER, not bool)
             row.get::<_, String>(4)?,    // guest_name
             row.get::<_, String>(5)?,    // room_number
         ))
     }).map_err(|e| format!("Order not found: {}", e))?;
     
-    let (_id, order_date, total_amount, is_paid, guest_name, room_number) = order_row;
+    let (_id, created_at, total_amount, paid_status, guest_name, room_number) = order_row;
+    let is_paid = paid_status != 0;
     
     // Get order items
     let mut stmt = conn.prepare(
-        "SELECT mi.name, foi.quantity, foi.unit_price, (foi.quantity * foi.unit_price) as line_total
-         FROM food_order_items foi
-         JOIN menu_items mi ON foi.menu_item_id = mi.id
-         WHERE foi.order_id = ?
-         ORDER BY mi.name"
+        "SELECT item_name, quantity, unit_price, line_total
+         FROM order_items 
+         WHERE order_id = ?
+         ORDER BY item_name"
     ).map_err(|e| format!("Failed to prepare items query: {}", e))?;
     
     let item_rows = stmt.query_map([order_id], |row| {
         Ok((
-            row.get::<_, String>(0)?,    // name
+            row.get::<_, String>(0)?,    // item_name
             row.get::<_, i32>(1)?,       // quantity
             row.get::<_, f64>(2)?,       // unit_price
             row.get::<_, f64>(3)?,       // line_total
@@ -49,10 +48,10 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
     
     let mut items_html = String::new();
     for item in item_rows {
-        let (name, quantity, unit_price, line_total) = item.map_err(|e| format!("Failed to read item: {}", e))?;
+        let (item_name, quantity, unit_price, line_total) = item.map_err(|e| format!("Failed to read item: {}", e))?;
         items_html.push_str(&format!(
             "<tr><td>{}</td><td>{}</td><td>${:.2}</td><td>${:.2}</td></tr>",
-            html_escape(&name), quantity, unit_price, line_total
+            html_escape(&item_name), quantity, unit_price, line_total
         ));
     }
     
@@ -220,7 +219,7 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
         order_id,
         payment_color,
         order_id,
-        order_date,
+        created_at,
         html_escape(&guest_name),
         html_escape(&room_number),
         payment_status,
@@ -235,8 +234,7 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
 /// Generate HTML invoice for a guest's final bill
 #[tauri::command]
 pub fn build_final_invoice_html(guest_id: i64) -> Result<String, String> {
-    let db_path = crate::database_reset::get_database_path()?;
-    let conn = Connection::open(&db_path).map_err(|e| format!("Failed to open database: {}", e))?;
+    let conn = crate::db::get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
     
     // Get guest details
     let mut stmt = conn.prepare(

@@ -43,7 +43,11 @@ pub fn get_rooms() -> Result<Vec<Room>, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     let mut stmt = conn.prepare(
-        "SELECT id, number, room_type, daily_rate, is_occupied, guest_id FROM rooms WHERE is_active = 1 ORDER BY number"
+        "SELECT r.id, r.number, r.room_type, r.daily_rate, r.is_occupied, r.guest_id, g.name as guest_name 
+         FROM rooms r 
+         LEFT JOIN guests g ON r.guest_id = g.id AND g.status = 'active'
+         WHERE r.is_active = 1 
+         ORDER BY r.number"
     ).map_err(|e| e.to_string())?;
     
     let room_iter = stmt.query_map([], |row| {
@@ -54,6 +58,7 @@ pub fn get_rooms() -> Result<Vec<Room>, String> {
             daily_rate: row.get(3)?,
             is_occupied: row.get::<_, i32>(4)? == 1,
             guest_id: row.get(5)?,
+            guest_name: row.get(6)?,
         })
     }).map_err(|e| e.to_string())?;
     
@@ -173,13 +178,29 @@ pub fn add_guest(name: String, phone: Option<String>, room_id: i64, check_in: St
     }
     
     let now = get_current_timestamp();
-    conn.execute(
+    
+    // Start a transaction to ensure both operations succeed or fail together
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    
+    // Insert the guest
+    tx.execute(
         "INSERT INTO guests (name, phone, room_id, check_in, check_out, daily_rate, status, created_at, updated_at) 
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'active', ?7, ?8)",
         params![name.trim(), phone, room_id, check_in, check_out, daily_rate, now, now],
     ).map_err(|e| e.to_string())?;
     
-    Ok(conn.last_insert_rowid())
+    let guest_id = tx.last_insert_rowid();
+    
+    // Update room status to occupied
+    tx.execute(
+        "UPDATE rooms SET is_occupied = 1 WHERE id = ?1",
+        params![room_id],
+    ).map_err(|e| e.to_string())?;
+    
+    // Commit the transaction
+    tx.commit().map_err(|e| e.to_string())?;
+    
+    Ok(guest_id)
 }
 
 #[command]
@@ -323,14 +344,34 @@ pub fn checkout_guest(guest_id: i64, discount_flat: Option<f64>, discount_pct: O
     // Clamp to >= 0
     let grand_total = subtotal.max(0.0);
     
-    // Update guest status
+    // Update guest status and free up the room
     let now = get_current_timestamp();
     let today_str = today.format("%Y-%m-%d").to_string();
     
-    conn.execute(
+    // Start a transaction to ensure both operations succeed or fail together
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    
+    // Get the room_id before updating guest status
+    let room_id: i64 = tx.query_row(
+        "SELECT room_id FROM guests WHERE id = ?1",
+        params![guest_id],
+        |row| row.get(0)
+    ).map_err(|e| e.to_string())?;
+    
+    // Update guest status
+    tx.execute(
         "UPDATE guests SET status = 'checked_out', check_out = ?1, updated_at = ?2 WHERE id = ?3",
         params![today_str, now, guest_id],
     ).map_err(|e| e.to_string())?;
+    
+    // Update room status to not occupied
+    tx.execute(
+        "UPDATE rooms SET is_occupied = 0 WHERE id = ?1",
+        params![room_id],
+    ).map_err(|e| e.to_string())?;
+    
+    // Commit the transaction
+    tx.commit().map_err(|e| e.to_string())?;
     
     Ok(CheckoutTotals {
         room_total,
@@ -438,9 +479,6 @@ pub fn update_menu_item(item_id: i64, name: Option<String>, price: Option<f64>, 
     if update_parts.is_empty() {
         return Err("No fields to update".to_string());
     }
-    
-    // Add updated_at timestamp
-    update_parts.push("updated_at = CURRENT_TIMESTAMP");
     
     let query = format!("UPDATE menu_items SET {} WHERE id = ?", update_parts.join(", "));
     params.push(Box::new(item_id));

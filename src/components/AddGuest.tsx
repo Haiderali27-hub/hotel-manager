@@ -5,9 +5,10 @@ import { useTheme } from '../context/ThemeContext';
 interface AddGuestProps {
   onBack: () => void;
   onGuestAdded: () => void;
+  refreshTrigger?: number; // Optional prop to trigger room list refresh
 }
 
-const AddGuest: React.FC<AddGuestProps> = ({ onBack, onGuestAdded }) => {
+const AddGuest: React.FC<AddGuestProps> = ({ onBack, onGuestAdded, refreshTrigger }) => {
   const { colors } = useTheme();
   const [formData, setFormData] = useState({
     name: '',
@@ -22,7 +23,7 @@ const AddGuest: React.FC<AddGuestProps> = ({ onBack, onGuestAdded }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Load available rooms on component mount
+  // Load available rooms on component mount and when refresh is triggered
   useEffect(() => {
     const loadRooms = async () => {
       try {
@@ -37,7 +38,7 @@ const AddGuest: React.FC<AddGuestProps> = ({ onBack, onGuestAdded }) => {
     };
 
     loadRooms();
-  }, []);
+  }, [refreshTrigger]); // Add refreshTrigger as dependency
 
   // Calculate number of days when dates change
   useEffect(() => {

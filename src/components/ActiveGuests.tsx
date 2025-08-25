@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import type { Guest } from '../api/client';
+import type { ActiveGuestRow } from '../api/client';
 import {
     checkoutGuest,
     getActiveGuests,
-    getFoodOrdersByGuest,
-    updateGuest
+    getFoodOrdersByGuest
 } from '../api/client';
 import { useTheme } from '../context/ThemeContext';
 
@@ -13,17 +12,17 @@ interface ActiveGuestsProps {
   onAddOrder: (guestId: number) => void;
 }
 
-interface GuestWithOrders extends Guest {
+interface ActiveGuestWithOrders extends ActiveGuestRow {
   totalFoodOrders: number;
   stayDays: number;
 }
 
 const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
   const { colors } = useTheme();
-  const [guests, setGuests] = useState<GuestWithOrders[]>([]);
+  const [guests, setGuests] = useState<ActiveGuestWithOrders[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [editingGuest, setEditingGuest] = useState<Guest | null>(null);
+  const [editingGuest, setEditingGuest] = useState<ActiveGuestRow | null>(null);
   const [showEditForm, setShowEditForm] = useState(false);
   
   // Edit form states
@@ -46,16 +45,16 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
           // Get food orders count
           let totalFoodOrders = 0;
           try {
-            const orders = await getFoodOrdersByGuest(guest.id);
+            const orders = await getFoodOrdersByGuest(guest.guest_id);
             totalFoodOrders = orders.length;
           } catch (err) {
-            console.error('Error fetching food orders for guest:', guest.id, err);
+            console.error('Error fetching food orders for guest:', guest.guest_id, err);
           }
 
           // Calculate stay days
           const checkInDate = new Date(guest.check_in);
-          const checkOutDate = guest.check_out ? new Date(guest.check_out) : new Date();
-          const stayDays = Math.ceil((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
+          const today = new Date();
+          const stayDays = Math.ceil((today.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
 
           return {
             ...guest,
@@ -75,37 +74,45 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
     }
   };
 
-  const handleEditGuest = (guest: Guest) => {
-    setEditingGuest(guest);
-    setEditCheckoutDate(guest.check_out ? guest.check_out.split('T')[0] : ''); // Extract date part
-    setEditRoomNumber(guest.room_id.toString());
-    setEditDailyRate(guest.daily_rate.toString());
-    setShowEditForm(true);
+  const handleEditGuest = (_guest: ActiveGuestRow) => {
+    // For now, disable editing until we have full guest details
+    setError('Edit functionality will be implemented in next update');
+    return;
+    
+    // setEditingGuest(guest);
+    // setEditCheckoutDate(''); 
+    // setEditRoomNumber(guest.room_number);
+    // setEditDailyRate(guest.daily_rate.toString());
+    // setShowEditForm(true);
   };
 
   const handleUpdateGuest = async () => {
-    if (!editingGuest || !editCheckoutDate || !editRoomNumber || !editDailyRate) {
-      setError('Please fill in all fields');
-      return;
-    }
+    // Disabled for now
+    setError('Edit functionality will be implemented in next update');
+    return;
+    
+    // if (!editingGuest || !editCheckoutDate || !editRoomNumber || !editDailyRate) {
+    //   setError('Please fill in all fields');
+    //   return;
+    // }
 
-    try {
-      await updateGuest(editingGuest.id, {
-        name: editingGuest.name,
-        phone: editingGuest.phone,
-        room_id: parseInt(editRoomNumber),
-        check_in: editingGuest.check_in,
-        check_out: editCheckoutDate,
-        daily_rate: parseFloat(editDailyRate)
-      });
+    // try {
+    //   await updateGuest(editingGuest.id, {
+    //     name: editingGuest.name,
+    //     phone: editingGuest.phone,
+    //     room_id: parseInt(editRoomNumber),
+    //     check_in: editingGuest.check_in,
+    //     check_out: editCheckoutDate,
+    //     daily_rate: parseFloat(editDailyRate)
+    //   });
 
-      setShowEditForm(false);
-      setEditingGuest(null);
-      loadActiveGuests();
-    } catch (err) {
-      setError('Failed to update guest');
-      console.error(err);
-    }
+    //   setShowEditForm(false);
+    //   setEditingGuest(null);
+    //   loadActiveGuests();
+    // } catch (err) {
+    //   setError('Failed to update guest');
+    //   console.error(err);
+    // }
   };
 
   const handleCheckoutGuest = async (guestId: number, guestName: string) => {
@@ -216,7 +223,7 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
         ) : (
           guests.map((guest, index) => (
             <div
-              key={guest.id}
+              key={guest.guest_id}
               style={{
                 display: 'grid',
                 gridTemplateColumns: '200px 100px 200px 100px 150px 300px',
@@ -227,10 +234,10 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
               }}
             >
               <div style={{ fontWeight: '500' }}>{guest.name}</div>
-              <div>Room {guest.room_id}</div>
+              <div>Room {guest.room_number}</div>
               <div style={{ fontSize: '0.875rem', color: colors.textSecondary }}>
                 <div>{formatDate(guest.check_in)}</div>
-                <div>{guest.check_out ? formatDate(guest.check_out) : 'Open'}</div>
+                <div>Open</div>
               </div>
               <div style={{ textAlign: 'center' }}>{guest.stayDays}</div>
               <div style={{ textAlign: 'center' }}>{guest.totalFoodOrders}</div>
@@ -250,7 +257,7 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
                   Edit
                 </button>
                 <button
-                  onClick={() => onAddOrder(guest.id)}
+                  onClick={() => onAddOrder(guest.guest_id)}
                   style={{
                     backgroundColor: colors.accent,
                     color: '#FFFFFF',
@@ -264,7 +271,7 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
                   Add Order
                 </button>
                 <button
-                  onClick={() => handleCheckoutGuest(guest.id, guest.name)}
+                  onClick={() => handleCheckoutGuest(guest.guest_id, guest.name)}
                   style={{
                     backgroundColor: colors.success,
                     color: '#FFFFFF',

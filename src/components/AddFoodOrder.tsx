@@ -4,7 +4,7 @@ import {
     buildOrderReceiptHtml,
     getActiveGuests,
     getMenuItems,
-    type Guest,
+    type ActiveGuestRow,
     type MenuItem,
     type NewFoodOrder,
     type OrderItem
@@ -26,7 +26,7 @@ const AddFoodOrder: React.FC<AddFoodOrderProps> = ({ onBack, onOrderAdded }) => 
   const [customerType, setCustomerType] = useState<'active' | 'walkin'>('active');
   const [selectedGuestId, setSelectedGuestId] = useState<number>(0);
   const [walkinCustomerName, setWalkinCustomerName] = useState('Walk-in');
-  const [activeGuests, setActiveGuests] = useState<Guest[]>([]);
+  const [activeGuests, setActiveGuests] = useState<ActiveGuestRow[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItemWithDetails[]>([]);
   const [selectedMenuItemId, setSelectedMenuItemId] = useState<number>(0);
@@ -83,11 +83,12 @@ const AddFoodOrder: React.FC<AddFoodOrderProps> = ({ onBack, onOrderAdded }) => 
     } else {
       // Add new item
       const newOrderItem: OrderItemWithDetails = {
-        menu_item_id: selectedMenuItemId,
-        quantity: quantity,
-        unit_price: menuItem.price,
-        menu_item: menuItem,
-        total_price: quantity * menuItem.price
+          menu_item_id: selectedMenuItemId,
+          quantity: quantity,
+          unit_price: menuItem.price,
+          menu_item: menuItem,
+          total_price: quantity * menuItem.price,
+          item_name: ''
       };
       setOrderItems([...orderItems, newOrderItem]);
     }
@@ -135,6 +136,7 @@ const AddFoodOrder: React.FC<AddFoodOrderProps> = ({ onBack, onOrderAdded }) => 
         guest_id: guestId,
         items: orderItems.map(item => ({
           menu_item_id: item.menu_item_id,
+          item_name: item.menu_item.name,
           quantity: item.quantity,
           unit_price: item.unit_price
         }))
@@ -284,8 +286,8 @@ const AddFoodOrder: React.FC<AddFoodOrderProps> = ({ onBack, onOrderAdded }) => 
             >
               <option value={0}>Select an active guest</option>
               {activeGuests.map(guest => (
-                <option key={guest.id} value={guest.id}>
-                  {guest.name} - Room {guest.room_id}
+                <option key={guest.guest_id} value={guest.guest_id}>
+                  {guest.name} - Room {guest.room_number}
                 </option>
               ))}
             </select>
@@ -384,7 +386,7 @@ const AddFoodOrder: React.FC<AddFoodOrderProps> = ({ onBack, onOrderAdded }) => 
             <input
               type="number"
               value={quantity}
-              onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+              onChange={(e) => setQuantity(parseInt(e.target.value) || 0)}
               min="1"
               placeholder="Qty"
               style={{

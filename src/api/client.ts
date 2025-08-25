@@ -26,6 +26,7 @@ export interface Room {
   daily_rate: number;
   is_occupied: boolean;
   guest_id?: number;
+  guest_name?: string;
 }
 
 export interface NewRoom {
@@ -45,6 +46,14 @@ export interface Guest {
   daily_rate: number;
   total_bill: number;
   is_active: boolean;
+}
+
+export interface ActiveGuestRow {
+  guest_id: number;
+  name: string;
+  room_number: string;
+  check_in: string;
+  daily_rate: number;
 }
 
 export interface NewGuest {
@@ -74,6 +83,7 @@ export interface NewMenuItem {
 
 export interface OrderItem {
   menu_item_id: number;
+  item_name: string;
   quantity: number;
   unit_price: number;
 }
@@ -230,13 +240,20 @@ export const deleteRoom = (roomId: number): Promise<boolean> =>
  * ```
  */
 export const addGuest = (guest: NewGuest): Promise<number> => 
-  invoke("add_guest", { ...guest });
+  invoke("add_guest", { 
+    name: guest.name,
+    phone: guest.phone,
+    roomId: guest.room_id,
+    checkIn: guest.check_in,
+    checkOut: guest.check_out,
+    dailyRate: guest.daily_rate
+  });
 
 /**
  * Get all currently active guests
  * @returns Array of active guests with their details
  */
-export const getActiveGuests = (): Promise<Guest[]> => 
+export const getActiveGuests = (): Promise<ActiveGuestRow[]> => 
   invoke("get_active_guests");
 
 /**
@@ -339,14 +356,19 @@ export const deleteMenuItem = (itemId: number): Promise<boolean> =>
  * const orderId = await addFoodOrder({
  *   guest_id: 123,
  *   items: [
- *     { menu_item_id: 1, quantity: 2, unit_price: 12.99 },
- *     { menu_item_id: 5, quantity: 1, unit_price: 8.50 }
+ *     { menu_item_id: 1, item_name: "Chicken Burger", quantity: 2, unit_price: 12.99 },
+ *     { menu_item_id: 5, item_name: "French Fries", quantity: 1, unit_price: 8.50 }
  *   ]
  * });
  * ```
  */
 export const addFoodOrder = (order: NewFoodOrder): Promise<number> => 
-  invoke("add_food_order", { order });
+  invoke("add_food_order", { 
+    guestId: order.guest_id,
+    customerType: order.guest_id ? 'active' : 'walkin',
+    customerName: order.guest_id ? undefined : 'Walk-in Customer',
+    items: order.items
+  });
 
 /**
  * Get all food orders
@@ -599,8 +621,8 @@ export const mockMenuItem: NewMenuItem = {
 export const mockFoodOrder: NewFoodOrder = {
   guest_id: 1,
   items: [
-    { menu_item_id: 1, quantity: 2, unit_price: 12.99 },
-    { menu_item_id: 2, quantity: 1, unit_price: 8.50 }
+    { menu_item_id: 1, item_name: "Chicken Burger", quantity: 2, unit_price: 12.99 },
+    { menu_item_id: 2, item_name: "French Fries", quantity: 1, unit_price: 8.50 }
   ]
 };
 

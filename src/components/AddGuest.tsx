@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { addGuest, getRooms, type NewGuest, type Room } from '../api/client';
+import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
 
 interface AddGuestProps {
@@ -10,6 +11,7 @@ interface AddGuestProps {
 
 const AddGuest: React.FC<AddGuestProps> = ({ onBack, onGuestAdded, refreshTrigger }) => {
   const { colors } = useTheme();
+  const { showSuccess, showError } = useNotification();
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -32,14 +34,17 @@ const AddGuest: React.FC<AddGuestProps> = ({ onBack, onGuestAdded, refreshTrigge
         // Filter only available rooms (not occupied)
         const availableRooms = allRooms.filter(room => !room.is_occupied);
         setRooms(availableRooms);
+        setError(null); // Clear any previous errors
       } catch (err) {
         console.error('Failed to load rooms:', err);
-        setError('Failed to load available rooms');
+        const errorMessage = 'Failed to load available rooms';
+        setError(errorMessage);
+        showError('Error loading rooms', errorMessage);
       }
     };
 
     loadRooms();
-  }, [refreshTrigger]); // Add refreshTrigger as dependency
+  }, [refreshTrigger, showError]); // Add showError as dependency
 
   // Calculate number of days when dates change
   useEffect(() => {
@@ -107,6 +112,13 @@ const AddGuest: React.FC<AddGuestProps> = ({ onBack, onGuestAdded, refreshTrigge
       if (!isWalkIn && !formData.check_out) {
         throw new Error('Check-out date is required for room guests');
       }
+      if (!isWalkIn && formData.check_in && formData.check_out) {
+        const checkIn = new Date(formData.check_in);
+        const checkOut = new Date(formData.check_out);
+        if (checkOut <= checkIn) {
+          throw new Error('Check-out date must be after check-in date');
+        }
+      }
 
       const newGuest: NewGuest = {
         name: formData.name.trim(),
@@ -119,6 +131,13 @@ const AddGuest: React.FC<AddGuestProps> = ({ onBack, onGuestAdded, refreshTrigge
 
       const guestId = await addGuest(newGuest);
       console.log('✅ Guest added successfully:', guestId);
+      
+      // Show success notification
+      const guestType = isWalkIn ? 'Walk-in customer' : 'Room guest';
+      showSuccess(
+        `${guestType} added successfully!`,
+        `${formData.name} has been registered${!isWalkIn ? ` in room ${rooms.find(r => r.id === formData.room_id)?.number}` : ''}`
+      );
       
       // Reset form
       setFormData({
@@ -135,7 +154,9 @@ const AddGuest: React.FC<AddGuestProps> = ({ onBack, onGuestAdded, refreshTrigge
       onBack();
     } catch (err) {
       console.error('❌ Failed to add guest:', err);
-      setError(err instanceof Error ? err.message : 'Failed to add guest');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to add guest';
+      setError(errorMessage);
+      showError('Failed to add guest', errorMessage);
     } finally {
       setLoading(false);
     }

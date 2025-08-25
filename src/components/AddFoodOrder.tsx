@@ -10,6 +10,7 @@ import {
     type NewFoodOrder,
     type OrderItem
 } from '../api/client';
+import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
 
 interface AddFoodOrderProps {
@@ -24,6 +25,7 @@ interface OrderItemWithDetails extends OrderItem {
 
 const AddFoodOrder: React.FC<AddFoodOrderProps> = ({ onBack, onOrderAdded }) => {
   const { colors, theme } = useTheme();
+  const { showSuccess, showError, showWarning } = useNotification();
   const [customerType, setCustomerType] = useState<'active' | 'walkin'>('active');
   const [selectedGuestId, setSelectedGuestId] = useState<number>(0);
   const [walkinCustomerName, setWalkinCustomerName] = useState('Walk-in');
@@ -49,24 +51,31 @@ const AddFoodOrder: React.FC<AddFoodOrderProps> = ({ onBack, onOrderAdded }) => 
         setActiveGuests(guests);
         const availableMenu = menu.filter(item => item.is_available);
         setMenuItems(availableMenu);
+        setError(null); // Clear any previous errors
       } catch (err) {
         console.error('Failed to load data:', err);
-        setError('Failed to load guests and menu items');
+        const errorMessage = 'Failed to load guests and menu items';
+        setError(errorMessage);
+        showError('Loading Error', errorMessage);
       }
     };
 
     loadData();
-  }, []);
+  }, [showError]);
 
   const handleAddItem = () => {
     if (selectedMenuItemId === 0 || quantity <= 0) {
-      setError('Please select a menu item and enter valid quantity');
+      const errorMessage = 'Please select a menu item and enter valid quantity';
+      setError(errorMessage);
+      showWarning('Invalid Selection', errorMessage);
       return;
     }
 
     const menuItem = menuItems.find(item => item.id === selectedMenuItemId);
     if (!menuItem) {
-      setError('Selected menu item not found');
+      const errorMessage = 'Selected menu item not found';
+      setError(errorMessage);
+      showError('Item Not Found', errorMessage);
       return;
     }
 
@@ -82,6 +91,7 @@ const AddFoodOrder: React.FC<AddFoodOrderProps> = ({ onBack, onOrderAdded }) => 
       updatedItems[existingItemIndex].total_price = 
         updatedItems[existingItemIndex].quantity * menuItem.price;
       setOrderItems(updatedItems);
+      showSuccess('Item Updated', `${menuItem.name} quantity updated to ${updatedItems[existingItemIndex].quantity}`);
     } else {
       // Add new item
       const newOrderItem: OrderItemWithDetails = {
@@ -93,6 +103,7 @@ const AddFoodOrder: React.FC<AddFoodOrderProps> = ({ onBack, onOrderAdded }) => 
           item_name: ''
       };
       setOrderItems([...orderItems, newOrderItem]);
+      showSuccess('Item Added', `${quantity}x ${menuItem.name} added to order`);
     }
 
     // Reset selection
@@ -145,6 +156,15 @@ const AddFoodOrder: React.FC<AddFoodOrderProps> = ({ onBack, onOrderAdded }) => 
       const orderId = await addFoodOrder(newOrder);
       console.log('✅ Food order added successfully:', orderId);
       
+      const customerInfo = customerType === 'walkin' 
+        ? walkinCustomerName 
+        : activeGuests.find(g => g.guest_id === selectedGuestId)?.name || 'Guest';
+      
+      showSuccess(
+        'Food Order Created!',
+        `Order #${orderId} has been created for ${customerInfo} (Total: Rs ${getTotalAmount().toFixed(2)})`
+      );
+      
       setLastOrderId(orderId);
       setShowSuccessModal(true);
       
@@ -159,7 +179,9 @@ const AddFoodOrder: React.FC<AddFoodOrderProps> = ({ onBack, onOrderAdded }) => 
       onOrderAdded();
     } catch (err) {
       console.error('❌ Failed to add food order:', err);
-      setError(err instanceof Error ? err.message : 'Failed to add food order');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to add food order';
+      setError(errorMessage);
+      showError('Failed to Create Order', errorMessage);
     } finally {
       setLoading(false);
     }
@@ -179,10 +201,15 @@ const AddFoodOrder: React.FC<AddFoodOrderProps> = ({ onBack, onOrderAdded }) => 
         printWindow.focus();
         printWindow.print();
         printWindow.close();
+        showSuccess('Receipt Printed', `Receipt for order #${lastOrderId} has been sent to printer`);
+      } else {
+        showWarning('Print Window Blocked', 'Please allow popups to print receipts');
       }
     } catch (err) {
       console.error('Failed to print receipt:', err);
-      setError('Failed to generate receipt');
+      const errorMessage = 'Failed to generate receipt';
+      setError(errorMessage);
+      showError('Print Failed', errorMessage);
     }
   };
 
@@ -194,13 +221,21 @@ const AddFoodOrder: React.FC<AddFoodOrderProps> = ({ onBack, onOrderAdded }) => 
       console.log('Payment status toggled:', result);
       
       // Update the local payment status
-      setPaymentStatus(prev => prev === 'paid' ? 'unpaid' : 'paid');
+      const newStatus = paymentStatus === 'paid' ? 'unpaid' : 'paid';
+      setPaymentStatus(newStatus);
+      
+      showSuccess(
+        'Payment Status Updated', 
+        `Order #${lastOrderId} marked as ${newStatus.toUpperCase()}`
+      );
       
       // Show success message
       setError(null);
     } catch (err) {
       console.error('Failed to toggle payment:', err);
-      setError('Failed to update payment status');
+      const errorMessage = 'Failed to update payment status';
+      setError(errorMessage);
+      showError('Payment Update Failed', errorMessage);
     }
   };
 

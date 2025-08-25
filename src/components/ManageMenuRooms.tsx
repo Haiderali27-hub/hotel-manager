@@ -9,6 +9,7 @@ import {
     getRooms,
     updateMenuItem
 } from '../api/client';
+import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
 
 interface ManageMenuRoomsProps {
@@ -17,6 +18,7 @@ interface ManageMenuRoomsProps {
 
 const ManageMenuRooms: React.FC<ManageMenuRoomsProps> = ({ onBack }) => {
     const { colors } = useTheme();
+    const { showSuccess, showError, showWarning } = useNotification();
     const [activeTab, setActiveTab] = useState<'menu' | 'rooms'>('menu');
     const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
     const [rooms, setRooms] = useState<Room[]>([]);
@@ -51,7 +53,9 @@ const ManageMenuRooms: React.FC<ManageMenuRoomsProps> = ({ onBack }) => {
             setRooms(roomData);
             setError(null);
         } catch (err) {
-            setError('Failed to load data');
+            const errorMessage = 'Failed to load data';
+            setError(errorMessage);
+            showError('Loading Error', errorMessage);
             console.error(err);
         } finally {
             setLoading(false);
@@ -60,58 +64,98 @@ const ManageMenuRooms: React.FC<ManageMenuRoomsProps> = ({ onBack }) => {
 
     const handleAddMenuItem = async () => {
         if (!menuName.trim() || !menuPrice.trim()) {
-            setError('Please fill in all fields');
+            const errorMessage = 'Please fill in all fields';
+            setError(errorMessage);
+            showError('Validation Error', 'Menu name and price are required');
+            return;
+        }
+
+        const price = parseFloat(menuPrice);
+        if (isNaN(price) || price <= 0) {
+            const errorMessage = 'Please enter a valid price';
+            setError(errorMessage);
+            showError('Validation Error', 'Price must be a positive number');
             return;
         }
 
         try {
             await addMenuItem({
                 name: menuName.trim(),
-                price: parseFloat(menuPrice),
+                price: price,
                 category: 'Main Course',
                 is_available: true
             });
+            
+            showSuccess('Menu Item Added', `${menuName} has been added to the menu`);
             setMenuName('');
             setMenuPrice('');
             setShowMenuForm(false);
+            setError(null);
             loadData();
         } catch (err) {
-            setError('Failed to add menu item');
-            console.error(err);
+            const errorMessage = err instanceof Error ? err.message : 'Failed to add menu item';
+            setError(errorMessage);
+            
+            // Check for specific error types
+            if (errorMessage.toLowerCase().includes('already exists') || errorMessage.toLowerCase().includes('duplicate')) {
+                showError('Duplicate Item', 'A menu item with this name already exists');
+            } else {
+                showError('Failed to Add Item', errorMessage);
+            }
         }
     };
 
     const handleUpdateMenuItem = async () => {
         if (!editingMenuItem || !menuName.trim() || !menuPrice.trim()) {
-            setError('Please fill in all fields');
+            const errorMessage = 'Please fill in all fields';
+            setError(errorMessage);
+            showError('Validation Error', 'Menu name and price are required');
+            return;
+        }
+
+        const price = parseFloat(menuPrice);
+        if (isNaN(price) || price <= 0) {
+            const errorMessage = 'Please enter a valid price';
+            setError(errorMessage);
+            showError('Validation Error', 'Price must be a positive number');
             return;
         }
 
         try {
             await updateMenuItem(editingMenuItem.id, {
                 name: menuName.trim(),
-                price: parseFloat(menuPrice),
+                price: price,
                 is_available: true
             });
+            
+            showSuccess('Menu Item Updated', `"${menuName}" has been updated successfully`);
             setMenuName('');
             setMenuPrice('');
             setEditingMenuItem(null);
             setShowMenuForm(false);
+            setError(null);
             loadData();
         } catch (err) {
-            setError('Failed to update menu item');
-            console.error(err);
+            const errorMessage = err instanceof Error ? err.message : 'Failed to update menu item';
+            setError(errorMessage);
+            showError('Failed to Update Item', errorMessage);
         }
     };
 
     const handleDeleteMenuItem = async (id: number) => {
-        if (confirm('Are you sure you want to delete this menu item?')) {
+        const menuItem = menuItems.find(item => item.id === id);
+        const itemInfo = menuItem ? `"${menuItem.name}"` : 'this menu item';
+        
+        if (confirm(`Are you sure you want to delete ${itemInfo}?`)) {
             try {
                 await deleteMenuItem(id);
+                showSuccess('Menu Item Deleted', `${itemInfo} has been removed from the menu`);
+                setError(null);
                 loadData();
             } catch (err) {
-                setError('Failed to delete menu item');
-                console.error(err);
+                const errorMessage = err instanceof Error ? err.message : 'Failed to delete menu item';
+                setError(errorMessage);
+                showError('Failed to Delete Item', errorMessage);
             }
         }
     };
@@ -125,13 +169,25 @@ const ManageMenuRooms: React.FC<ManageMenuRoomsProps> = ({ onBack }) => {
 
     const handleAddRoom = async () => {
         if (!roomNumber.trim() || !roomPrice.trim()) {
-            setError('Please fill in all required fields');
+            const errorMessage = 'Please fill in all required fields';
+            setError(errorMessage);
+            showError('Validation Error', 'Room number and price are required');
             return;
         }
 
         const finalRoomType = roomType === 'Other' ? customRoomType.trim() : roomType;
         if (!finalRoomType) {
-            setError('Please specify room type');
+            const errorMessage = 'Please specify room type';
+            setError(errorMessage);
+            showError('Validation Error', 'Room type is required');
+            return;
+        }
+
+        const price = parseFloat(roomPrice);
+        if (isNaN(price) || price <= 0) {
+            const errorMessage = 'Please enter a valid price';
+            setError(errorMessage);
+            showError('Validation Error', 'Price must be a positive number');
             return;
         }
 
@@ -139,28 +195,49 @@ const ManageMenuRooms: React.FC<ManageMenuRoomsProps> = ({ onBack }) => {
             await addRoom({
                 number: roomNumber.trim(),
                 room_type: finalRoomType,
-                daily_rate: parseFloat(roomPrice)
+                daily_rate: price
             });
+            
+            showSuccess('Room Added', `Room ${roomNumber} has been added successfully`);
             setRoomNumber('');
             setRoomType('Single Room');
             setCustomRoomType('');
             setRoomPrice('');
             setShowRoomForm(false);
+            setError(null);
             loadData();
         } catch (err) {
-            setError('Failed to add room');
-            console.error(err);
+            const errorMessage = err instanceof Error ? err.message : 'Failed to add room';
+            setError(errorMessage);
+            
+            // Check for specific error types
+            if (errorMessage.toLowerCase().includes('already exists') || errorMessage.toLowerCase().includes('duplicate')) {
+                showError('Duplicate Room', 'A room with this number already exists');
+            } else {
+                showError('Failed to Add Room', errorMessage);
+            }
         }
     };
 
     const handleDeleteRoom = async (id: number) => {
-        if (confirm('Are you sure you want to delete this room?')) {
+        const room = rooms.find(r => r.id === id);
+        const roomInfo = room ? `Room ${room.number}` : 'This room';
+        
+        if (confirm(`Are you sure you want to delete ${roomInfo}?`)) {
             try {
                 await deleteRoom(id);
+                showSuccess('Room Deleted', `${roomInfo} has been deleted successfully`);
+                setError(null);
                 loadData();
             } catch (err) {
-                setError('Failed to delete room');
-                console.error(err);
+                const errorMessage = err instanceof Error ? err.message : 'Failed to delete room';
+                setError(errorMessage);
+                
+                if (errorMessage.toLowerCase().includes('occupied') || errorMessage.toLowerCase().includes('guest')) {
+                    showError('Cannot Delete Room', 'Room cannot be deleted because it is currently occupied');
+                } else {
+                    showError('Failed to Delete Room', errorMessage);
+                }
             }
         }
     };

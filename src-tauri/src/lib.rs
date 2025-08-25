@@ -21,7 +21,8 @@ use simple_commands::{
     add_guest, get_active_guests, get_all_guests, get_guest, checkout_guest,
     add_menu_item, get_menu_items, update_menu_item, delete_menu_item,
     dashboard_stats, add_food_order, get_food_orders, get_food_orders_by_guest, mark_order_paid,
-    add_expense, get_expenses, get_expenses_by_date_range, update_expense, delete_expense
+    add_expense, get_expenses, get_expenses_by_date_range, update_expense, delete_expense,
+    toggle_food_order_payment
 };
 use database_reset::{reset_database, get_database_path, get_database_stats};
 use export::{export_history_csv, create_database_backup};
@@ -76,6 +77,7 @@ pub fn run() {
             get_food_orders,
             get_food_orders_by_guest,
             mark_order_paid,
+            toggle_food_order_payment,
             // Expenses
             add_expense,
             get_expenses,

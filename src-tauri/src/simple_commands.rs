@@ -703,8 +703,9 @@ pub fn get_food_orders() -> Result<Vec<FoodOrderSummary>, String> {
     orders.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }
 
-#[command]
-pub fn mark_order_paid(order_id: i64) -> Result<String, String> {
+#[tauri::command]
+pub fn mark_order_paid(orderId: i64) -> Result<String, String> {
+    let order_id = orderId;
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     let rows_affected = conn.execute(
@@ -875,4 +876,39 @@ pub fn delete_expense(expense_id: i64) -> Result<String, String> {
     }
     
     Ok("Expense deleted successfully".to_string())
+}
+
+#[tauri::command]
+pub fn toggle_food_order_payment(orderId: i64) -> Result<String, String> {
+    let order_id = orderId;
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    // Get current payment status
+    let current_paid: i64 = conn.query_row(
+        "SELECT paid FROM food_orders WHERE id = ?1",
+        params![order_id],
+        |row| row.get(0)
+    ).map_err(|e| {
+        if e.to_string().contains("no rows") {
+            "Food order not found".to_string()
+        } else {
+            e.to_string()
+        }
+    })?;
+    
+    // Toggle the payment status
+    let new_paid = if current_paid == 0 { 1 } else { 0 };
+    let paid_at = if new_paid == 1 { 
+        Some(get_current_timestamp()) 
+    } else { 
+        None 
+    };
+    
+    conn.execute(
+        "UPDATE food_orders SET paid = ?1, paid_at = ?2 WHERE id = ?3",
+        params![new_paid, paid_at, order_id],
+    ).map_err(|e| e.to_string())?;
+    
+    let status = if new_paid == 1 { "paid" } else { "unpaid" };
+    Ok(format!("Food order marked as {}", status))
 }

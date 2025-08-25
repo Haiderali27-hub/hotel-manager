@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import {
     addFoodOrder,
-    buildOrderReceiptHtml,
     getActiveGuests,
     getMenuItems,
+    printOrderReceipt,
+    toggleFoodOrderPayment,
     type ActiveGuestRow,
     type MenuItem,
     type NewFoodOrder,
@@ -35,6 +36,7 @@ const AddFoodOrder: React.FC<AddFoodOrderProps> = ({ onBack, onOrderAdded }) => 
   const [error, setError] = useState<string | null>(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [lastOrderId, setLastOrderId] = useState<number | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<'paid' | 'unpaid'>('unpaid');
 
   // Load data on component mount
   useEffect(() => {
@@ -168,7 +170,7 @@ const AddFoodOrder: React.FC<AddFoodOrderProps> = ({ onBack, onOrderAdded }) => 
     if (!lastOrderId) return;
     
     try {
-      const receiptHtml = await buildOrderReceiptHtml(lastOrderId);
+      const receiptHtml = await printOrderReceipt(lastOrderId);
       
       // Create a new window for printing
       const printWindow = window.open('', '_blank');
@@ -185,9 +187,28 @@ const AddFoodOrder: React.FC<AddFoodOrderProps> = ({ onBack, onOrderAdded }) => 
     }
   };
 
+  const handleTogglePayment = async () => {
+    if (!lastOrderId) return;
+    
+    try {
+      const result = await toggleFoodOrderPayment(lastOrderId);
+      console.log('Payment status toggled:', result);
+      
+      // Update the local payment status
+      setPaymentStatus(prev => prev === 'paid' ? 'unpaid' : 'paid');
+      
+      // Show success message
+      setError(null);
+    } catch (err) {
+      console.error('Failed to toggle payment:', err);
+      setError('Failed to update payment status');
+    }
+  };
+
   const closeSuccessModal = () => {
     setShowSuccessModal(false);
     setLastOrderId(null);
+    setPaymentStatus('unpaid'); // Reset payment status for next order
   };
 
   return (
@@ -548,6 +569,17 @@ const AddFoodOrder: React.FC<AddFoodOrderProps> = ({ onBack, onOrderAdded }) => 
             }}>
               Food Order Added
             </h2>
+            <p style={{
+              marginBottom: '1rem',
+              color: colors.textMuted
+            }}>
+              Payment Status: <span style={{
+                color: paymentStatus === 'paid' ? '#22C55E' : '#F59E0B',
+                fontWeight: 'bold'
+              }}>
+                {paymentStatus === 'paid' ? 'PAID' : 'UNPAID'}
+              </span>
+            </p>
             <div style={{
               display: 'flex',
               gap: '1rem',
@@ -568,6 +600,21 @@ const AddFoodOrder: React.FC<AddFoodOrderProps> = ({ onBack, onOrderAdded }) => 
                 }}
               >
                 Print Receipt
+              </button>
+              <button
+                onClick={handleTogglePayment}
+                style={{
+                  backgroundColor: paymentStatus === 'paid' ? '#EF4444' : '#22C55E',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  padding: '0.75rem 1.5rem',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '1rem',
+                  fontWeight: '500'
+                }}
+              >
+                Mark as {paymentStatus === 'paid' ? 'Unpaid' : 'Paid'}
               </button>
               <button
                 onClick={closeSuccessModal}

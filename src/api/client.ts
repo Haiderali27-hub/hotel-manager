@@ -398,8 +398,24 @@ export const getFoodOrdersByGuest = (guestId: number): Promise<FoodOrder[]> =>
  * @param orderId - ID of the order to mark as paid
  * @returns Success status
  */
-export const markOrderPaid = (orderId: number): Promise<boolean> => 
+export const markOrderPaid = (orderId: number): Promise<string> => 
   invoke("mark_order_paid", { orderId });
+
+/**
+ * Toggle payment status of a food order (paid/unpaid)
+ * @param orderId - ID of the order to toggle payment status
+ * @returns Success message
+ */
+export const toggleFoodOrderPayment = (orderId: number): Promise<string> => 
+  invoke("toggle_food_order_payment", { orderId });
+
+/**
+ * Generate and print receipt for a food order
+ * @param orderId - ID of the order to print receipt for
+ * @returns HTML content of the receipt
+ */
+export const printOrderReceipt = (orderId: number): Promise<string> => 
+  invoke("build_order_receipt_html", { orderId });
 
 // Expense Management APIs
 /**

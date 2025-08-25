@@ -1,8 +1,32 @@
-use rusqlite::Connection;
+use std::fs;
+use std::path::Path;
+use base64::{Engine as _, engine::general_purpose};
+
+fn get_logo_base64() -> String {
+    // Try to read the logo file
+    let logo_paths = [
+        "src/assets/Logo/logo.jpg",
+        "assets/Logo/logo.jpg", 
+        "../src/assets/Logo/logo.jpg",
+        "../../src/assets/Logo/logo.jpg"
+    ];
+    
+    for path in &logo_paths {
+        if Path::new(path).exists() {
+            if let Ok(logo_data) = fs::read(path) {
+                return general_purpose::STANDARD.encode(logo_data);
+            }
+        }
+    }
+    
+    // Return empty string if logo not found
+    String::new()
+}
 
 /// Generate HTML receipt for a food order
 #[tauri::command]
-pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
+pub fn build_order_receipt_html(orderId: i64) -> Result<String, String> {
+    let order_id = orderId;
     let conn = crate::db::get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
     
     // Get order details
@@ -29,6 +53,17 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
     let (_id, created_at, total_amount, paid_status, guest_name, room_number) = order_row;
     let is_paid = paid_status != 0;
     
+    // Get logo as base64
+    let logo_base64 = get_logo_base64();
+    
+    // Format the date properly
+    let formatted_date = if let Ok(parsed_date) = chrono::DateTime::parse_from_rfc3339(&created_at) {
+        parsed_date.format("%B %d, %Y at %I:%M %p").to_string()
+    } else {
+        // Fallback to original format if parsing fails
+        created_at.clone()
+    };
+    
     // Get order items
     let mut stmt = conn.prepare(
         "SELECT item_name, quantity, unit_price, line_total
@@ -50,7 +85,7 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
     for item in item_rows {
         let (item_name, quantity, unit_price, line_total) = item.map_err(|e| format!("Failed to read item: {}", e))?;
         items_html.push_str(&format!(
-            "<tr><td>{}</td><td>{}</td><td>${:.2}</td><td>${:.2}</td></tr>",
+            "<tr><td>{}</td><td>{}</td><td>Rs {:.2}</td><td>Rs {:.2}</td></tr>",
             html_escape(&item_name), quantity, unit_price, line_total
         ));
     }
@@ -79,6 +114,11 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
             padding-bottom: 20px;
             margin-bottom: 30px;
         }}
+        .logo {{
+            max-width: 100px;
+            height: auto;
+            margin-bottom: 15px;
+        }}
         .hotel-name {{
             font-size: 28px;
             font-weight: bold;
@@ -86,9 +126,10 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
             margin: 0;
         }}
         .hotel-subtitle {{
-            font-size: 16px;
+            font-size: 14px;
             color: #7f8c8d;
             margin: 5px 0 0 0;
+            line-height: 1.4;
         }}
         .receipt-title {{
             font-size: 24px;
@@ -162,8 +203,13 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
 </head>
 <body>
     <div class="header">
-        <h1 class="hotel-name">Grand Vista Hotel</h1>
-        <p class="hotel-subtitle">123 Main Street, Downtown | Phone: +1-555-HOTEL-1</p>
+        <img src="data:image/jpeg;base64,{}" alt="Hotel Logo" class="logo">
+        <h1 class="hotel-name">Yasin Heaven Star Hotel</h1>
+        <p class="hotel-subtitle">
+            Main Yasin Ghizer Gilgit Baltistan, Pakistan<br>
+            Phone: +92 355 4650686<br>
+            Email: yasinheavenstarhotel@gmail.com
+        </p>
         <h2 class="receipt-title">Food Order Receipt</h2>
     </div>
 
@@ -205,7 +251,7 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
         <tfoot>
             <tr class="total-row">
                 <td colspan="3"><strong>Grand Total</strong></td>
-                <td class="text-right"><strong>${:.2}</strong></td>
+                <td class="text-right"><strong>Rs {:.2}</strong></td>
             </tr>
         </tfoot>
     </table>
@@ -218,14 +264,15 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
 </html>"#, 
         order_id,
         payment_color,
+        logo_base64,
         order_id,
-        created_at,
+        formatted_date,
         html_escape(&guest_name),
         html_escape(&room_number),
         payment_status,
         items_html,
         total_amount,
-        chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
+        chrono::Local::now().format("%B %d, %Y at %I:%M %p")
     );
     
     Ok(html)

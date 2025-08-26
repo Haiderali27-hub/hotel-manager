@@ -358,7 +358,7 @@ pub fn build_final_invoice_html(guest_id: i64) -> Result<String, String> {
     
     // Get guest details
     let mut stmt = conn.prepare(
-        "SELECT g.id, g.name, g.phone, g.check_in, g.check_out, g.daily_rate, g.is_active,
+        "SELECT g.id, g.name, g.phone, g.check_in, g.check_out, g.daily_rate, g.status,
                 r.number as room_number
          FROM guests g
          JOIN rooms r ON g.room_id = r.id
@@ -373,12 +373,12 @@ pub fn build_final_invoice_html(guest_id: i64) -> Result<String, String> {
             row.get::<_, String>(3)?,         // check_in
             row.get::<_, Option<String>>(4)?, // check_out
             row.get::<_, f64>(5)?,            // daily_rate
-            row.get::<_, bool>(6)?,           // is_active
+            row.get::<_, String>(6)?,         // status
             row.get::<_, String>(7)?,         // room_number
         ))
     }).map_err(|e| format!("Guest not found: {}", e))?;
     
-    let (_id, name, phone, check_in, check_out, daily_rate, is_active, room_number) = guest_row;
+        let (_id, name, _phone, check_in, check_out, daily_rate, _status, room_number) = guest_row;
     
     // Calculate room charges
     let checkout_date = check_out.clone().unwrap_or_else(|| {
@@ -388,319 +388,228 @@ pub fn build_final_invoice_html(guest_id: i64) -> Result<String, String> {
     let days = calculate_stay_days(&check_in, &checkout_date)?;
     let room_total = days as f64 * daily_rate;
     
-    // Get food orders
-    let mut stmt = conn.prepare(
-        "SELECT fo.id, fo.order_date, fo.total_amount, fo.is_paid
+    // Get food order details with items
+    let mut food_items_text = String::new();
+    let mut total_food_cost = 0.0;
+    
+    // First get all food orders for this guest
+    let mut order_stmt = conn.prepare(
+        "SELECT fo.id, fo.total_amount, fo.paid
          FROM food_orders fo
-         WHERE fo.guest_id = ?
-         ORDER BY fo.order_date"
-    ).map_err(|e| format!("Failed to prepare orders query: {}", e))?;
+         WHERE fo.guest_id = ? AND fo.paid = 1
+         ORDER BY fo.created_at"
+    ).map_err(|e| format!("Failed to prepare food orders query: {}", e))?;
     
-    let order_rows = stmt.query_map([guest_id], |row| {
+    let food_orders = order_stmt.query_map([guest_id], |row| {
         Ok((
-            row.get::<_, i64>(0)?,   // id
-            row.get::<_, String>(1)?, // order_date
-            row.get::<_, f64>(2)?,   // total_amount
-            row.get::<_, bool>(3)?,  // is_paid
+            row.get::<_, i64>(0)?,   // order_id
+            row.get::<_, f64>(1)?,   // total_amount
+            row.get::<_, bool>(2)?,  // paid
         ))
-    }).map_err(|e| format!("Failed to execute orders query: {}", e))?;
+    }).map_err(|e| format!("Failed to execute food orders query: {}", e))?;
     
-    let mut food_items_html = String::new();
-    let mut food_total = 0.0;
-    let mut unpaid_food = 0.0;
-    
-    for order in order_rows {
-        let (order_id, order_date, amount, is_paid) = order.map_err(|e| format!("Failed to read order: {}", e))?;
-        let status = if is_paid { "✓ Paid" } else { "⚠ Unpaid" };
-        let status_color = if is_paid { "#28a745" } else { "#dc3545" };
+    // For each order, get the items
+    for order_result in food_orders {
+        let (order_id, _amount, _paid) = order_result.map_err(|e| format!("Failed to read order: {}", e))?;
         
-        food_items_html.push_str(&format!(
-            "<tr><td>Food Order #{}</td><td>{}</td><td class=\"text-right\">${:.2}</td><td class=\"text-right\" style=\"color: {}\">{}</td></tr>",
-            order_id, order_date, amount, status_color, status
-        ));
+        let mut item_stmt = conn.prepare(
+            "SELECT oi.quantity, oi.item_name, oi.unit_price
+             FROM order_items oi
+             WHERE oi.order_id = ?"
+        ).map_err(|e| format!("Failed to prepare order items query: {}", e))?;
         
-        food_total += amount;
-        if !is_paid {
-            unpaid_food += amount;
+        let items = item_stmt.query_map([order_id], |row| {
+            Ok((
+                row.get::<_, i32>(0)?,    // quantity
+                row.get::<_, String>(1)?, // item_name
+                row.get::<_, f64>(2)?,    // unit_price
+            ))
+        }).map_err(|e| format!("Failed to execute order items query: {}", e))?;
+        
+        for item_result in items {
+            let (quantity, name, unit_price) = item_result.map_err(|e| format!("Failed to read item: {}", e))?;
+            let line_total = quantity as f64 * unit_price;
+            total_food_cost += line_total;
+            
+            food_items_text.push_str(&format!("{} x{} {}\n", html_escape(&name), quantity, (unit_price as i32)));
         }
     }
     
-    let grand_total = room_total + food_total;
-    let balance_due = room_total + unpaid_food;
+    // If no paid food items, show a simple message
+    if food_items_text.is_empty() {
+        food_items_text = "No food orders".to_string();
+    }
     
-    let status_text = if is_active {
-        "CURRENT STAY - Balance Due"
-    } else {
-        "FINAL INVOICE - Checked Out"
-    };
+    // Calculate totals
+    let subtotal = room_total + total_food_cost;
+    let tax_rate = 0.05; // 5% tax
+    let tax_amount = subtotal * tax_rate;
+    let final_total = subtotal + tax_amount;
+    
+    // Create receipt in the format requested
+    let current_date = chrono::Local::now();
+    let formatted_date = current_date.format("%d-%m-%Y");
+    let formatted_time = current_date.format("%I:%M %p");
     
     let html = format!(r#"<!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Guest Invoice - {}</title>
+    <title>Receipt - {}</title>
     <style>
         body {{
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            max-width: 800px;
+            font-family: 'Courier New', monospace;
+            max-width: 300px;
             margin: 0 auto;
             padding: 20px;
-            line-height: 1.6;
-            color: #333;
+            background: white;
+            color: black;
+            font-size: 12px;
+            line-height: 1.4;
         }}
-        .header {{
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 3px solid #2c3e50;
-            padding-bottom: 20px;
-            margin-bottom: 30px;
+        .receipt {{
+            border: 1px solid black;
+            padding: 15px;
+            background: white;
         }}
-        .hotel-info {{
-            flex: 1;
+        .logo {{
+            text-align: center;
+            margin-bottom: 10px;
+        }}
+        .logo-symbol {{
+            font-size: 24px;
+            margin-bottom: 5px;
         }}
         .hotel-name {{
-            font-size: 32px;
             font-weight: bold;
-            color: #2c3e50;
-            margin: 0;
-        }}
-        .hotel-subtitle {{
-            font-size: 16px;
-            color: #7f8c8d;
-            margin: 5px 0;
-        }}
-        .invoice-info {{
-            text-align: right;
-            flex: 1;
-        }}
-        .invoice-title {{
-            font-size: 28px;
-            color: #e74c3c;
-            margin: 0;
-            font-weight: bold;
-        }}
-        .invoice-status {{
             font-size: 14px;
-            color: #34495e;
-            margin: 5px 0;
+            margin-bottom: 5px;
         }}
-        .guest-info {{
-            background-color: #f8f9fa;
-            padding: 25px;
-            border-radius: 8px;
-            margin-bottom: 30px;
+        .divider {{
+            border-top: 1px dashed black;
+            margin: 8px 0;
         }}
-        .info-grid {{
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
+        .customer-info {{
+            margin-bottom: 8px;
         }}
-        .info-item {{
+        .info-line {{
+            margin-bottom: 2px;
+        }}
+        .items-section {{
+            margin: 8px 0;
+        }}
+        .item-line {{
+            margin-bottom: 2px;
+        }}
+        .totals {{
+            margin-top: 8px;
+        }}
+        .total-line {{
             display: flex;
             justify-content: space-between;
-            padding: 8px 0;
-            border-bottom: 1px solid #dee2e6;
+            margin-bottom: 2px;
         }}
-        .info-label {{
+        .final-total {{
             font-weight: bold;
-            color: #495057;
+            border-top: 1px solid black;
+            padding-top: 3px;
+            margin-top: 3px;
         }}
-        .section-title {{
-            font-size: 20px;
-            color: #2c3e50;
-            margin: 30px 0 15px 0;
-            padding-bottom: 8px;
-            border-bottom: 2px solid #ecf0f1;
-        }}
-        table {{
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 30px;
-            background-color: white;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }}
-        th, td {{
-            padding: 15px;
-            text-align: left;
-            border-bottom: 1px solid #dee2e6;
-        }}
-        th {{
-            background-color: #495057;
-            color: white;
-            font-weight: bold;
-        }}
-        .text-right {{
-            text-align: right;
-        }}
-        .total-section {{
-            background-color: #f8f9fa;
-            padding: 25px;
-            border-radius: 8px;
-            margin-top: 30px;
-        }}
-        .total-row {{
-            display: flex;
-            justify-content: space-between;
-            padding: 8px 0;
-            border-bottom: 1px solid #dee2e6;
-        }}
-        .grand-total {{
-            font-size: 24px;
-            font-weight: bold;
-            color: #2c3e50;
-            padding: 15px 0;
-            border-top: 2px solid #2c3e50;
-            margin-top: 15px;
-        }}
-        .balance-due {{
-            font-size: 20px;
-            font-weight: bold;
-            color: #e74c3c;
-            background-color: #fff5f5;
-            padding: 15px;
-            border-radius: 5px;
-            margin-top: 15px;
+        .payment-method {{
             text-align: center;
+            margin: 8px 0;
+            font-weight: bold;
         }}
         .footer {{
             text-align: center;
-            margin-top: 50px;
-            padding-top: 20px;
-            border-top: 1px solid #dee2e6;
-            color: #6c757d;
-            font-size: 14px;
+            margin-top: 10px;
+            font-size: 11px;
+        }}
+        .contact-info {{
+            text-align: center;
+            margin-top: 8px;
+            font-size: 10px;
         }}
         @media print {{
             body {{
                 margin: 0;
-                padding: 15px;
+                padding: 10px;
+            }}
+            .receipt {{
+                border: 1px solid black;
             }}
         }}
     </style>
 </head>
 <body>
-    <div class="header">
-        <div class="hotel-info">
-            <h1 class="hotel-name">Grand Vista Hotel</h1>
-            <p class="hotel-subtitle">123 Main Street, Downtown</p>
-            <p class="hotel-subtitle">Phone: +1-555-HOTEL-1</p>
+    <div class="receipt">
+        <div class="logo">
+            <div class="logo-symbol">🏨</div>
+            <div class="hotel-name">Yasin heaven star Hotel</div>
         </div>
-        <div class="invoice-info">
-            <h1 class="invoice-title">INVOICE</h1>
-            <p class="invoice-status">{}</p>
-            <p class="invoice-status">Generated: {}</p>
+        
+        <div class="divider"></div>
+        
+        <div class="customer-info">
+            <div class="info-line"><strong>Customer:</strong> {}</div>
+            <div class="info-line"><strong>Room No:</strong> {}</div>
+            <div class="info-line"><strong>Date:</strong> {} <strong>Time:</strong> {}</div>
         </div>
-    </div>
-
-    <div class="guest-info">
-        <h2 style="margin-top: 0; color: #2c3e50;">Guest Information</h2>
-        <div class="info-grid">
-            <div class="info-item">
-                <span class="info-label">Guest Name:</span>
-                <span>{}</span>
-            </div>
-            <div class="info-item">
-                <span class="info-label">Room Number:</span>
-                <span>{}</span>
-            </div>
-            <div class="info-item">
-                <span class="info-label">Phone:</span>
-                <span>{}</span>
-            </div>
-            <div class="info-item">
-                <span class="info-label">Daily Rate:</span>
-                <span>${:.2}</span>
-            </div>
-            <div class="info-item">
-                <span class="info-label">Check-in Date:</span>
-                <span>{}</span>
-            </div>
-            <div class="info-item">
-                <span class="info-label">Check-out Date:</span>
-                <span>{}</span>
-            </div>
-        </div>
-    </div>
-
-    <h2 class="section-title">Room Charges</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>Description</th>
-                <th class="text-right">Days</th>
-                <th class="text-right">Rate/Day</th>
-                <th class="text-right">Total</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr>
-                <td>Room {} - Accommodation</td>
-                <td class="text-right">{}</td>
-                <td class="text-right">${:.2}</td>
-                <td class="text-right">${:.2}</td>
-            </tr>
-        </tbody>
-    </table>
-
-    <h2 class="section-title">Food & Beverage Charges</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>Description</th>
-                <th>Date</th>
-                <th class="text-right">Amount</th>
-                <th class="text-right">Status</th>
-            </tr>
-        </thead>
-        <tbody>
+        
+        <div class="divider"></div>
+        
+        <div class="items-section">
+            <div><strong>Items:</strong></div>
             {}
-        </tbody>
-    </table>
-
-    <div class="total-section">
-        <div class="total-row">
-            <span><strong>Room Charges Subtotal:</strong></span>
-            <span><strong>${:.2}</strong></span>
         </div>
-        <div class="total-row">
-            <span><strong>Food & Beverage Subtotal:</strong></span>
-            <span><strong>${:.2}</strong></span>
+        
+        <div class="divider"></div>
+        
+        <div class="totals">
+            <div class="total-line">
+                <span>Subtotal:</span>
+                <span>{}</span>
+            </div>
+            <div class="total-line">
+                <span>Tax (5%):</span>
+                <span>{}</span>
+            </div>
+            <div class="total-line final-total">
+                <span>Total:</span>
+                <span>{}</span>
+            </div>
         </div>
-        <div class="total-row grand-total">
-            <span>TOTAL CHARGES:</span>
-            <span>${:.2}</span>
+        
+        <div class="divider"></div>
+        
+        <div class="payment-method">
+            Paid by: Cash
         </div>
-        <div class="balance-due">
-            <strong>BALANCE DUE: ${:.2}</strong>
+        
+        <div class="footer">
+            Thank you for your stay!
         </div>
-    </div>
-
-    <div class="footer">
-        <p>Thank you for staying with Grand Vista Hotel!</p>
-        <p>We hope you enjoyed your stay and look forward to serving you again.</p>
+        
+        <div class="divider"></div>
+        
+        <div class="contact-info">
+            📧 Yasinheavenstarhotel@gmail.com<br>
+            🌐 yasinheavenstarhotel.com<br>
+            📞 03171279230
+        </div>
     </div>
 </body>
 </html>"#,
         html_escape(&name),
-        status_text,
-        chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
         html_escape(&name),
         html_escape(&room_number),
-        phone.unwrap_or("N/A".to_string()),
-        daily_rate,
-        check_in,
-        checkout_date,
-        html_escape(&room_number),
-        days,
-        daily_rate,
-        room_total,
-        food_items_html,
-        room_total,
-        food_total,
-        grand_total,
-        balance_due
+        formatted_date,
+        formatted_time,
+        food_items_text,
+        subtotal as i32,
+        tax_amount as i32,
+        final_total as i32
     );
     
     Ok(html)

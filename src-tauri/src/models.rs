@@ -196,7 +196,7 @@ pub struct OrderItemDetail {
     pub item_name: String,
     pub quantity: i64,
     pub unit_price: f64,
-    pub total_price: f64,
+    pub line_total: f64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

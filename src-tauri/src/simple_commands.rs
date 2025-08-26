@@ -1155,7 +1155,7 @@ pub fn get_order_details(orderId: i64) -> Result<FoodOrderDetails, String> {
     
     // Get order items
     let mut stmt = conn.prepare(
-        "SELECT id, menu_item_id, item_name, quantity, unit_price, total_price
+        "SELECT id, menu_item_id, item_name, quantity, unit_price, line_total
          FROM order_items WHERE order_id = ?1"
     ).map_err(|e| e.to_string())?;
     
@@ -1166,7 +1166,7 @@ pub fn get_order_details(orderId: i64) -> Result<FoodOrderDetails, String> {
             item_name: row.get(2)?,
             quantity: row.get(3)?,
             unit_price: row.get(4)?,
-            total_price: row.get(5)?,
+            line_total: row.get(5)?,
         })
     }).map_err(|e| e.to_string())?
     .collect::<Result<Vec<_>, _>>()
@@ -1176,4 +1176,102 @@ pub fn get_order_details(orderId: i64) -> Result<FoodOrderDetails, String> {
         order: order,
         items: items,
     })
+}
+
+// Enhanced checkout function with discount support
+#[command]
+pub fn checkout_guest_with_discount(
+    guest_id: i64, 
+    check_out_date: String,
+    discount_type: String,
+    discount_amount: f64,
+    discount_description: String
+) -> Result<f64, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    // Get guest details
+    let (check_in, daily_rate, room_id): (String, f64, Option<i64>) = conn.query_row(
+        "SELECT check_in, daily_rate, room_id FROM guests WHERE id = ?1 AND status = 'active'",
+        params![guest_id],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+    ).map_err(|e| {
+        if e.to_string().contains("no rows") {
+            "Active guest not found".to_string()
+        } else {
+            e.to_string()
+        }
+    })?;
+    
+    // Calculate stay days
+    let check_in_date = NaiveDate::parse_from_str(&check_in, "%Y-%m-%d")
+        .map_err(|_| "Invalid check-in date format")?;
+    let check_out_date_parsed = NaiveDate::parse_from_str(&check_out_date, "%Y-%m-%d")
+        .map_err(|_| "Invalid check-out date format")?;
+    let stay_days = (check_out_date_parsed - check_in_date).num_days().max(1);
+    
+    // Calculate room total
+    let room_total = stay_days as f64 * daily_rate;
+    
+    // Calculate unpaid food total
+    let unpaid_food: f64 = conn.query_row(
+        "SELECT COALESCE(SUM(total_amount), 0) FROM food_orders WHERE guest_id = ?1 AND paid = 0",
+        params![guest_id],
+        |row| row.get(0)
+    ).map_err(|e| e.to_string())?;
+    
+    // Calculate subtotal before discount
+    let subtotal = room_total + unpaid_food;
+    
+    // Apply discount
+    let discount_value = if discount_amount > 0.0 {
+        match discount_type.as_str() {
+            "percentage" => {
+                if discount_amount > 100.0 {
+                    return Err("Percentage discount cannot exceed 100%".to_string());
+                }
+                subtotal * (discount_amount / 100.0)
+            },
+            "flat" => discount_amount,
+            _ => return Err("Invalid discount type. Use 'flat' or 'percentage'".to_string())
+        }
+    } else {
+        0.0
+    };
+    
+    // Calculate final total
+    let grand_total = (subtotal - discount_value).max(0.0);
+    
+    // Update guest status and free up the room
+    let now = get_current_timestamp();
+    
+    // Start a transaction to ensure all operations succeed or fail together
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    
+    // Update guest checkout status
+    tx.execute(
+        "UPDATE guests SET status = 'checked_out', check_out = ?1, updated_at = ?2 WHERE id = ?3",
+        params![check_out_date, now, guest_id],
+    ).map_err(|e| e.to_string())?;
+    
+    // Free up the room if guest had one
+    if let Some(room_id) = room_id {
+        tx.execute(
+            "UPDATE rooms SET is_occupied = 0, guest_id = NULL WHERE id = ?1",
+            params![room_id],
+        ).map_err(|e| e.to_string())?;
+    }
+    
+    // If there was a discount, log it (you could add a discounts table later)
+    if discount_value > 0.0 {
+        // For now, we'll just log it in a comment or you could create a discounts table
+        // tx.execute(
+        //     "INSERT INTO discounts (guest_id, discount_type, discount_amount, description, created_at) 
+        //      VALUES (?1, ?2, ?3, ?4, ?5)",
+        //     params![guest_id, discount_type, discount_value, discount_description, now],
+        // ).map_err(|e| e.to_string())?;
+    }
+    
+    tx.commit().map_err(|e| e.to_string())?;
+    
+    Ok(grand_total)
 }

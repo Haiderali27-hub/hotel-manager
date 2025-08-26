@@ -135,7 +135,7 @@ export interface OrderItemDetail {
   item_name: string;
   quantity: number;
   unit_price: number;
-  total_price: number;
+  line_total: number;
 }
 
 export interface FoodOrderDetails {
@@ -654,6 +654,35 @@ export const buildOrderReceiptHtml = (orderId: number): Promise<string> =>
  */
 export const buildFinalInvoiceHtml = (guestId: number): Promise<string> => 
   invoke("build_final_invoice_html", { guestId });
+
+/**
+ * Check out a guest with optional discount and calculate final bill
+ * @param guestId - ID of the guest to check out  
+ * @param checkOutDate - Date of checkout (YYYY-MM-DD format)
+ * @param discountType - Type of discount ('flat' or 'percentage')
+ * @param discountAmount - Amount or percentage of discount
+ * @param discountDescription - Description/reason for discount
+ * @returns Final bill amount after discount
+ * @example
+ * ```typescript
+ * const finalBill = await checkoutGuestWithDiscount(123, "2025-08-20", "percentage", 10, "Senior citizen discount");
+ * console.log(`Final bill: Rs ${finalBill.toFixed(2)}`);
+ * ```
+ */
+export const checkoutGuestWithDiscount = (
+  guestId: number, 
+  checkOutDate: string,
+  discountType: 'flat' | 'percentage' = 'flat',
+  discountAmount: number = 0,
+  discountDescription: string = ''
+): Promise<number> => 
+  invoke("checkout_guest_with_discount", { 
+    guestId, 
+    checkOutDate, 
+    discountType, 
+    discountAmount, 
+    discountDescription 
+  });
 
 // Database Management APIs
 /**

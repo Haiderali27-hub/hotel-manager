@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import type { ActiveGuestRow, FoodOrderSummary, Room } from '../api/client';
 import {
-    checkoutGuest,
     deleteFoodOrder,
     getActiveGuests,
     getAvailableRoomsForGuest,
@@ -11,6 +10,7 @@ import {
     updateGuest
 } from '../api/client';
 import { useTheme } from '../context/ThemeContext';
+import CheckoutScreen from './CheckoutScreen';
 
 interface ActiveGuestsProps {
   onBack: () => void;
@@ -35,6 +35,10 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
   const [showEditForm, setShowEditForm] = useState(false);
   const [expandedGuest, setExpandedGuest] = useState<number | null>(null);
   const [availableRooms, setAvailableRooms] = useState<Room[]>([]);
+  
+  // Checkout state
+  const [showCheckout, setShowCheckout] = useState(false);
+  const [selectedGuestForCheckout, setSelectedGuestForCheckout] = useState<ActiveGuestRow | null>(null);
   
   // User feedback states
   const [isUpdating, setIsUpdating] = useState(false);
@@ -198,19 +202,15 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
     }
   };
 
-  const handleCheckoutGuest = async (guestId: number, guestName: string) => {
-    if (confirm(`Are you sure you want to checkout ${guestName}?`)) {
-      setError(null);
-      try {
-        const today = new Date().toISOString().split('T')[0]; // Current date in YYYY-MM-DD format
-        await checkoutGuest(guestId, today);
-        setSuccessMessage(`${guestName} has been checked out successfully!`);
-        loadActiveGuests();
-      } catch (err) {
-        setError(`Failed to checkout ${guestName}: ${err instanceof Error ? err.message : 'Unknown error'}`);
-        console.error(err);
-      }
-    }
+  const handleCheckoutGuest = (guest: ActiveGuestRow) => {
+    setSelectedGuestForCheckout(guest);
+    setShowCheckout(true);
+  };
+
+  const handleCheckoutComplete = () => {
+    setShowCheckout(false);
+    setSelectedGuestForCheckout(null);
+    loadActiveGuests(); // Refresh the guest list
   };
 
   const resetEditForm = () => {
@@ -470,7 +470,7 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
                           {expandedGuest === guest.guest_id ? 'Hide' : 'Orders'}
                         </button>
                         <button
-                          onClick={() => handleCheckoutGuest(guest.guest_id, guest.name)}
+                          onClick={() => handleCheckoutGuest(guest)}
                           style={{
                             backgroundColor: colors.success,
                             color: '#FFFFFF',
@@ -976,6 +976,25 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
             </div>
           </div>
         </div>
+      )}
+
+      {showCheckout && selectedGuestForCheckout && (
+        <CheckoutScreen
+          guest={selectedGuestForCheckout}
+          onBack={() => {
+            setShowCheckout(false);
+            setSelectedGuestForCheckout(null);
+          }}
+          onClose={() => {
+            setShowCheckout(false);
+            setSelectedGuestForCheckout(null);
+          }}
+          onCheckoutComplete={() => {
+            setShowCheckout(false);
+            setSelectedGuestForCheckout(null);
+            loadActiveGuests(); // Refresh the guests list
+          }}
+        />
       )}
     </div>
   );

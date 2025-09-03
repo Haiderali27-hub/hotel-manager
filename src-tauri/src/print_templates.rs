@@ -5,10 +5,10 @@ use base64::{Engine as _, engine::general_purpose};
 fn get_logo_base64() -> String {
     // Try to read the logo file
     let logo_paths = [
-        "src/assets/Logo/logo.jpg",
-        "assets/Logo/logo.jpg", 
-        "../src/assets/Logo/logo.jpg",
-        "../../src/assets/Logo/logo.jpg"
+        "src/assets/Logo/logo.png",
+        "assets/Logo/logo.png", 
+        "../src/assets/Logo/logo.png",
+        "../../src/assets/Logo/logo.png"
     ];
     
     for path in &logo_paths {

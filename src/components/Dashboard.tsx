@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import logoImage from '../assets/Logo/logo.jpg';
+import logoImage from '../assets/Logo/logo.png';
 import { useAuth } from '../context/SimpleAuthContext';
 import { getGradientColors, useTheme } from '../context/ThemeContext';
 import type { DashboardStats } from '../services/DatabaseService';
@@ -10,6 +10,7 @@ import AddFoodOrder from './AddFoodOrder';
 import AddGuest from './AddGuest';
 import History from './History';
 import ManageMenuRooms from './ManageMenuRooms';
+import MonthlyReport from './MonthlyReport';
 
 const Dashboard: React.FC = () => {
   const { logout } = useAuth();
@@ -633,6 +634,11 @@ const Dashboard: React.FC = () => {
               onBack={goBackToDashboard}
             />
           )}
+          {currentPage === 'monthly-report' && (
+            <MonthlyReport 
+              onBack={goBackToDashboard}
+            />
+          )}
           {/* TODO: Add other page components */}
           {currentPage !== 'dashboard' && 
            currentPage !== 'add-guest' && 
@@ -640,6 +646,7 @@ const Dashboard: React.FC = () => {
            currentPage !== 'add-expense' && 
            currentPage !== 'active-guests' && 
            currentPage !== 'history' && 
+           currentPage !== 'monthly-report' && 
            currentPage !== 'manage-menu-rooms' && (
             <div style={{
               padding: '2rem',

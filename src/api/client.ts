@@ -3,12 +3,12 @@ import { invoke } from "@tauri-apps/api/core";
 // Extend Window interface for Tauri
 declare global {
   interface Window {
-    __TAURI__?: any;
+    __TAURI_INTERNALS__?: any;
   }
 }
 
-// Check if Tauri is available
-const isTauri = typeof window !== 'undefined' && window.__TAURI__;
+// Check if we're running in Tauri environment
+const isTauri = typeof window !== 'undefined' && window.__TAURI_INTERNALS__;
 
 if (!isTauri) {
   console.warn('Tauri APIs not available - running in web mode');
@@ -656,6 +656,34 @@ export const buildFinalInvoiceHtml = (guestId: number): Promise<string> =>
   invoke("build_final_invoice_html", { guestId });
 
 /**
+ * Generate HTML for final invoice with discount information
+ * @param guestId - ID of the guest
+ * @param discountType - Type of discount ('flat' or 'percentage')
+ * @param discountAmount - Amount or percentage of discount
+ * @param discountDescription - Description/reason for discount
+ * @returns HTML string ready for printing with discount included
+ * @example
+ * ```ts
+ * const html = await buildFinalInvoiceHtmlWithDiscount(123, "percentage", 10, "Senior discount");
+ * const newWindow = window.open('', '_blank');
+ * newWindow?.document.write(html);
+ * newWindow?.print();
+ * ```
+ */
+export const buildFinalInvoiceHtmlWithDiscount = (
+  guestId: number, 
+  discountType: string, 
+  discountAmount: number, 
+  discountDescription: string
+): Promise<string> => 
+  invoke("build_final_invoice_html_with_discount", { 
+    guestId, 
+    discountType, 
+    discountAmount, 
+    discountDescription 
+  });
+
+/**
  * Check out a guest with optional discount and calculate final bill
  * @param guestId - ID of the guest to check out  
  * @param checkOutDate - Date of checkout (YYYY-MM-DD format)
@@ -820,3 +848,37 @@ export const handleApiError = (error: any): string => {
   }
   return "An unexpected error occurred. Please try again.";
 };
+
+// ============================================================================
+// TAX SETTINGS
+// ============================================================================
+
+/**
+ * Set the tax rate for invoices
+ * @param rate - Tax rate percentage (0-100)
+ * @returns Success message
+ */
+export const setTaxRate = (rate: number): Promise<string> => 
+  invoke("set_tax_rate", { rate });
+
+/**
+ * Get the current tax rate
+ * @returns Tax rate percentage
+ */
+export const getTaxRate = (): Promise<number> => 
+  invoke("get_tax_rate");
+
+/**
+ * Set whether tax is enabled for invoices
+ * @param enabled - Whether tax should be applied
+ * @returns Success message
+ */
+export const setTaxEnabled = (enabled: boolean): Promise<string> => 
+  invoke("set_tax_enabled", { enabled });
+
+/**
+ * Get whether tax is currently enabled
+ * @returns Whether tax is enabled
+ */
+export const getTaxEnabled = (): Promise<boolean> => 
+  invoke("get_tax_enabled");

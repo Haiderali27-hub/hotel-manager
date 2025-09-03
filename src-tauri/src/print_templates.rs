@@ -25,9 +25,9 @@ fn get_logo_base64() -> String {
 
 /// Print a food order receipt
 #[tauri::command]
-pub fn print_order_receipt(orderId: i64) -> Result<String, String> {
+pub fn print_order_receipt(order_id: i64) -> Result<String, String> {
     // Generate the HTML receipt
-    let mut html = build_order_receipt_html(orderId)?;
+    let mut html = build_order_receipt_html(order_id)?;
     
     // Add auto-print JavaScript before the closing </head> tag
     let auto_print_script = String::from(r#"
@@ -44,7 +44,7 @@ pub fn print_order_receipt(orderId: i64) -> Result<String, String> {
     
     // Create a temporary HTML file
     let temp_dir = std::env::temp_dir();
-    let file_path = temp_dir.join(format!("receipt_{}.html", orderId));
+    let file_path = temp_dir.join(format!("receipt_{}.html", order_id));
     
     // Write HTML to file
     std::fs::write(&file_path, html)
@@ -80,8 +80,7 @@ pub fn print_order_receipt(orderId: i64) -> Result<String, String> {
 
 /// Generate HTML receipt for a food order
 #[tauri::command]
-pub fn build_order_receipt_html(orderId: i64) -> Result<String, String> {
-    let order_id = orderId;
+pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
     let conn = crate::db::get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
     
     // Get order details with optional guest information
@@ -354,6 +353,17 @@ pub fn build_order_receipt_html(orderId: i64) -> Result<String, String> {
 /// Generate HTML invoice for a guest's final bill
 #[tauri::command]
 pub fn build_final_invoice_html(guest_id: i64) -> Result<String, String> {
+    build_final_invoice_html_with_discount(guest_id, "flat".to_string(), 0.0, "".to_string())
+}
+
+/// Generate HTML invoice for a guest's final bill with discount information
+#[tauri::command]
+pub fn build_final_invoice_html_with_discount(
+    guest_id: i64, 
+    discount_type: String, 
+    discount_amount: f64, 
+    _discount_description: String
+) -> Result<String, String> {
     let conn = crate::db::get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
     
     // Get guest details
@@ -388,15 +398,14 @@ pub fn build_final_invoice_html(guest_id: i64) -> Result<String, String> {
     let days = calculate_stay_days(&check_in, &checkout_date)?;
     let room_total = days as f64 * daily_rate;
     
-    // Get food order details with items
-    let mut food_items_text = String::new();
+    // Get food order details with items (ALL orders, both paid and unpaid)
     let mut total_food_cost = 0.0;
     
-    // First get all food orders for this guest
+    // Get all food orders for this guest (both paid and unpaid)
     let mut order_stmt = conn.prepare(
         "SELECT fo.id, fo.total_amount, fo.paid
          FROM food_orders fo
-         WHERE fo.guest_id = ? AND fo.paid = 1
+         WHERE fo.guest_id = ?
          ORDER BY fo.created_at"
     ).map_err(|e| format!("Failed to prepare food orders query: {}", e))?;
     
@@ -409,8 +418,9 @@ pub fn build_final_invoice_html(guest_id: i64) -> Result<String, String> {
     }).map_err(|e| format!("Failed to execute food orders query: {}", e))?;
     
     // For each order, get the items
+    let mut food_table_rows = String::new();
     for order_result in food_orders {
-        let (order_id, _amount, _paid) = order_result.map_err(|e| format!("Failed to read order: {}", e))?;
+        let (order_id, _amount, paid) = order_result.map_err(|e| format!("Failed to read order: {}", e))?;
         
         let mut item_stmt = conn.prepare(
             "SELECT oi.quantity, oi.item_name, oi.unit_price
@@ -429,20 +439,66 @@ pub fn build_final_invoice_html(guest_id: i64) -> Result<String, String> {
         for item_result in items {
             let (quantity, name, unit_price) = item_result.map_err(|e| format!("Failed to read item: {}", e))?;
             let line_total = quantity as f64 * unit_price;
-            total_food_cost += line_total;
             
-            food_items_text.push_str(&format!("{} x{} {}\n", html_escape(&name), quantity, (unit_price as i32)));
+            // Only include UNPAID food orders in the total calculation
+            if !paid {
+                total_food_cost += line_total;
+            }
+            
+            // Add table row for this item with clear paid/unpaid indication
+            let status_indicator = if paid { " [PAID]" } else { " [UNPAID]" };
+            let strike_through = if paid { "text-decoration: line-through; opacity: 0.6;" } else { "" };
+            food_table_rows.push_str(&format!(
+                r#"<div class="table-row" style="{}">
+                    <div class="table-cell"><strong>{}{}</strong></div>
+                    <div class="table-cell center">{}</div>
+                    <div class="table-cell center">Rs {:.0}</div>
+                    <div class="table-cell right">Rs {:.0}</div>
+                </div>"#,
+                strike_through, html_escape(&name), status_indicator, quantity, unit_price, line_total
+            ));
         }
     }
     
-    // If no paid food items, show a simple message
-    if food_items_text.is_empty() {
-        food_items_text = "No food orders".to_string();
+    // If no food items, show a simple message
+    if food_table_rows.is_empty() {
+        food_table_rows = r#"<div class="table-row">
+            <div class="table-cell">No food orders</div>
+            <div class="table-cell center">-</div>
+            <div class="table-cell center">-</div>
+            <div class="table-cell right">Rs 0</div>
+        </div>"#.to_string();
     }
     
-    // Calculate totals
-    let subtotal = room_total + total_food_cost;
-    let tax_rate = 0.05; // 5% tax
+    // Calculate totals (only unpaid food items are included in final total)
+    let subtotal_before_discount = room_total + total_food_cost;
+    
+    // Apply discount
+    let discount_value = if discount_amount > 0.0 {
+        match discount_type.as_str() {
+            "percentage" => {
+                if discount_amount > 100.0 {
+                    0.0 // Cap at 100%
+                } else {
+                    subtotal_before_discount * (discount_amount / 100.0)
+                }
+            },
+            "flat" => discount_amount,
+            _ => 0.0
+        }
+    } else {
+        0.0
+    };
+    
+    let subtotal = (subtotal_before_discount - discount_value).max(0.0);
+    
+    // Get tax settings
+    let tax_enabled = crate::simple_commands::get_tax_enabled().unwrap_or(true);
+    let tax_rate = if tax_enabled {
+        crate::simple_commands::get_tax_rate().unwrap_or(5.0) / 100.0
+    } else {
+        0.0
+    };
     let tax_amount = subtotal * tax_rate;
     let final_total = subtotal + tax_amount;
     
@@ -455,161 +511,346 @@ pub fn build_final_invoice_html(guest_id: i64) -> Result<String, String> {
 <html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Receipt - {}</title>
+    <title>Final Invoice</title>
     <style>
+        @page {{
+            size: A4;
+            margin: 15mm;
+        }}
+        
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
+        
         body {{
-            font-family: 'Courier New', monospace;
-            max-width: 300px;
-            margin: 0 auto;
-            padding: 20px;
-            background: white;
-            color: black;
-            font-size: 12px;
+            font-family: Arial, sans-serif;
+            font-size: 11px;
             line-height: 1.4;
-        }}
-        .receipt {{
-            border: 1px solid black;
+            color: #000;
+            background: #fff;
+            max-width: 600px;
+            margin: 0 auto;
             padding: 15px;
-            background: white;
         }}
-        .logo {{
+        
+        .invoice {{
+            border: 1px solid #333;
+            padding: 20px;
+            background: #fff;
+            page-break-inside: avoid;
+        }}
+        
+        .header {{
             text-align: center;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 10px;
         }}
-        .logo-symbol {{
-            font-size: 24px;
-            margin-bottom: 5px;
-        }}
-        .hotel-name {{
+        
+        .logo {{
+            width: 50px;
+            height: 30px;
+            background: #333;
+            margin: 0 auto 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
             font-weight: bold;
             font-size: 14px;
-            margin-bottom: 5px;
         }}
-        .divider {{
-            border-top: 1px dashed black;
-            margin: 8px 0;
+        
+        .hotel-name {{
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 3px;
         }}
-        .customer-info {{
-            margin-bottom: 8px;
-        }}
-        .info-line {{
+        
+        .hotel-address {{
+            font-size: 9px;
+            color: #666;
             margin-bottom: 2px;
         }}
-        .items-section {{
-            margin: 8px 0;
+        
+        .receipt-title {{
+            font-size: 14px;
+            font-weight: bold;
+            margin-top: 10px;
+            color: #2c5282;
         }}
-        .item-line {{
-            margin-bottom: 2px;
+        
+        .info-section {{
+            margin-bottom: 15px;
         }}
-        .totals {{
-            margin-top: 8px;
-        }}
-        .total-line {{
+        
+        .info-row {{
             display: flex;
             justify-content: space-between;
-            margin-bottom: 2px;
+            margin-bottom: 3px;
+            font-size: 10px;
         }}
-        .final-total {{
+        
+        .info-label {{
             font-weight: bold;
-            border-top: 1px solid black;
-            padding-top: 3px;
-            margin-top: 3px;
+            color: #666;
         }}
-        .payment-method {{
-            text-align: center;
-            margin: 8px 0;
+        
+        .divider {{
+            border-top: 1px solid #333;
+            margin: 12px 0;
+        }}
+        
+        .section-header {{
             font-weight: bold;
-        }}
-        .footer {{
+            margin: 12px 0 8px 0;
             text-align: center;
-            margin-top: 10px;
+            text-decoration: underline;
             font-size: 11px;
         }}
+        
+        .table-header {{
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr;
+            gap: 8px;
+            padding: 6px 0;
+            border-bottom: 1px solid #333;
+            font-weight: bold;
+            font-size: 10px;
+            background: #f5f5f5;
+        }}
+        
+        .table-row {{
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr;
+            gap: 8px;
+            padding: 4px 0;
+            border-bottom: 1px dotted #ccc;
+            font-size: 10px;
+        }}
+        
+        .table-cell {{
+            text-align: left;
+        }}
+        
+        .table-cell.center {{
+            text-align: center;
+        }}
+        
+        .table-cell.right {{
+            text-align: right;
+        }}
+        
+        .total-section {{
+            margin-top: 12px;
+            border-top: 1px solid #333;
+            padding-top: 8px;
+        }}
+        
+        .total-row {{
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 3px;
+            font-size: 10px;
+        }}
+        
+        .grand-total {{
+            font-weight: bold;
+            font-size: 12px;
+            border-top: 2px solid #333;
+            padding-top: 6px;
+            margin-top: 6px;
+        }}
+        
+        .payment-status {{
+            text-align: center;
+            margin: 12px 0;
+            padding: 6px;
+            border: 1px solid #333;
+            font-weight: bold;
+            background: #f0f0f0;
+            font-size: 11px;
+        }}
+        
+        .footer {{
+            text-align: center;
+            margin-top: 12px;
+            font-size: 10px;
+            font-style: italic;
+        }}
+        
         .contact-info {{
             text-align: center;
             margin-top: 8px;
-            font-size: 10px;
+            font-size: 9px;
+            color: #666;
         }}
+        
         @media print {{
             body {{
                 margin: 0;
-                padding: 10px;
+                padding: 8px;
+                max-width: none;
             }}
-            .receipt {{
-                border: 1px solid black;
+            
+            .invoice {{
+                border: 1px solid #000;
+                margin: 0;
+                padding: 15px;
+            }}
+            
+            .payment-status {{
+                background: #fff !important;
+            }}
+            
+            .table-header {{
+                background: #fff !important;
             }}
         }}
     </style>
 </head>
 <body>
-    <div class="receipt">
-        <div class="logo">
-            <div class="logo-symbol">🏨</div>
-            <div class="hotel-name">Yasin heaven star Hotel</div>
+    <div class="invoice">
+        <div class="header">
+            <div class="logo">YH</div>
+            <div class="hotel-name">Yasin Heaven Star Hotel</div>
+            <div class="hotel-address">Main Yasin Ghizer Gilgit Baltistan, Pakistan</div>
+            <div class="hotel-address">Phone: +92 355 4650686</div>
+            <div class="hotel-address">Email: yasinheavenstarhotel@gmail.com</div>
+            <div class="receipt-title">Final Invoice</div>
+        </div>
+        
+        <div class="info-section">
+            <div class="info-row">
+                <span class="info-label">Customer:</span>
+                <span>{}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Date:</span>
+                <span>{}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Room:</span>
+                <span>{}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Check-in:</span>
+                <span>{}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Check-out:</span>
+                <span>{}</span>
+            </div>
         </div>
         
         <div class="divider"></div>
         
-        <div class="customer-info">
-            <div class="info-line"><strong>Customer:</strong> {}</div>
-            <div class="info-line"><strong>Room No:</strong> {}</div>
-            <div class="info-line"><strong>Date:</strong> {} <strong>Time:</strong> {}</div>
+        <div class="section-header">ROOM CHARGES</div>
+        <div class="table-header">
+            <div class="table-cell">Description</div>
+            <div class="table-cell center">Days</div>
+            <div class="table-cell center">Rate</div>
+            <div class="table-cell right">Total</div>
+        </div>
+        <div class="table-row">
+            <div class="table-cell">Room {} - Accommodation</div>
+            <div class="table-cell center">{}</div>
+            <div class="table-cell center">Rs {:.0}</div>
+            <div class="table-cell right">Rs {:.0}</div>
         </div>
         
-        <div class="divider"></div>
-        
-        <div class="items-section">
-            <div><strong>Items:</strong></div>
-            {}
+        <div class="section-header">FOOD ORDERS</div>
+        <div class="table-header">
+            <div class="table-cell">Item</div>
+            <div class="table-cell center">Qty</div>
+            <div class="table-cell center">Unit Price</div>
+            <div class="table-cell right">Total</div>
         </div>
+        {}
         
-        <div class="divider"></div>
-        
-        <div class="totals">
-            <div class="total-line">
+        <div class="total-section">
+            <div class="total-row">
+                <span>Room Charges:</span>
+                <span>Rs {:.0}</span>
+            </div>
+            <div class="total-row">
+                <span>Food Orders:</span>
+                <span>Rs {:.0}</span>
+            </div>
+            <div class="total-row">
                 <span>Subtotal:</span>
-                <span>{}</span>
+                <span>Rs {:.0}</span>
             </div>
-            <div class="total-line">
-                <span>Tax (5%):</span>
-                <span>{}</span>
-            </div>
-            <div class="total-line final-total">
-                <span>Total:</span>
-                <span>{}</span>
+            {}
+            {}
+            <div class="total-row grand-total">
+                <span>Grand Total:</span>
+                <span>Rs {:.0}</span>
             </div>
         </div>
         
-        <div class="divider"></div>
+        <div class="payment-status">
+            PAID BY: CASH
+        </div>
         
-        <div class="payment-method">
-            Paid by: Cash
+        <div style="margin: 8px 0; padding: 6px; border: 1px solid #333; font-size: 9px; text-align: center; background: #f9f9f9;">
+            <strong>NOTE:</strong> Only unpaid food orders are included in the total amount.<br>
+            Paid orders are shown with [PAID] status and crossed out for reference only.
         </div>
         
         <div class="footer">
-            Thank you for your stay!
+            Thank you for your stay!<br>
+            Invoice generated on {} at {}
         </div>
         
-        <div class="divider"></div>
-        
         <div class="contact-info">
-            📧 Yasinheavenstarhotel@gmail.com<br>
-            🌐 yasinheavenstarhotel.com<br>
-            📞 03171279230
+            Receipt generated on {} at {}
         </div>
     </div>
 </body>
 </html>"#,
-        html_escape(&name),
-        html_escape(&name),
-        html_escape(&room_number),
-        formatted_date,
-        formatted_time,
-        food_items_text,
-        subtotal as i32,
-        tax_amount as i32,
-        final_total as i32
+        html_escape(&name),           // Customer name
+        formatted_date,               // Current date
+        html_escape(&room_number),    // Room number
+        html_escape(&check_in),       // Check-in date
+        html_escape(&checkout_date),  // Check-out date
+        html_escape(&room_number),    // Room number for charges table
+        days,                         // Number of days
+        daily_rate as i32,           // Daily rate
+        room_total as i32,           // Total room charges
+        food_table_rows,             // Food items table rows
+        room_total as i32,           // Room charges in totals
+        total_food_cost as i32,      // Food cost
+        subtotal_before_discount as i32, // Subtotal before discount
+        // Discount row - conditionally included
+        if discount_value > 0.0 {
+            let discount_label = if discount_type == "percentage" {
+                format!("Discount ({:.1}%):", discount_amount)
+            } else {
+                "Discount:".to_string()
+            };
+            format!(r#"<div class="total-row">
+                <span>{}</span>
+                <span>-Rs {:.0}</span>
+            </div>"#, discount_label, discount_value)
+        } else {
+            "".to_string()
+        },
+        // Tax row - conditionally included
+        if tax_enabled {
+            format!(r#"<div class="total-row">
+                <span>Tax ({:.1}%):</span>
+                <span>Rs {:.0}</span>
+            </div>"#, tax_rate * 100.0, tax_amount)
+        } else {
+            "".to_string()
+        },
+        final_total as i32,          // Final total
+        formatted_date,              // Date for footer
+        formatted_time,              // Time for footer
+        formatted_date,              // Date for contact info
+        formatted_time               // Time for contact info
     );
     
     Ok(html)

@@ -7,6 +7,10 @@ import {
     deleteRoom,
     getMenuItems,
     getRooms,
+    getTaxEnabled,
+    getTaxRate,
+    setTaxEnabled as saveTaxEnabled,
+    setTaxRate as saveTaxRate,
     updateMenuItem
 } from '../api/client';
 import { useNotification } from '../context/NotificationContext';
@@ -18,8 +22,8 @@ interface ManageMenuRoomsProps {
 
 const ManageMenuRooms: React.FC<ManageMenuRoomsProps> = ({ onBack }) => {
     const { colors } = useTheme();
-    const { showSuccess, showError, showWarning } = useNotification();
-    const [activeTab, setActiveTab] = useState<'menu' | 'rooms'>('menu');
+    const { showSuccess, showError } = useNotification();
+    const [activeTab, setActiveTab] = useState<'menu' | 'rooms' | 'settings'>('menu');
     const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
     const [rooms, setRooms] = useState<Room[]>([]);
     const [loading, setLoading] = useState(false);
@@ -38,6 +42,11 @@ const ManageMenuRooms: React.FC<ManageMenuRoomsProps> = ({ onBack }) => {
     const [customRoomType, setCustomRoomType] = useState('');
     const [roomPrice, setRoomPrice] = useState('');
 
+    // Settings states
+    const [taxRate, setTaxRate] = useState('5.0');
+    const [taxEnabled, setTaxEnabled] = useState(true);
+    const [savingSettings, setSavingSettings] = useState(false);
+
     useEffect(() => {
         loadData();
     }, []);
@@ -51,6 +60,10 @@ const ManageMenuRooms: React.FC<ManageMenuRoomsProps> = ({ onBack }) => {
             ]);
             setMenuItems(menuData);
             setRooms(roomData);
+            
+            // Load settings
+            await loadSettings();
+            
             setError(null);
         } catch (err) {
             const errorMessage = 'Failed to load data';
@@ -59,6 +72,51 @@ const ManageMenuRooms: React.FC<ManageMenuRoomsProps> = ({ onBack }) => {
             console.error(err);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const loadSettings = async () => {
+        try {
+            // Try to get tax rate from backend
+            const response = await getTaxRate();
+            setTaxRate(response.toString());
+            
+            // Try to get tax enabled setting
+            try {
+                const taxEnabledResponse = await getTaxEnabled();
+                setTaxEnabled(taxEnabledResponse);
+            } catch (err) {
+                setTaxEnabled(true); // Default to enabled
+            }
+        } catch (err) {
+            // If no tax rate is set, use default 5%
+            console.log('Using default tax rate of 5%');
+            setTaxRate('5.0');
+            setTaxEnabled(true);
+        }
+    };
+
+    const handleSaveSettings = async () => {
+        const rate = parseFloat(taxRate);
+        if (isNaN(rate) || rate < 0 || rate > 100) {
+            showError('Invalid Tax Rate', 'Please enter a valid tax rate between 0 and 100');
+            return;
+        }
+
+        setSavingSettings(true);
+        try {
+            console.log('Saving tax settings:', { rate, enabled: taxEnabled });
+            await saveTaxRate(rate);
+            await saveTaxEnabled(taxEnabled);
+            showSuccess('Settings Saved', 'Tax settings updated successfully');
+            // Reload settings to confirm they were saved
+            await loadSettings();
+        } catch (err) {
+            console.error('Detailed error:', err);
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            showError('Save Error', `Failed to save tax settings: ${errorMessage}`);
+        } finally {
+            setSavingSettings(false);
         }
     };
 
@@ -446,6 +504,21 @@ const ManageMenuRooms: React.FC<ManageMenuRoomsProps> = ({ onBack }) => {
                     }}
                 >
                     Rooms
+                </button>
+                <button
+                    onClick={() => setActiveTab('settings')}
+                    style={{
+                        padding: '1rem 2rem',
+                        backgroundColor: activeTab === 'settings' ? colors.accent : 'transparent',
+                        color: activeTab === 'settings' ? '#FFFFFF' : colors.text,
+                        border: 'none',
+                        borderRadius: '8px 8px 0 0',
+                        cursor: 'pointer',
+                        fontSize: '1rem',
+                        fontWeight: '600'
+                    }}
+                >
+                    Settings
                 </button>
             </div>
 
@@ -931,6 +1004,131 @@ const ManageMenuRooms: React.FC<ManageMenuRoomsProps> = ({ onBack }) => {
                                 Add
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Settings Tab */}
+            {activeTab === 'settings' && (
+                <div>
+                    <div style={{
+                        backgroundColor: colors.surface,
+                        padding: '2rem',
+                        borderRadius: '12px',
+                        border: `1px solid ${colors.border}`,
+                        maxWidth: '600px'
+                    }}>
+                        <h3 style={{ 
+                            color: colors.text, 
+                            marginBottom: '2rem',
+                            fontSize: '1.5rem',
+                            fontWeight: '600'
+                        }}>
+                            Tax Configuration
+                        </h3>
+
+                        <div style={{ marginBottom: '2rem' }}>
+                            <label style={{ 
+                                display: 'flex',
+                                alignItems: 'center',
+                                marginBottom: '1rem', 
+                                color: colors.text,
+                                fontWeight: '500',
+                                cursor: 'pointer'
+                            }}>
+                                <input
+                                    type="checkbox"
+                                    checked={taxEnabled}
+                                    onChange={(e) => setTaxEnabled(e.target.checked)}
+                                    style={{
+                                        marginRight: '0.5rem',
+                                        width: '18px',
+                                        height: '18px',
+                                        cursor: 'pointer'
+                                    }}
+                                />
+                                Apply Tax to Invoices
+                            </label>
+                            
+                            {taxEnabled && (
+                                <div>
+                                    <label style={{ 
+                                        display: 'block', 
+                                        marginBottom: '0.5rem', 
+                                        color: colors.text,
+                                        fontWeight: '500'
+                                    }}>
+                                        Tax Rate (%)
+                                    </label>
+                                    <input
+                                        type="number"
+                                        step="0.1"
+                                        min="0"
+                                        max="100"
+                                        value={taxRate}
+                                        onChange={(e) => setTaxRate(e.target.value)}
+                                        style={{
+                                            width: '200px',
+                                            padding: '0.75rem',
+                                            backgroundColor: colors.surface,
+                                            border: `1px solid ${colors.border}`,
+                                            borderRadius: '8px',
+                                            color: colors.text,
+                                            fontSize: '1rem'
+                                        }}
+                                        placeholder="e.g. 5.0"
+                                    />
+                                    <div style={{
+                                        marginTop: '0.5rem',
+                                        fontSize: '0.875rem',
+                                        color: colors.textSecondary
+                                    }}>
+                                        Enter the tax rate percentage (0-100). This will be applied to all invoices.
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div style={{ 
+                            padding: '1rem',
+                            backgroundColor: colors.accent + '20',
+                            borderRadius: '8px',
+                            marginBottom: '2rem',
+                            border: `1px solid ${colors.accent}40`
+                        }}>
+                            <h4 style={{ color: colors.text, marginBottom: '0.5rem' }}>Preview</h4>
+                            <div style={{ color: colors.textSecondary, fontSize: '0.875rem' }}>
+                                {taxEnabled ? (
+                                    <>
+                                        Tax enabled: <strong>{taxRate}%</strong><br/>
+                                        Example: Rs. 1000 subtotal → Rs. {(1000 * (1 + parseFloat(taxRate || '0') / 100)).toFixed(0)} total
+                                    </>
+                                ) : (
+                                    <>
+                                        Tax disabled<br/>
+                                        Example: Rs. 1000 subtotal → Rs. 1000 total (no tax applied)
+                                    </>
+                                )}
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={handleSaveSettings}
+                            disabled={savingSettings}
+                            style={{
+                                backgroundColor: colors.success,
+                                color: '#FFFFFF',
+                                border: 'none',
+                                padding: '0.75rem 2rem',
+                                borderRadius: '8px',
+                                cursor: savingSettings ? 'not-allowed' : 'pointer',
+                                fontSize: '1rem',
+                                fontWeight: '500',
+                                opacity: savingSettings ? 0.7 : 1
+                            }}
+                        >
+                            {savingSettings ? 'Saving...' : 'Save Tax Rate'}
+                        </button>
                     </div>
                 </div>
             )}

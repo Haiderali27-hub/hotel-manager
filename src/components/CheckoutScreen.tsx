@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import {
     addFoodOrder,
-    buildFinalInvoiceHtml,
+    buildFinalInvoiceHtmlWithDiscount,
     checkoutGuestWithDiscount,
     deleteFoodOrder,
     getFoodOrdersByGuest,
     getMenuItems,
     getOrderDetails,
+    getTaxEnabled,
+    getTaxRate,
     toggleFoodOrderPayment,
     type ActiveGuestRow,
     type MenuItem,
@@ -40,7 +42,7 @@ interface FoodOrderWithDetails {
     description: string;
 }
 
-const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ guest, onBack, onClose, onCheckoutComplete }) => {
+const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ guest, onBack, onClose: _onClose, onCheckoutComplete }) => {
     const { colors } = useTheme();
     const { showSuccess, showError, showWarning } = useNotification();
     
@@ -52,9 +54,13 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ guest, onBack, onClose,
     
     // Calculation states
     const [roomCharges, setRoomCharges] = useState(0);
-    const [unpaidFoodTotal, setPaidFoodTotal] = useState(0);
+    const [unpaidFoodTotal, setUnpaidFoodTotal] = useState(0);
     const [discount, setDiscount] = useState<DiscountInfo>({ type: 'flat', amount: 0, description: '' });
     const [grandTotal, setGrandTotal] = useState(0);
+    
+    // Tax states
+    const [taxEnabled, setTaxEnabled] = useState(false);
+    const [taxRate, setTaxRate] = useState(0);
     
     // UI states
     const [showAddFood, setShowAddFood] = useState(false);
@@ -70,7 +76,7 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ guest, onBack, onClose,
     // Calculate totals when dependencies change
     useEffect(() => {
         calculateTotals();
-    }, [foodOrders, discount, roomCharges]);
+    }, [foodOrders, discount, roomCharges, taxEnabled, taxRate]);
 
     const loadCheckoutData = async () => {
         setLoading(true);
@@ -79,6 +85,20 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ guest, onBack, onClose,
                 getFoodOrdersByGuest(guest.guest_id),
                 getMenuItems()
             ]);
+            
+                        // Load tax settings
+            try {
+                const [taxEnabledResult, taxRateResult] = await Promise.all([
+                    getTaxEnabled(),
+                    getTaxRate()
+                ]);
+                setTaxEnabled(taxEnabledResult);
+                setTaxRate(taxRateResult);
+            } catch (err) {
+                console.error('Failed to load tax settings:', err);
+                setTaxEnabled(false);
+                setTaxRate(0);
+            }
             
             // Load detailed order information for each order
             const detailedOrders: FoodOrderWithDetails[] = [];
@@ -140,21 +160,31 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ guest, onBack, onClose,
             .filter(order => !order.paid)
             .reduce((sum, order) => sum + order.total_amount, 0);
         
-        setPaidFoodTotal(unpaidTotal);
+        setUnpaidFoodTotal(unpaidTotal);
+        
+        // Calculate subtotal (before discount and tax)
+        const subtotal = roomCharges + unpaidTotal;
         
         // Calculate discount amount
         let discountAmount = 0;
         if (discount.amount > 0) {
             if (discount.type === 'percentage') {
-                discountAmount = ((roomCharges + unpaidTotal) * discount.amount) / 100;
+                discountAmount = (subtotal * discount.amount) / 100;
             } else {
                 discountAmount = discount.amount;
             }
         }
         
-        // Calculate grand total
-        const total = Math.max(0, roomCharges + unpaidTotal - discountAmount);
-        setGrandTotal(total);
+        // Calculate total after discount but before tax
+        const afterDiscount = Math.max(0, subtotal - discountAmount);
+        
+        // Calculate tax amount and final total
+        let finalTotal = afterDiscount;
+        if (taxEnabled && taxRate > 0) {
+            finalTotal = afterDiscount * (1 + taxRate / 100);
+        }
+        
+        setGrandTotal(finalTotal);
     };
 
     const handleTogglePayment = async (orderId: number) => {
@@ -235,7 +265,12 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ guest, onBack, onClose,
 
     const handlePrintInvoice = async () => {
         try {
-            const invoiceHtml = await buildFinalInvoiceHtml(guest.guest_id);
+            const invoiceHtml = await buildFinalInvoiceHtmlWithDiscount(
+                guest.guest_id,
+                discount.type,
+                discount.amount,
+                discount.description
+            );
             
             const printWindow = window.open('', '_blank');
             if (printWindow) {
@@ -506,14 +541,25 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ guest, onBack, onClose,
                                         justifyContent: 'space-between',
                                         alignItems: 'center',
                                         padding: '0.75rem',
-                                        border: `1px solid ${colors.border}`,
+                                        border: `2px solid ${order.paid ? '#28a745' : '#dc3545'}`,
                                         borderRadius: '4px',
                                         marginBottom: '0.5rem',
-                                        backgroundColor: order.paid ? '#f0f8f0' : colors.primary
+                                        backgroundColor: order.paid ? '#f8f9fa' : '#fff3cd',
+                                        opacity: order.paid ? 0.7 : 1
                                     }}>
                                         <div style={{ flex: 1 }}>
-                                            <div style={{ fontWeight: 'bold' }}>
+                                            <div style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                 Order #{order.id}
+                                                <span style={{
+                                                    backgroundColor: order.paid ? '#28a745' : '#dc3545',
+                                                    color: 'white',
+                                                    padding: '2px 6px',
+                                                    borderRadius: '3px',
+                                                    fontSize: '0.7rem',
+                                                    fontWeight: 'bold'
+                                                }}>
+                                                    {order.paid ? 'PAID' : 'UNPAID'}
+                                                </span>
                                             </div>
                                             <div style={{ fontSize: '0.9rem', color: colors.textSecondary }}>
                                                 {new Date(order.created_at).toLocaleDateString()} at{' '}
@@ -522,7 +568,10 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ guest, onBack, onClose,
                                         </div>
                                         
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                            <div style={{ fontWeight: 'bold' }}>
+                                            <div style={{ 
+                                                fontWeight: 'bold',
+                                                textDecoration: order.paid ? 'line-through' : 'none'
+                                            }}>
                                                 Rs {order.total_amount.toFixed(2)}
                                             </div>
                                             
@@ -536,10 +585,11 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ guest, onBack, onClose,
                                                     borderRadius: '4px',
                                                     cursor: 'pointer',
                                                     fontSize: '0.8rem',
-                                                    minWidth: '70px'
+                                                    minWidth: '80px',
+                                                    fontWeight: 'bold'
                                                 }}
                                             >
-                                                {order.paid ? '✓ Paid' : '❌ Unpaid'}
+                                                {order.paid ? '✓ Paid' : '❌ Mark Paid'}
                                             </button>
                                             
                                             <button
@@ -684,6 +734,26 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ guest, onBack, onClose,
                             </div>
                         )}
                         
+                        {taxEnabled && taxRate > 0 && (
+                            <div style={{ 
+                                display: 'flex', 
+                                justifyContent: 'space-between', 
+                                marginBottom: '0.5rem',
+                                paddingBottom: '0.5rem',
+                                borderBottom: `1px solid ${colors.border}`,
+                                color: '#007bff'
+                            }}>
+                                <span>Tax ({taxRate}%):</span>
+                                <span>
+                                    Rs {(((roomCharges + unpaidFoodTotal - (discount.amount > 0 
+                                        ? (discount.type === 'percentage' 
+                                            ? ((roomCharges + unpaidFoodTotal) * discount.amount) / 100
+                                            : discount.amount)
+                                        : 0)) * taxRate) / 100).toFixed(2)}
+                                </span>
+                            </div>
+                        )}
+                        
                         <div style={{ 
                             display: 'flex', 
                             justifyContent: 'space-between', 
@@ -744,6 +814,10 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ guest, onBack, onClose,
                     }}>
                         <strong>Note:</strong> All food orders will appear on the receipt. 
                         Only unpaid orders are included in the total amount.
+                        {taxEnabled && (
+                            <><br/><strong>Tax:</strong> {taxRate}% tax is applied to the final total.</>
+                        )}
+                        <br/><strong>Tip:</strong> Configure tax settings in Manage Menu & Rooms → Settings tab.
                     </div>
                 </div>
             </div>

@@ -829,8 +829,7 @@ pub fn add_food_order(guest_id: Option<i64>, customer_type: String, customer_nam
 }
 
 #[tauri::command]
-pub fn get_food_orders_by_guest(guestId: i64) -> Result<Vec<FoodOrderSummary>, String> {
-    let guest_id = guestId;
+pub fn get_food_orders_by_guest(guest_id: i64) -> Result<Vec<FoodOrderSummary>, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     let mut stmt = conn.prepare(
@@ -885,8 +884,7 @@ pub fn get_food_orders() -> Result<Vec<FoodOrderSummary>, String> {
 }
 
 #[tauri::command]
-pub fn mark_order_paid(orderId: i64) -> Result<String, String> {
-    let order_id = orderId;
+pub fn mark_order_paid(order_id: i64) -> Result<String, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     let rows_affected = conn.execute(
@@ -1060,8 +1058,7 @@ pub fn delete_expense(expense_id: i64) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn toggle_food_order_payment(orderId: i64) -> Result<String, String> {
-    let order_id = orderId;
+pub fn toggle_food_order_payment(order_id: i64) -> Result<String, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     // Get current payment status
@@ -1095,8 +1092,7 @@ pub fn toggle_food_order_payment(orderId: i64) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn delete_food_order(orderId: i64) -> Result<String, String> {
-    let order_id = orderId;
+pub fn delete_food_order(order_id: i64) -> Result<String, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     // Start a transaction
@@ -1132,8 +1128,7 @@ pub fn delete_food_order(orderId: i64) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn get_order_details(orderId: i64) -> Result<FoodOrderDetails, String> {
-    let order_id = orderId;
+pub fn get_order_details(order_id: i64) -> Result<FoodOrderDetails, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     // Get order details
@@ -1185,7 +1180,7 @@ pub fn checkout_guest_with_discount(
     check_out_date: String,
     discount_type: String,
     discount_amount: f64,
-    discount_description: String
+    _discount_description: String
 ) -> Result<f64, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
@@ -1274,4 +1269,107 @@ pub fn checkout_guest_with_discount(
     tx.commit().map_err(|e| e.to_string())?;
     
     Ok(grand_total)
+}
+
+// ===== TAX RATE COMMANDS =====
+
+#[command]
+pub fn set_tax_rate(rate: f64) -> Result<String, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    // Validate tax rate
+    if rate < 0.0 || rate > 100.0 {
+        return Err("Tax rate must be between 0 and 100".to_string());
+    }
+    
+    // Create settings table if it doesn't exist
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )",
+        [],
+    ).map_err(|e| e.to_string())?;
+    
+    let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    
+    // Insert or update tax rate
+    conn.execute(
+        "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('tax_rate', ?1, ?2)",
+        params![rate.to_string(), now],
+    ).map_err(|e| e.to_string())?;
+    
+    Ok(format!("Tax rate set to {}%", rate))
+}
+
+#[command]
+pub fn get_tax_rate() -> Result<f64, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    // Try to get tax rate from settings
+    let mut stmt = conn.prepare(
+        "SELECT value FROM settings WHERE key = 'tax_rate'"
+    ).map_err(|e| e.to_string())?;
+    
+    let result = stmt.query_row([], |row| {
+        let value_str: String = row.get(0)?;
+        Ok(value_str.parse::<f64>().unwrap_or(5.0))
+    });
+    
+    match result {
+        Ok(rate) => Ok(rate),
+        Err(_) => {
+            // If no tax rate is set, return default 5%
+            Ok(5.0)
+        }
+    }
+}
+
+#[command]
+pub fn set_tax_enabled(enabled: bool) -> Result<String, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    // Create settings table if it doesn't exist
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )",
+        [],
+    ).map_err(|e| e.to_string())?;
+    
+    let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    
+    // Insert or update tax enabled setting
+    conn.execute(
+        "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('tax_enabled', ?1, ?2)",
+        params![enabled.to_string(), now],
+    ).map_err(|e| e.to_string())?;
+    
+    Ok(format!("Tax {} successfully", if enabled { "enabled" } else { "disabled" }))
+}
+
+#[command]
+pub fn get_tax_enabled() -> Result<bool, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    // Try to get tax enabled setting
+    let mut stmt = conn.prepare(
+        "SELECT value FROM settings WHERE key = 'tax_enabled'"
+    ).map_err(|e| e.to_string())?;
+    
+    let result = stmt.query_row([], |row| {
+        let value_str: String = row.get(0)?;
+        Ok(value_str.parse::<bool>().unwrap_or(true))
+    });
+    
+    match result {
+        Ok(enabled) => Ok(enabled),
+        Err(_) => {
+            // If no setting is found, return default true (enabled)
+            Ok(true)
+        }
+    }
 }

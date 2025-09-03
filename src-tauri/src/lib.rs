@@ -1,6 +1,5 @@
 mod models;
 mod db;
-mod commands;
 mod offline_auth;
 mod test;
 mod simple_commands;
@@ -26,7 +25,7 @@ use simple_commands::{
     set_tax_rate, get_tax_rate, set_tax_enabled, get_tax_enabled
 };
 use database_reset::{reset_database, get_database_path, get_database_stats};
-use export::{export_history_csv, create_database_backup};
+use export::{export_history_csv, export_history_csv_with_dialog, create_database_backup};
 use print_templates::{build_order_receipt_html, build_final_invoice_html, build_final_invoice_html_with_discount, print_order_receipt};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -38,6 +37,7 @@ pub fn run() {
     }
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             #[cfg(debug_assertions)]
             {
@@ -98,6 +98,7 @@ pub fn run() {
             get_database_stats,
             // Export & Print
             export_history_csv,
+            export_history_csv_with_dialog,
             create_database_backup,
             build_order_receipt_html,
             build_final_invoice_html,

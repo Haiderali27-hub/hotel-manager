@@ -175,6 +175,8 @@ pub struct FoodOrderSummary {
     pub paid_at: Option<String>,
     pub total_amount: f64,
     pub items: String, // comma-separated list
+    pub guest_id: Option<i64>,
+    pub guest_name: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

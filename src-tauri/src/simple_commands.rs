@@ -295,27 +295,27 @@ pub fn get_active_guests() -> Result<Vec<ActiveGuestRow>, String> {
 }
 
 #[command]
-pub fn get_all_guests() -> Result<Vec<ActiveGuestRow>, String> {
+pub fn get_all_guests() -> Result<Vec<Guest>, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     let mut stmt = conn.prepare(
-        "SELECT g.id, g.name, r.number, g.check_in, g.check_out, g.daily_rate, 
-                CASE WHEN g.room_id IS NULL THEN 1 ELSE 0 END as is_walkin
-         FROM guests g 
-         LEFT JOIN rooms r ON g.room_id = r.id 
-         WHERE g.status = 'active'
-         ORDER BY g.created_at DESC"
+        "SELECT id, name, phone, room_id, check_in, check_out, daily_rate, status, created_at, updated_at
+         FROM guests 
+         ORDER BY created_at DESC"
     ).map_err(|e| e.to_string())?;
     
     let guest_iter = stmt.query_map([], |row| {
-        Ok(ActiveGuestRow {
-            guest_id: row.get(0)?,
+        Ok(Guest {
+            id: row.get(0)?,
             name: row.get(1)?,
-            room_number: row.get(2)?,
-            check_in: row.get(3)?,
-            check_out: row.get(4)?,
-            daily_rate: row.get(5)?,
-            is_walkin: row.get::<_, i32>(6)? == 1,
+            phone: row.get(2)?,
+            room_id: row.get(3)?,
+            check_in: row.get(4)?,
+            check_out: row.get(5)?,
+            daily_rate: row.get(6)?,
+            status: row.get(7)?,
+            created_at: row.get(8)?,
+            updated_at: row.get(9)?,
         })
     }).map_err(|e| e.to_string())?;
     
@@ -850,6 +850,8 @@ pub fn get_food_orders_by_guest(guest_id: i64) -> Result<Vec<FoodOrderSummary>, 
             paid_at: row.get(3)?,
             total_amount: row.get(4)?,
             items: row.get::<_, Option<String>>(5)?.unwrap_or_default(),
+            guest_id: Some(guest_id),
+            guest_name: None, // This function doesn't need guest name since it's for a specific guest
         })
     }).map_err(|e| e.to_string())?;
     
@@ -862,10 +864,13 @@ pub fn get_food_orders() -> Result<Vec<FoodOrderSummary>, String> {
     
     let mut stmt = conn.prepare(
         "SELECT fo.id, fo.created_at, fo.paid, fo.paid_at, fo.total_amount,
-                GROUP_CONCAT(oi.item_name || ' x' || oi.quantity) as items
+                GROUP_CONCAT(oi.item_name || ' x' || oi.quantity) as items,
+                fo.guest_id,
+                COALESCE(g.name, 'Walk-in') as guest_name
          FROM food_orders fo
          LEFT JOIN order_items oi ON fo.id = oi.order_id
-         GROUP BY fo.id, fo.created_at, fo.paid, fo.paid_at, fo.total_amount
+         LEFT JOIN guests g ON fo.guest_id = g.id
+         GROUP BY fo.id, fo.created_at, fo.paid, fo.paid_at, fo.total_amount, fo.guest_id, g.name
          ORDER BY fo.created_at DESC"
     ).map_err(|e| e.to_string())?;
     
@@ -877,6 +882,8 @@ pub fn get_food_orders() -> Result<Vec<FoodOrderSummary>, String> {
             paid_at: row.get(3)?,
             total_amount: row.get(4)?,
             items: row.get::<_, Option<String>>(5)?.unwrap_or_default(),
+            guest_id: row.get(6)?,
+            guest_name: row.get(7)?,
         })
     }).map_err(|e| e.to_string())?;
     

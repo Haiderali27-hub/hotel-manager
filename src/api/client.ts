@@ -50,12 +50,13 @@ export interface Guest {
   id: number;
   name: string;
   phone?: string;
-  room_id: number;
+  room_id?: number;  // Changed to optional to support walk-in customers
   check_in: string;
   check_out?: string;
   daily_rate: number;
-  total_bill: number;
-  is_active: boolean;
+  status: string; // 'active' or 'checked_out'
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ActiveGuestRow {
@@ -116,6 +117,8 @@ export interface FoodOrderSummary {
   paid_at?: string;
   total_amount: number;
   items: string; // comma-separated list like "Pizza x2, Burger x1"
+  guest_id?: number;
+  guest_name?: string;
 }
 
 export interface FoodOrderInfo {
@@ -199,8 +202,8 @@ export interface AdminUser {
 
 // Export & Print
 export interface ExportFilters {
-  start_date?: string;
-  end_date?: string;
+  date_from?: string;
+  date_to?: string;
   guest_id?: number;
   room_id?: number;
   category?: string;
@@ -439,9 +442,9 @@ export const addFoodOrder = (order: NewFoodOrder): Promise<number> =>
 
 /**
  * Get all food orders
- * @returns Array of all food orders with details
+ * @returns Array of all food orders with summary details
  */
-export const getFoodOrders = (): Promise<FoodOrder[]> => 
+export const getFoodOrders = (): Promise<FoodOrderSummary[]> => 
   invoke("get_food_orders");
 
 /**
@@ -624,6 +627,23 @@ export const resetAdminPassword = (answer: string, newPassword: string): Promise
  */
 export const exportHistoryCsv = (tab: string, filters: ExportFilters = {}): Promise<string> => 
   invoke("export_history_csv", { tab, filters });
+
+/**
+ * Export history data to CSV with file dialog (user chooses location)
+ * @param tab - Data type to export ("guests", "orders", "expenses", "rooms")
+ * @param filters - Optional filters for the export
+ * @returns File path of the generated CSV
+ * @example
+ * ```ts
+ * const filePath = await exportHistoryCsvWithDialog("guests", {
+ *   start_date: "2025-01-01",
+ *   end_date: "2025-08-16"
+ * });
+ * console.log(`CSV exported to: ${filePath}`);
+ * ```
+ */
+export const exportHistoryCsvWithDialog = (tab: string, filters: ExportFilters = {}): Promise<string> => 
+  invoke("export_history_csv_with_dialog", { tab, filters });
 
 /**
  * Generate HTML receipt for a food order

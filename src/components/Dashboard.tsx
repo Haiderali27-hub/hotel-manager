@@ -5,8 +5,10 @@ import { getGradientColors, useTheme } from '../context/ThemeContext';
 import type { DashboardStats } from '../services/DatabaseService';
 import DatabaseService from '../services/DatabaseService';
 import ActiveGuests from './ActiveGuests';
+import AddExpense from './AddExpense';
 import AddFoodOrder from './AddFoodOrder';
 import AddGuest from './AddGuest';
+import History from './History';
 import ManageMenuRooms from './ManageMenuRooms';
 
 const Dashboard: React.FC = () => {
@@ -604,6 +606,12 @@ const Dashboard: React.FC = () => {
               onOrderAdded={refreshData}
             />
           )}
+          {currentPage === 'add-expense' && (
+            <AddExpense 
+              onBack={goBackToDashboard} 
+              onExpenseAdded={refreshData}
+            />
+          )}
           {currentPage === 'active-guests' && (
             <ActiveGuests 
               onBack={goBackToDashboard}
@@ -620,11 +628,18 @@ const Dashboard: React.FC = () => {
               }}
             />
           )}
+          {currentPage === 'history' && (
+            <History 
+              onBack={goBackToDashboard}
+            />
+          )}
           {/* TODO: Add other page components */}
           {currentPage !== 'dashboard' && 
            currentPage !== 'add-guest' && 
            currentPage !== 'add-food-order' && 
+           currentPage !== 'add-expense' && 
            currentPage !== 'active-guests' && 
+           currentPage !== 'history' && 
            currentPage !== 'manage-menu-rooms' && (
             <div style={{
               padding: '2rem',

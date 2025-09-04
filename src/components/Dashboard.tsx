@@ -11,6 +11,7 @@ import AddGuest from './AddGuest';
 import History from './History';
 import ManageMenuRooms from './ManageMenuRooms';
 import MonthlyReport from './MonthlyReport';
+import Settings from './SettingsNew';
 
 const Dashboard: React.FC = () => {
   const { logout } = useAuth();
@@ -639,6 +640,9 @@ const Dashboard: React.FC = () => {
               onBack={goBackToDashboard}
             />
           )}
+          {currentPage === 'settings' && (
+            <Settings />
+          )}
           {/* TODO: Add other page components */}
           {currentPage !== 'dashboard' && 
            currentPage !== 'add-guest' && 
@@ -647,7 +651,8 @@ const Dashboard: React.FC = () => {
            currentPage !== 'active-guests' && 
            currentPage !== 'history' && 
            currentPage !== 'monthly-report' && 
-           currentPage !== 'manage-menu-rooms' && (
+           currentPage !== 'manage-menu-rooms' && 
+           currentPage !== 'settings' && (
             <div style={{
               padding: '2rem',
               color: colors.text,

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import logoImage from '../assets/Logo/logo.png';
 import { useAuth } from '../context/AuthContextTemp';
 import '../styles/LoginPage.css';
 
@@ -200,8 +201,8 @@ const EnhancedLoginPage: React.FC = () => {
         <div className="login-card">
           <div className="login-header">
             <div className="hotel-logo">
-              <div className="logo-icon">🏨</div>
-              <h1>Hotel Manager</h1>
+              <img src={logoImage} alt="Yasin Heaven Star Hotel" className="logo-image" />
+              <h1>Yasin Heaven Star Hotel</h1>
             </div>
             <p className="login-subtitle">
               {showResetPassword ? 'Password Reset' : 'Admin Access Portal'}

@@ -2,25 +2,84 @@ use std::fs;
 use std::path::Path;
 use base64::{Engine as _, engine::general_purpose};
 
+// Include the logo as a compile-time embedded resource
+const LOGO_DATA: &[u8] = include_bytes!("../logo.png");
+
 fn get_logo_base64() -> String {
-    // Try to read the logo file
+    // First try the embedded logo
+    if !LOGO_DATA.is_empty() {
+        let embedded_logo = base64::prelude::BASE64_STANDARD.encode(LOGO_DATA);
+        println!("✅ Using embedded logo data, size: {} bytes, base64 length: {}", LOGO_DATA.len(), embedded_logo.len());
+        
+        // Validate base64 string doesn't contain problematic characters
+        if embedded_logo.contains('\n') || embedded_logo.contains('\r') {
+            println!("⚠️ WARNING: Base64 contains newline characters");
+        }
+        
+        // Try to decode and re-encode to verify integrity
+        match base64::prelude::BASE64_STANDARD.decode(&embedded_logo) {
+            Ok(decoded) => {
+                println!("✅ Base64 validation successful, decoded size: {}", decoded.len());
+                if decoded.len() == LOGO_DATA.len() {
+                    println!("✅ Decoded data matches original size");
+                } else {
+                    println!("❌ WARNING: Decoded size mismatch!");
+                }
+            },
+            Err(e) => {
+                println!("❌ ERROR: Base64 validation failed: {}", e);
+                return "".to_string();
+            }
+        }
+        
+        let preview = if embedded_logo.len() > 50 { &embedded_logo[..50] } else { &embedded_logo };
+        println!("📝 Base64 preview: {}...", preview);
+        return embedded_logo;
+    }
+    
+    println!("⚠️  Warning: Embedded logo data is empty, trying file paths...");
+    
+    // Fallback: Try to read the logo file from different possible locations
     let logo_paths = [
+        // Development paths
         "src/assets/Logo/logo.png",
         "assets/Logo/logo.png", 
         "../src/assets/Logo/logo.png",
-        "../../src/assets/Logo/logo.png"
+        "../../src/assets/Logo/logo.png",
+        // Try relative to current working directory
+        "./src/assets/Logo/logo.png",
+        "./assets/Logo/logo.png",
+        // Try the copied logo
+        "logo.png",
+        "../logo.png",
     ];
     
     for path in &logo_paths {
         if Path::new(path).exists() {
             if let Ok(logo_data) = fs::read(path) {
-                return general_purpose::STANDARD.encode(logo_data);
+                let base64_data = general_purpose::STANDARD.encode(&logo_data);
+                println!("✅ Logo found at: {}, size: {} bytes, base64 length: {}", path, logo_data.len(), base64_data.len());
+                return base64_data;
             }
         }
     }
     
+    println!("❌ ERROR: Logo file not found in any of the expected locations");
+    println!("🔍 Current working directory: {:?}", std::env::current_dir());
+    
     // Return empty string if logo not found
     String::new()
+}
+
+/// Test command to verify logo loading
+#[tauri::command]
+pub fn test_logo_loading() -> Result<String, String> {
+    let logo_base64 = get_logo_base64();
+    if logo_base64.is_empty() {
+        Ok("ERROR: Logo not found or could not be loaded".to_string())
+    } else {
+        Ok(format!("SUCCESS: Logo loaded, base64 length: {} chars", logo_base64.len()))
+    }
 }
 
 /// Print a food order receipt
@@ -187,9 +246,13 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
             margin-bottom: 30px;
         }}
         .logo {{
-            max-width: 100px;
+            max-width: 120px;
             height: auto;
             margin-bottom: 15px;
+            display: block;
+            border: 2px solid #333;
+            background: #fff;
+            padding: 8px;
         }}
         .hotel-name {{
             font-size: 28px;
@@ -275,7 +338,7 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
 </head>
 <body>
     <div class="header">
-        <img src="data:image/jpeg;base64,{}" alt="Hotel Logo" class="logo">
+        <img src="data:image/png;base64,{}" alt="Hotel Logo" class="logo">
         <h1 class="hotel-name">Yasin Heaven Star Hotel</h1>
         <p class="hotel-subtitle">
             Main Yasin Ghizer Gilgit Baltistan, Pakistan<br>
@@ -347,6 +410,16 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
         chrono::Local::now().format("%B %d, %Y at %I:%M %p")
     );
     
+    // Debug: Print first 500 characters to see if logo is embedded
+    if html.len() > 500 {
+        println!("🔍 HTML PREVIEW (first 500 chars): {}", &html[..500]);
+    }
+    if html.contains("data:image/png;base64,") {
+        println!("✅ Logo image tag found in HTML!");
+    } else {
+        println!("❌ Logo image tag NOT found in HTML!");
+    }
+    
     Ok(html)
 }
 
@@ -365,6 +438,15 @@ pub fn build_final_invoice_html_with_discount(
     _discount_description: String
 ) -> Result<String, String> {
     let conn = crate::db::get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+    
+    // Get logo as base64
+    let logo_base64 = get_logo_base64();
+    
+    if logo_base64.is_empty() {
+        println!("❌ WARNING: Logo base64 data is EMPTY for final invoice!");
+    } else {
+        println!("✅ Logo data loaded for final invoice, length: {}", logo_base64.len());
+    }
     
     // Get guest details
     let mut stmt = conn.prepare(
@@ -550,16 +632,12 @@ pub fn build_final_invoice_html_with_discount(
         }}
         
         .logo {{
-            width: 50px;
-            height: 30px;
-            background: #333;
-            margin: 0 auto 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: bold;
-            font-size: 14px;
+            max-width: 120px;
+            height: auto;
+            margin: 0 auto 15px;
+            display: block;
+            background: yellow;
+            padding: 0px;
         }}
         
         .hotel-name {{
@@ -713,7 +791,7 @@ pub fn build_final_invoice_html_with_discount(
 <body>
     <div class="invoice">
         <div class="header">
-            <div class="logo">YH</div>
+            <img src="data:image/png;base64,{}" alt="Yasin Heaven Star Hotel Logo" class="logo">
             <div class="hotel-name">Yasin Heaven Star Hotel</div>
             <div class="hotel-address">Main Yasin Ghizer Gilgit Baltistan, Pakistan</div>
             <div class="hotel-address">Phone: +92 355 4650686</div>
@@ -810,6 +888,7 @@ pub fn build_final_invoice_html_with_discount(
     </div>
 </body>
 </html>"#,
+        logo_base64,                  // Logo base64 data
         html_escape(&name),           // Customer name
         formatted_date,               // Current date
         html_escape(&room_number),    // Room number
@@ -852,6 +931,25 @@ pub fn build_final_invoice_html_with_discount(
         formatted_date,              // Date for contact info
         formatted_time               // Time for contact info
     );
+    
+    // Debug: Print first 500 characters to see if logo is embedded
+    if html.len() > 500 {
+        println!("🔍 FINAL INVOICE HTML PREVIEW (first 500 chars): {}", &html[..500]);
+    }
+    if html.contains("data:image/png;base64,") {
+        println!("✅ Logo image tag found in FINAL INVOICE HTML!");
+        // Find the logo src and print the first 100 characters of base64
+        if let Some(start) = html.find("data:image/png;base64,") {
+            let base64_start = start + "data:image/png;base64,".len();
+            if let Some(end) = html[base64_start..].find("\"") {
+                let base64_sample = &html[base64_start..base64_start + end.min(100)];
+                println!("🔍 Base64 in HTML (first 100 chars): {}", base64_sample);
+                println!("📏 Total base64 length in HTML: {}", end);
+            }
+        }
+    } else {
+        println!("❌ Logo image tag NOT found in FINAL INVOICE HTML!");
+    }
     
     Ok(html)
 }

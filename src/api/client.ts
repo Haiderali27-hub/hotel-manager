@@ -26,6 +26,13 @@ if (!isTauri) {
 export const printOrderReceipt = (orderId: number): Promise<string> => 
   invoke("print_order_receipt", { orderId });
 
+/**
+ * Test logo loading functionality
+ * @returns Status message about logo loading
+ */
+export const testLogoLoading = (): Promise<string> => 
+  invoke("test_logo_loading");
+
 // ============================================================================
 
 // Room Management

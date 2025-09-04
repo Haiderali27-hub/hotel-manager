@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import logoImage from '../assets/Logo/logo.png';
 import { useAuth } from '../context/SimpleAuthContext';
 import '../styles/LoginPage.css';
 
@@ -179,8 +180,8 @@ const OfflineLoginPage: React.FC = () => {
         <div className="login-card">
           <div className="login-header">
             <div className="hotel-logo">
-              <span className="logo-icon">🏨</span>
-              <h1>Hotel Manager</h1>
+              <img src={logoImage} alt="Yasin Heaven Star Hotel" className="logo-image" />
+              <h1>Yasin Heaven Star Hotel</h1>
             </div>
             <p className="login-subtitle">
               {showResetPassword ? 'Reset Your Password' : 'Secure Admin Access'}

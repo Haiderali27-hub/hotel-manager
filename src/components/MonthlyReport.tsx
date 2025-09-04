@@ -8,6 +8,7 @@ import {
     type FoodOrderSummary,
     type Guest
 } from '../api/client';
+import logoImage from '../assets/Logo/logo.png';
 import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
 
@@ -286,6 +287,7 @@ const MonthlyReport: React.FC<MonthlyReportProps> = ({ onBack }) => {
             }
             body { font-family: Arial, sans-serif; margin: 0; padding: 20px; color: #333; }
             .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #007bff; padding-bottom: 20px; }
+            .logo { max-width: 80px; height: auto; margin: 0 auto 10px; display: block; }
             .header h1 { margin: 0; color: #007bff; font-size: 28px; }
             .header h2 { margin: 5px 0; color: #666; font-size: 18px; }
             .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
@@ -306,8 +308,10 @@ const MonthlyReport: React.FC<MonthlyReportProps> = ({ onBack }) => {
         </head>
         <body>
           <div class="header">
-            <h1>Monthly Financial Report</h1>
-            <h2>${monthName} ${selectedYear}</h2>
+            <img src="${logoImage}" alt="Yasin Heaven Star Hotel" class="logo">
+            <h1>Yasin Heaven Star Hotel</h1>
+            <h2>Monthly Financial Report</h2>
+            <h3>${monthName} ${selectedYear}</h3>
             <p>Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}</p>
           </div>
 

@@ -26,7 +26,7 @@ use simple_commands::{
 };
 use database_reset::{reset_database, get_database_path, get_database_stats};
 use export::{export_history_csv, export_history_csv_with_dialog, create_database_backup};
-use print_templates::{build_order_receipt_html, build_final_invoice_html, build_final_invoice_html_with_discount, print_order_receipt};
+use print_templates::{build_order_receipt_html, build_final_invoice_html, build_final_invoice_html_with_discount, print_order_receipt, test_logo_loading};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -104,6 +104,7 @@ pub fn run() {
             build_final_invoice_html,
             build_final_invoice_html_with_discount,
             print_order_receipt,
+            test_logo_loading,
             // Settings
             set_tax_rate,
             get_tax_rate,

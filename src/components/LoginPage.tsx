@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import logoImage from '../assets/Logo/logo.png';
 import { useAuth } from '../context/AuthContext';
 import '../styles/LoginPage.css';
 
@@ -57,8 +58,8 @@ export const LoginPage: React.FC = () => {
         <div className="login-card">
           <div className="login-header">
             <div className="hotel-logo">
-              <div className="logo-icon">🏨</div>
-              <h1>Hotel Manager</h1>
+              <img src={logoImage} alt="Yasin Heaven Star Hotel" className="logo-image" />
+              <h1>Yasin Heaven Star Hotel</h1>
             </div>
             <p className="login-subtitle">Admin Access Portal</p>
           </div>

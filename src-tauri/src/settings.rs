@@ -74,7 +74,7 @@ fn export_data_to_json(backup_dir: &Path, timestamp: &str) -> Result<(), String>
     // Export all tables
     let tables = vec![
         "guests", "rooms", "menu_items", "food_orders", 
-        "order_items", "expenses", "users"
+        "order_items", "expenses"
     ];
     
     for table in tables {
@@ -151,6 +151,232 @@ fn export_table(conn: &Connection, table_name: &str) -> Result<Value, String> {
     Ok(json!(table_data))
 }
 
+// Restore database from backup file with comprehensive safety checks
+#[command]
+pub async fn restore_database_from_backup(backup_file_path: String) -> Result<String, String> {
+    use crate::db::get_db_path;
+    
+    // Step 1: Validate input file path
+    let backup_path = Path::new(&backup_file_path);
+    if !backup_path.exists() {
+        return Err("Backup file does not exist. Please check the file path.".to_string());
+    }
+    
+    // Check if it's actually a database file
+    if let Some(extension) = backup_path.extension() {
+        if extension != "db" {
+            return Err("File must have .db extension to be a valid database backup.".to_string());
+        }
+    } else {
+        return Err("Backup file must have .db extension.".to_string());
+    }
+    
+    let db_path = get_db_path();
+    
+    // Step 2: Create backup directory and backup current database
+    let current_backup_dir = db_path.parent().ok_or("Failed to get app directory")?.join("backups");
+    if !current_backup_dir.exists() {
+        fs::create_dir_all(&current_backup_dir)
+            .map_err(|e| format!("Failed to create backup directory: {}", e))?;
+    }
+    
+    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
+    let current_backup_name = format!("hotel_backup_before_restore_{}.db", timestamp);
+    let current_backup_path = current_backup_dir.join(&current_backup_name);
+    
+    // Backup current database first (safety net)
+    fs::copy(&db_path, &current_backup_path)
+        .map_err(|e| format!("Failed to backup current database: {}", e))?;
+    
+    // Step 3: Comprehensive validation of backup file
+    let backup_validation_result = validate_backup_database(&backup_path);
+    if let Err(validation_error) = backup_validation_result {
+        return Err(format!("Backup file validation failed: {}", validation_error));
+    }
+    
+    // Step 4: Test restore in a temporary location first
+    let temp_restore_path = current_backup_dir.join(format!("temp_restore_test_{}.db", timestamp));
+    fs::copy(&backup_path, &temp_restore_path)
+        .map_err(|e| format!("Failed to create temporary restore test: {}", e))?;
+    
+    // Test if the restored database can be opened and basic operations work
+    let test_result = test_database_functionality(&temp_restore_path);
+    
+    // Clean up temp file
+    let _ = fs::remove_file(&temp_restore_path);
+    
+    if let Err(test_error) = test_result {
+        return Err(format!("Backup file functionality test failed: {}. Your current database is safe.", test_error));
+    }
+    
+    // Step 5: Perform the actual restore (we know it's safe now)
+    fs::copy(&backup_path, &db_path)
+        .map_err(|e| {
+            // If this fails, try to restore the original
+            let _ = fs::copy(&current_backup_path, &db_path);
+            format!("Failed to restore database: {}. Original database restored.", e)
+        })?;
+    
+    // Step 6: Final verification of restored database
+    let final_verification = test_database_functionality(&db_path);
+    if let Err(verification_error) = final_verification {
+        // Critical error - restore the original database immediately
+        fs::copy(&current_backup_path, &db_path)
+            .map_err(|e| format!("CRITICAL ERROR: Failed to restore original database: {}", e))?;
+        return Err(format!("Restored database verification failed: {}. Original database has been restored.", verification_error));
+    }
+    
+    Ok(format!(
+        "✅ Database restored successfully!\n\
+         📁 Restored from: {}\n\
+         💾 Previous database backed up to: {}\n\
+         🔍 All safety checks passed.",
+        backup_path.display(),
+        current_backup_path.display()
+    ))
+}
+
+// Comprehensive validation function for backup databases
+fn validate_backup_database(backup_path: &Path) -> Result<(), String> {
+    // Open the backup database
+    let backup_conn = Connection::open(&backup_path)
+        .map_err(|e| format!("Cannot open backup file as SQLite database: {}", e))?;
+    
+    // Check basic integrity
+    let integrity_check: Result<String, _> = backup_conn.query_row(
+        "PRAGMA integrity_check",
+        [],
+        |row| row.get(0)
+    );
+    
+    match integrity_check {
+        Ok(result) if result != "ok" => {
+            backup_conn.close().map_err(|e| format!("Failed to close backup connection: {:?}", e))?;
+            return Err(format!("Database integrity check failed: {}", result));
+        },
+        Err(e) => {
+            backup_conn.close().map_err(|e| format!("Failed to close backup connection: {:?}", e))?;
+            return Err(format!("Failed to check database integrity: {}", e));
+        },
+        _ => {} // OK
+    }
+    
+    // Verify required tables exist
+    let required_tables = vec![
+        "rooms", "guests", "menu_items", "food_orders", 
+        "order_items", "expenses"
+    ];
+    
+    for table in required_tables {
+        let table_check: Result<i64, _> = backup_conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?",
+            [table],
+            |row| row.get(0)
+        );
+        
+        match table_check {
+            Ok(count) if count == 0 => {
+                backup_conn.close().map_err(|e| format!("Failed to close backup connection: {:?}", e))?;
+                return Err(format!("Required table '{}' not found in backup", table));
+            },
+            Err(e) => {
+                backup_conn.close().map_err(|e| format!("Failed to close backup connection: {:?}", e))?;
+                return Err(format!("Failed to check table '{}': {}", table, e));
+            },
+            _ => {} // Table exists
+        }
+    }
+    
+    // Check if essential columns exist in key tables
+    let column_checks = vec![
+        ("rooms", "id, number, room_type, daily_rate, is_active"),
+        ("guests", "id, name, phone, room_id, check_in"),
+        ("menu_items", "id, name, price, is_active"),
+        ("food_orders", "id, guest_id, created_at, total_amount"),
+    ];
+    
+    for (table, expected_columns) in column_checks {
+        let column_info: Result<Vec<String>, _> = backup_conn.prepare(&format!("PRAGMA table_info({})", table))
+            .and_then(|mut stmt| {
+                let column_iter = stmt.query_map([], |row| {
+                    Ok(row.get::<_, String>(1)?) // Column name is at index 1
+                })?;
+                
+                let mut columns = Vec::new();
+                for column in column_iter {
+                    columns.push(column?);
+                }
+                Ok(columns)
+            });
+        
+        match column_info {
+            Ok(columns) => {
+                let expected: Vec<&str> = expected_columns.split(", ").collect();
+                for expected_col in expected {
+                    if !columns.iter().any(|col| col == expected_col) {
+                        backup_conn.close().map_err(|e| format!("Failed to close backup connection: {:?}", e))?;
+                        return Err(format!("Required column '{}' not found in table '{}'", expected_col, table));
+                    }
+                }
+            },
+            Err(e) => {
+                backup_conn.close().map_err(|e| format!("Failed to close backup connection: {:?}", e))?;
+                return Err(format!("Failed to check columns in table '{}': {}", table, e));
+            }
+        }
+    }
+    
+    backup_conn.close().map_err(|e| format!("Failed to close backup connection: {:?}", e))?;
+    Ok(())
+}
+
+// Test basic database functionality
+fn test_database_functionality(db_path: &Path) -> Result<(), String> {
+    let test_conn = Connection::open(&db_path)
+        .map_err(|e| format!("Cannot open database for testing: {}", e))?;
+    
+    // Test basic queries on essential tables
+    let test_queries = vec![
+        ("SELECT COUNT(*) FROM rooms", "rooms table"),
+        ("SELECT COUNT(*) FROM menu_items", "menu_items table"),
+        ("SELECT COUNT(*) FROM guests", "guests table"),
+        ("SELECT COUNT(*) FROM food_orders", "food_orders table"),
+    ];
+    
+    for (query, description) in test_queries {
+        let test_result: Result<i64, _> = test_conn.query_row(query, [], |row| row.get(0));
+        if let Err(e) = test_result {
+            test_conn.close().map_err(|e| format!("Failed to close test connection: {:?}", e))?;
+            return Err(format!("Failed to query {}: {}", description, e));
+        }
+    }
+    
+    // Test a simple INSERT to ensure database is writable (then rollback)
+    let tx = test_conn.unchecked_transaction()
+        .map_err(|e| format!("Failed to start test transaction: {}", e))?;
+    
+    let insert_test = tx.execute(
+        "INSERT INTO rooms (number, room_type, daily_rate, is_occupied, is_active) VALUES ('TEST', 'Test', 0.0, 0, 1)",
+        []
+    );
+    
+    // Always rollback the test
+    let rollback_result = tx.rollback();
+    
+    if let Err(e) = insert_test {
+        test_conn.close().map_err(|e| format!("Failed to close test connection: {:?}", e))?;
+        return Err(format!("Database write test failed: {}", e));
+    }
+    
+    if let Err(e) = rollback_result {
+        test_conn.close().map_err(|e| format!("Failed to close test connection: {:?}", e))?;
+        return Err(format!("Failed to rollback test transaction: {}", e));
+    }
+    
+    test_conn.close().map_err(|e| format!("Failed to close test connection: {:?}", e))?;
+    Ok(())
+}
+
 // Get security question for reset validation
 #[command]
 pub async fn get_reset_security_question() -> Result<SecurityQuestion, String> {
@@ -161,28 +387,6 @@ pub async fn get_reset_security_question() -> Result<SecurityQuestion, String> {
         question: "What country is your hotel located in?".to_string(),
         answer: "pakistan".to_string(), // This would normally be hashed
     })
-}
-
-// Validate admin password
-#[command]
-pub async fn validate_admin_password(password: String) -> Result<bool, String> {
-    use crate::db::get_db_path;
-    
-    let db_path = get_db_path();
-    let conn = Connection::open(&db_path)
-        .map_err(|e| format!("Failed to open database: {}", e))?;
-    
-    // Check against stored admin password
-    let mut stmt = conn.prepare("SELECT password FROM users WHERE username = 'admin' AND role = 'admin'")
-        .map_err(|e| format!("Failed to prepare password query: {}", e))?;
-    
-    let stored_password: String = stmt.query_row([], |row| {
-        row.get(0)
-    }).map_err(|_| "Admin user not found".to_string())?;
-    
-    // In a real app, you'd hash the input password and compare
-    // For simplicity, we're doing direct comparison
-    Ok(password == stored_password)
 }
 
 // Validate security question answer
@@ -199,34 +403,58 @@ pub async fn validate_security_answer(question_id: String, answer: String) -> Re
     Ok(answer.trim().to_lowercase() == security_question.answer.to_lowercase())
 }
 
-// Reset all application data
+// Reset all application data with automatic backup
 #[command]
 pub async fn reset_application_data() -> Result<String, String> {
     use crate::db::get_db_path;
+    
+    // Create automatic backup before reset
+    let backup_result = create_automatic_backup_before_reset().await;
+    match backup_result {
+        Ok(backup_path) => println!("Automatic backup created at: {}", backup_path),
+        Err(e) => return Err(format!("Failed to create backup before reset: {}", e)),
+    }
     
     let db_path = get_db_path();
     let conn = Connection::open(&db_path)
         .map_err(|e| format!("Failed to open database: {}", e))?;
     
-    // List of tables to clear (preserve structure, clear data)
-    let tables_to_clear = vec![
-        "guests",
-        "food_orders", 
-        "order_items",
-        "expenses"
-    ];
+    // Verify database integrity before reset
+    let integrity_check: Result<String, _> = conn.query_row(
+        "PRAGMA integrity_check",
+        [],
+        |row| row.get(0)
+    );
     
-    // Tables to reset completely
-    let tables_to_reset = vec![
-        "rooms",
-        "menu_items"
-    ];
+    match integrity_check {
+        Ok(result) if result != "ok" => {
+            return Err(format!("Database integrity check failed: {}", result));
+        },
+        Err(e) => {
+            return Err(format!("Failed to check database integrity: {}", e));
+        },
+        _ => {} // OK, continue
+    }
+    
+    // List of tables to clear (preserve structure, clear data)
+    // This comment is for reference - tables are handled in the correct order below
     
     // Start transaction
     let tx = conn.unchecked_transaction()
         .map_err(|e| format!("Failed to start transaction: {}", e))?;
     
-    // Clear data tables
+    // Disable foreign key constraints temporarily for reset
+    tx.execute("PRAGMA foreign_keys = OFF", [])
+        .map_err(|e| format!("Failed to disable foreign keys: {}", e))?;
+    
+    // Clear data tables in correct order (child tables first)
+    let tables_to_clear = vec![
+        "order_items",    // Clear child table first
+        "food_orders",    // Then parent food orders
+        "expenses",       // Independent table
+        "guests"          // Finally guests table
+    ];
+    
     for table in tables_to_clear {
         tx.execute(&format!("DELETE FROM {}", table), [])
             .map_err(|e| format!("Failed to clear table {}: {}", table, e))?;
@@ -237,6 +465,11 @@ pub async fn reset_application_data() -> Result<String, String> {
     }
     
     // Reset specific tables with default data
+    let tables_to_reset = vec![
+        "rooms",
+        "menu_items"
+    ];
+    
     for table in tables_to_reset {
         tx.execute(&format!("DELETE FROM {}", table), [])
             .map_err(|e| format!("Failed to clear table {}: {}", table, e))?;
@@ -247,65 +480,163 @@ pub async fn reset_application_data() -> Result<String, String> {
     }
     
     // Re-seed with default data
-    seed_default_data(&tx)?;
+    match seed_default_data(&tx) {
+        Ok(_) => {},
+        Err(e) => {
+            return Err(format!("Failed to seed default data: {}", e));
+        }
+    }
+    
+    // Re-enable foreign key constraints
+    tx.execute("PRAGMA foreign_keys = ON", [])
+        .map_err(|e| format!("Failed to re-enable foreign keys: {}", e))?;
     
     // Commit transaction
     tx.commit()
         .map_err(|e| format!("Failed to commit reset transaction: {}", e))?;
     
-    Ok("Application data has been reset successfully".to_string())
+    // Verify database integrity after reset
+    let final_integrity_check: Result<String, _> = conn.query_row(
+        "PRAGMA integrity_check",
+        [],
+        |row| row.get(0)
+    );
+    
+    match final_integrity_check {
+        Ok(result) if result != "ok" => {
+            return Err(format!("Database integrity check failed after reset: {}", result));
+        },
+        Err(e) => {
+            return Err(format!("Failed to check database integrity after reset: {}", e));
+        },
+        _ => {} // OK
+    }
+    
+    Ok("Application data has been reset successfully. Backup created automatically.".to_string())
+}
+
+// Create automatic backup before reset
+async fn create_automatic_backup_before_reset() -> Result<String, String> {
+    use crate::db::get_db_path;
+    
+    let db_path = get_db_path();
+    
+    // Create backup directory in app directory
+    let app_dir = db_path.parent().ok_or("Failed to get app directory")?;
+    let backup_dir = app_dir.join("backups");
+    
+    if !backup_dir.exists() {
+        fs::create_dir_all(&backup_dir)
+            .map_err(|e| format!("Failed to create backup directory: {}", e))?;
+    }
+    
+    // Create timestamp for backup file
+    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
+    let backup_file_name = format!("hotel_backup_before_reset_{}.db", timestamp);
+    let backup_file_path = backup_dir.join(&backup_file_name);
+    
+    // Copy database file
+    fs::copy(&db_path, &backup_file_path)
+        .map_err(|e| format!("Failed to copy database: {}", e))?;
+    
+    // Also create a JSON export for data portability
+    if let Err(e) = export_data_to_json(&backup_dir, &format!("before_reset_{}", timestamp)) {
+        println!("Warning: JSON export failed: {}", e);
+    }
+    
+    Ok(backup_file_path.to_string_lossy().to_string())
 }
 
 // Seed default data after reset
 fn seed_default_data(conn: &rusqlite::Transaction) -> Result<(), String> {
-    // Add default rooms
+    // Add default rooms with correct column names
     let rooms = vec![
-        (1, "Standard Room", 8000.0, true),
-        (2, "Standard Room", 8000.0, true),
-        (3, "Standard Room", 8000.0, true),
-        (4, "Deluxe Room", 10000.0, true),
-        (5, "Deluxe Room", 10000.0, true),
-        (6, "Suite", 15000.0, true),
-        (7, "Standard Room", 8000.0, true),
-        (8, "Standard Room", 8000.0, true),
-        (9, "Deluxe Room", 10000.0, true),
-        (10, "Suite", 15000.0, true),
-        (11, "Standard Room", 8000.0, true),
-        (12, "Standard Room", 8000.0, true),
-        (13, "Deluxe Room", 10000.0, true),
-        (14, "Deluxe Room", 10000.0, true),
-        (15, "Suite", 15000.0, true),
+        ("101", "Standard Room", 8000.0),
+        ("102", "Standard Room", 8000.0),
+        ("103", "Standard Room", 8000.0),
+        ("104", "Deluxe Room", 10000.0),
+        ("105", "Deluxe Room", 10000.0),
+        ("106", "Suite", 15000.0),
+        ("107", "Standard Room", 8000.0),
+        ("108", "Standard Room", 8000.0),
+        ("109", "Deluxe Room", 10000.0),
+        ("110", "Suite", 15000.0),
     ];
     
-    for (number, room_type, rate, available) in rooms {
+    for (number, room_type, daily_rate) in rooms {
         conn.execute(
-            "INSERT INTO rooms (number, type, rate, available) VALUES (?, ?, ?, ?)",
-            [&number.to_string(), room_type, &rate.to_string(), &(available as i32).to_string()],
+            "INSERT INTO rooms (number, room_type, daily_rate, is_occupied, is_active) VALUES (?, ?, ?, 0, 1)",
+            [number, room_type, &daily_rate.to_string()],
         ).map_err(|e| format!("Failed to insert room {}: {}", number, e))?;
     }
     
-    // Add default menu items
+    // Add default menu items with correct column names
     let menu_items = vec![
-        ("Dal Chawal", 300.0, true, "Main Course"),
-        ("Chicken Karahi", 800.0, true, "Main Course"),
-        ("Mutton Karahi", 1200.0, true, "Main Course"),
-        ("Chicken Biryani", 600.0, true, "Rice"),
-        ("Mutton Biryani", 800.0, true, "Rice"),
-        ("Naan", 25.0, true, "Bread"),
-        ("Roti", 15.0, true, "Bread"),
-        ("Tea", 50.0, true, "Beverages"),
-        ("Coffee", 80.0, true, "Beverages"),
-        ("Cold Drink", 60.0, true, "Beverages"),
-        ("Water Bottle", 30.0, true, "Beverages"),
-        ("Kheer", 200.0, true, "Dessert"),
+        ("Dal Chawal", 300.0),
+        ("Chicken Karahi", 800.0),
+        ("Mutton Karahi", 1200.0),
+        ("Chicken Biryani", 600.0),
+        ("Mutton Biryani", 800.0),
+        ("Naan", 25.0),
+        ("Roti", 15.0),
+        ("Tea", 50.0),
+        ("Coffee", 80.0),
+        ("Cold Drink", 60.0),
+        ("Water Bottle", 30.0),
+        ("Kheer", 200.0),
     ];
     
-    for (name, price, available, category) in menu_items {
+    for (name, price) in menu_items {
         conn.execute(
-            "INSERT INTO menu_items (name, price, available, category) VALUES (?, ?, ?, ?)",
-            [name, &price.to_string(), &(available as i32).to_string(), category],
+            "INSERT INTO menu_items (name, price, is_active) VALUES (?, ?, 1)",
+            [name, &price.to_string()],
         ).map_err(|e| format!("Failed to insert menu item {}: {}", name, e))?;
     }
     
     Ok(())
+}
+
+// Open file browser to select backup file
+#[command]
+pub async fn select_backup_file() -> Result<String, String> {
+    // For now, let's provide a simple way to get common backup file locations
+    // Since Tauri v2 file dialog requires additional setup
+    
+    use crate::db::get_db_path;
+    
+    let db_path = get_db_path();
+    let app_dir = db_path.parent().ok_or("Failed to get app directory")?;
+    let backup_dir = app_dir.join("backups");
+    
+    // Check if backup directory exists and get latest backup
+    if backup_dir.exists() {
+        let mut backup_files = Vec::new();
+        
+        if let Ok(entries) = std::fs::read_dir(&backup_dir) {
+            for entry in entries.flatten() {
+                if let Some(file_name) = entry.file_name().to_str() {
+                    if file_name.ends_with(".db") && file_name.contains("hotel_backup") {
+                        backup_files.push(entry.path());
+                    }
+                }
+            }
+        }
+        
+        // Sort by modification time and return the most recent
+        backup_files.sort_by_key(|path| {
+            std::fs::metadata(path)
+                .and_then(|m| m.modified())
+                .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+        });
+        
+        if let Some(latest_backup) = backup_files.last() {
+            return Ok(latest_backup.to_string_lossy().to_string());
+        }
+    }
+    
+    // If no backups found in app directory, suggest common locations
+    let user_dir = std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\Users\\Default".to_string());
+    let desktop_path = format!("{}\\Desktop\\hotel_backup_YYYYMMDD_HHMMSS.db", user_dir);
+    
+    Err(format!("No backup files found. Please check these locations:\n1. App backup directory: {}\n2. Desktop: {}\n3. Downloads folder", backup_dir.display(), desktop_path))
 }

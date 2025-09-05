@@ -27,8 +27,8 @@ use database_reset::{reset_database, get_database_path, get_database_stats};
 use export::{export_history_csv, export_history_csv_with_dialog, create_database_backup};
 use print_templates::{build_order_receipt_html, build_final_invoice_html, build_final_invoice_html_with_discount, print_order_receipt};
 use settings::{
-    backup_database, export_json_backup, get_reset_security_question, 
-    validate_admin_password, validate_security_answer, reset_application_data
+    backup_database, export_json_backup, restore_database_from_backup, get_reset_security_question, 
+    validate_security_answer, reset_application_data
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -113,8 +113,8 @@ pub fn run() {
             // Backup & Reset
             backup_database,
             export_json_backup,
+            restore_database_from_backup,
             get_reset_security_question,
-            validate_admin_password,
             validate_security_answer,
             reset_application_data
         ])

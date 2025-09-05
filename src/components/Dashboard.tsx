@@ -361,55 +361,6 @@ const Dashboard: React.FC = () => {
             </div>
           ))}
         </div>
-
-        {/* Charts Section */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
-          gap: '1.5rem'
-        }}>
-          <div style={{
-            backgroundColor: colors.card,
-            padding: '2rem',
-            borderRadius: '12px',
-            boxShadow: `0 2px 10px ${colors.shadow}`,
-            border: `1px solid ${colors.border}`
-          }}>
-            <h3 style={{ color: colors.text, marginBottom: '1rem' }}>Occupancy</h3>
-            <div style={{
-              height: '200px',
-              backgroundColor: colors.secondary,
-              borderRadius: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: colors.textMuted
-            }}>
-              📊 Occupancy Chart
-            </div>
-          </div>
-
-          <div style={{
-            backgroundColor: colors.card,
-            padding: '2rem',
-            borderRadius: '12px',
-            boxShadow: `0 2px 10px ${colors.shadow}`,
-            border: `1px solid ${colors.border}`
-          }}>
-            <h3 style={{ color: colors.text, marginBottom: '1rem' }}>Revenue</h3>
-            <div style={{
-              height: '200px',
-              backgroundColor: colors.secondary,
-              borderRadius: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: colors.textMuted
-            }}>
-              📈 Statistics Chart
-            </div>
-          </div>
-        </div>
       </div>
     );
   };

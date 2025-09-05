@@ -625,12 +625,12 @@ pub fn add_menu_item(name: String, price: f64, category: String, is_available: O
     }
 }
 
-#[command]
+#[tauri::command]
 pub fn get_menu_items() -> Result<Vec<MenuItem>, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     let mut stmt = conn.prepare(
-        "SELECT id, name, price, category, is_available FROM menu_items WHERE is_active = 1 ORDER BY name"
+        "SELECT id, name, price, category, is_available FROM menu_items WHERE is_active = 1 AND is_available = 1 ORDER BY name"
     ).map_err(|e| e.to_string())?;
     
     let item_iter = stmt.query_map([], |row| {

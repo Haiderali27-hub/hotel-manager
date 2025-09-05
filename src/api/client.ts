@@ -24,7 +24,7 @@ if (!isTauri) {
  * @returns Success message
  */
 export const printOrderReceipt = (orderId: number): Promise<string> => 
-  invoke("print_order_receipt", { order_id: orderId });
+  invoke("print_order_receipt", { orderId });
 
 /**
  * Test logo loading functionality
@@ -286,7 +286,7 @@ export const getRooms = (): Promise<Room[]> =>
  * ```
  */
 export const getAvailableRoomsForGuest = (guestId?: number): Promise<Room[]> => 
-  invoke("get_available_rooms_for_guest", { guest_id: guestId || null });
+  invoke("get_available_rooms_for_guest", { guestId: guestId || null });
 
 /**
  * Update room details
@@ -374,7 +374,7 @@ export const getAllGuests = (): Promise<Guest[]> =>
  * @returns Guest details with current bill
  */
 export const getGuest = (guestId: number): Promise<Guest> => 
-  invoke("get_guest", { guest_id: guestId });
+  invoke("get_guest", { guestId });
 
 /**
  * Check out a guest and calculate final bill
@@ -388,7 +388,7 @@ export const getGuest = (guestId: number): Promise<Guest> =>
  * ```
  */
 export const checkoutGuest = (guestId: number, checkOutDate: string): Promise<number> => 
-  invoke("checkout_guest", { guest_id: guestId, check_out_date: checkOutDate });
+  invoke("checkout_guest", { guestId, checkOutDate });
 
 /**
  * Update guest information
@@ -532,7 +532,7 @@ export const getFoodOrders = (): Promise<FoodOrderSummary[]> =>
  * @returns Array of orders for that guest
  */
 export const getGuestOrders = (guestId: number): Promise<FoodOrder[]> => 
-  invoke("get_food_orders_by_guest", { guest_id: guestId });
+  invoke("get_food_orders_by_guest", { guestId });
 
 /**
  * Alias for getGuestOrders - same functionality
@@ -540,7 +540,7 @@ export const getGuestOrders = (guestId: number): Promise<FoodOrder[]> =>
  * @returns Array of orders for that guest
  */
 export const getFoodOrdersByGuest = (guestId: number): Promise<FoodOrderSummary[]> => 
-  invoke("get_food_orders_by_guest", { guest_id: guestId });
+  invoke("get_food_orders_by_guest", { guestId });
 
 /**
  * Mark a food order as paid
@@ -548,7 +548,7 @@ export const getFoodOrdersByGuest = (guestId: number): Promise<FoodOrderSummary[
  * @returns Success status
  */
 export const markOrderPaid = (orderId: number): Promise<string> => 
-  invoke("mark_order_paid", { order_id: orderId });
+  invoke("mark_order_paid", { orderId });
 
 /**
  * Toggle payment status of a food order (paid/unpaid)

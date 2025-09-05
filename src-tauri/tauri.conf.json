@@ -13,14 +13,19 @@
     "windows": [
       {
         "title": "Hotel Manager - Admin Portal",
-        "width": 800,
-        "height": 600,
+        "width": 1200,
+        "height": 800,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": true,
+        "center": true,
+        "decorations": true
       }
     ],
     "security": {
       "csp": null
+    },
+    "trayIcon": {
+      "iconPath": "icons/icon.png"
     }
   },
   "bundle": {
@@ -32,6 +37,9 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
+    ],
+    "resources": [
+      "../src/assets/Logo/logo.png"
     ]
   }
 }

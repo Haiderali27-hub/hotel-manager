@@ -66,17 +66,6 @@ pub struct Expense {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct DashboardStats {
-    pub totalGuests: i32,
-    pub activeGuests: i32,
-    pub totalIncome: f64,
-    pub totalExpenses: f64,
-    pub profitLoss: f64,
-    pub totalFoodOrders: i32,
-    pub currency: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 pub struct FinancialSummary {
     pub total_revenue: f64,
     pub total_expenses: f64,
@@ -102,55 +91,6 @@ fn get_db_connection() -> Result<Connection> {
     db_path.push("hotel.db");
     
     Connection::open(db_path)
-}
-
-// Dashboard Stats - Fixed database path
-#[command]
-pub fn get_dashboard_stats() -> Result<DashboardStats, String> {
-    let conn = get_db_connection().map_err(|e| e.to_string())?;
-    
-    let total_guests: i32 = conn.query_row(
-        "SELECT COUNT(*) FROM guests",
-        [],
-        |row| row.get(0)
-    ).map_err(|e| e.to_string())?;
-    
-    let active_guests: i32 = conn.query_row(
-        "SELECT COUNT(*) FROM guests WHERE status = 'active'",
-        [],
-        |row| row.get(0)
-    ).map_err(|e| e.to_string())?;
-    
-    let total_income: f64 = conn.query_row(
-        "SELECT COALESCE(SUM(amount), 0) FROM revenue",
-        [],
-        |row| row.get(0)
-    ).map_err(|e| e.to_string())?;
-    
-    let total_expenses: f64 = conn.query_row(
-        "SELECT COALESCE(SUM(amount), 0) FROM expenses",
-        [],
-        |row| row.get(0)
-    ).map_err(|e| e.to_string())?;
-    
-    let total_food_orders: i32 = conn.query_row(
-        "SELECT COUNT(*) FROM food_orders",
-        [],
-        |row| row.get(0)
-    ).map_err(|e| e.to_string())?;
-    
-    let profit_loss = total_income - total_expenses;
-    
-    // Fixed: Updated to match frontend interface
-    Ok(DashboardStats {
-        totalGuests: total_guests,
-        activeGuests: active_guests,
-        totalIncome: total_income,
-        totalExpenses: total_expenses,
-        profitLoss: profit_loss,
-        totalFoodOrders: total_food_orders,
-        currency: "PKR".to_string(),
-    })
 }
 
 // Guest Management

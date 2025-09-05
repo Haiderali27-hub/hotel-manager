@@ -6,14 +6,18 @@ use serde::{Deserialize, Serialize};
 pub struct Room {
     pub id: i64,
     pub number: String,
-    pub is_active: bool,
+    pub room_type: String,
+    pub daily_rate: f64,
+    pub is_occupied: bool,
+    pub guest_id: Option<i64>,
+    pub guest_name: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NewGuest {
     pub name: String,
     pub phone: Option<String>,
-    pub room_id: i64,
+    pub room_id: Option<i64>,  // Changed to Option to support walk-in customers
     pub check_in: String, // YYYY-MM-DD format
     pub check_out: Option<String>, // YYYY-MM-DD format
     pub daily_rate: f64,
@@ -24,7 +28,7 @@ pub struct Guest {
     pub id: i64,
     pub name: String,
     pub phone: Option<String>,
-    pub room_id: i64,
+    pub room_id: Option<i64>,  // Changed to Option to support walk-in customers
     pub check_in: String,
     pub check_out: Option<String>,
     pub daily_rate: f64,
@@ -37,9 +41,11 @@ pub struct Guest {
 pub struct ActiveGuestRow {
     pub guest_id: i64,
     pub name: String,
-    pub room_number: String,
+    pub room_number: Option<String>,  // Changed to Option for walk-in customers
     pub check_in: String,
+    pub check_out: Option<String>,
     pub daily_rate: f64,
+    pub is_walkin: bool,  // New field to identify walk-in customers
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -47,7 +53,8 @@ pub struct MenuItem {
     pub id: i64,
     pub name: String,
     pub price: f64,
-    pub is_active: bool,
+    pub category: String,
+    pub is_available: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -168,6 +175,36 @@ pub struct FoodOrderSummary {
     pub paid_at: Option<String>,
     pub total_amount: f64,
     pub items: String, // comma-separated list
+    pub guest_id: Option<i64>,
+    pub guest_name: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FoodOrderInfo {
+    pub id: i64,
+    pub guest_id: Option<i64>,
+    pub customer_type: String,
+    pub customer_name: Option<String>,
+    pub created_at: String,
+    pub paid: bool,
+    pub paid_at: Option<String>,
+    pub total_amount: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OrderItemDetail {
+    pub id: i64,
+    pub menu_item_id: Option<i64>,
+    pub item_name: String,
+    pub quantity: i64,
+    pub unit_price: f64,
+    pub line_total: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FoodOrderDetails {
+    pub order: FoodOrderInfo,
+    pub items: Vec<OrderItemDetail>,
 }
 
 // ===== EXPENSE MODELS =====

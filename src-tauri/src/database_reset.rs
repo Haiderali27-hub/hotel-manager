@@ -136,12 +136,13 @@ fn create_database_schema(conn: &Connection) -> Result<(), String> {
         CREATE INDEX IF NOT EXISTS idx_rooms_occupied ON rooms(is_occupied);
         
         -- Create triggers for automatic updated_at timestamps
-        CREATE TRIGGER IF NOT EXISTS trigger_rooms_updated_at 
-         AFTER UPDATE ON rooms
-         FOR EACH ROW 
-         BEGIN
-            UPDATE rooms SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-         END;
+        -- NOTE: Rooms table doesn't have updated_at column, so no trigger needed
+        -- CREATE TRIGGER IF NOT EXISTS trigger_rooms_updated_at 
+        --  AFTER UPDATE ON rooms
+        --  FOR EACH ROW 
+        --  BEGIN
+        --     UPDATE rooms SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+        --  END;
         
         CREATE TRIGGER IF NOT EXISTS trigger_guests_updated_at 
          AFTER UPDATE ON guests
@@ -150,12 +151,13 @@ fn create_database_schema(conn: &Connection) -> Result<(), String> {
             UPDATE guests SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
          END;
         
-        CREATE TRIGGER IF NOT EXISTS trigger_menu_items_updated_at 
-         AFTER UPDATE ON menu_items
-         FOR EACH ROW 
-         BEGIN
-            UPDATE menu_items SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-         END;
+        -- NOTE: menu_items table doesn't have updated_at column, so no trigger needed
+        -- CREATE TRIGGER IF NOT EXISTS trigger_menu_items_updated_at 
+        --  AFTER UPDATE ON menu_items
+        --  FOR EACH ROW 
+        --  BEGIN
+        --     UPDATE menu_items SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+        --  END;
         
         CREATE TRIGGER IF NOT EXISTS trigger_admin_settings_updated_at 
          AFTER UPDATE ON admin_settings

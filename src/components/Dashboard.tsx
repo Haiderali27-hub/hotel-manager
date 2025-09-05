@@ -1,158 +1,183 @@
 import React, { useEffect, useState } from 'react';
+import logoImage from '../assets/Logo/logo.png';
 import { useAuth } from '../context/SimpleAuthContext';
+import { getGradientColors, useTheme } from '../context/ThemeContext';
 import type { DashboardStats } from '../services/DatabaseService';
 import DatabaseService from '../services/DatabaseService';
+import ActiveGuests from './ActiveGuests';
+import AddExpense from './AddExpense';
+import AddFoodOrder from './AddFoodOrder';
+import AddGuest from './AddGuest';
+import History from './History';
+import ManageMenuRooms from './ManageMenuRooms';
+import MonthlyReport from './MonthlyReport';
+import Settings from './SettingsNew';
 
 const Dashboard: React.FC = () => {
   const { logout } = useAuth();
+  const { theme, colors, toggleTheme } = useTheme();
+  const gradients = getGradientColors(theme);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState('dashboard');
   const [dbStats, setDbStats] = useState<DashboardStats | null>(null);
-  const [dbError, setDbError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [testMode, setTestMode] = useState(false);
 
   const toggleSidebar = () => {
     setSidebarOpen(!sidebarOpen);
   };
 
-  // Test database connection
-  const testDatabase = async () => {
-    setLoading(true);
-    setDbError(null);
+  const handleNavigation = (title: string) => {
+    switch (title) {
+      case 'Add Guest':
+        setCurrentPage('add-guest');
+        break;
+      case 'Add Food Order':
+        setCurrentPage('add-food-order');
+        break;
+      case 'Active Guests':
+        setCurrentPage('active-guests');
+        break;
+      case 'Add Expense':
+        setCurrentPage('add-expense');
+        break;
+      case 'History':
+        setCurrentPage('history');
+        break;
+      case 'Monthly Report':
+        setCurrentPage('monthly-report');
+        break;
+      case 'Manage Menu / Rooms':
+        setCurrentPage('manage-menu-rooms');
+        break;
+      case 'Settings':
+        setCurrentPage('settings');
+        break;
+      default:
+        setCurrentPage('dashboard');
+    }
+    setSidebarOpen(false); // Close sidebar on mobile after selection
+  };
+
+  const goBackToDashboard = () => {
+    setCurrentPage('dashboard');
+  };
+
+  const refreshData = async () => {
     try {
-      console.log('🔍 Testing database connection...');
       const stats = await DatabaseService.getDashboardStats();
-      console.log('✅ Database response:', stats);
       setDbStats(stats);
-      setTestMode(true);
     } catch (error) {
-      console.error('❌ Database error:', error);
-      setDbError(error instanceof Error ? error.message : 'Database connection failed');
-    } finally {
-      setLoading(false);
+      console.error('Database error:', error);
     }
   };
 
   // Load database data on component mount
   useEffect(() => {
-    testDatabase();
+    refreshData();
   }, []);
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-PK', {
-      style: 'currency',
-      currency: 'PKR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount).replace('PKR', 'Rs.');
-  };
-
-  // Get display stats (real data when available and test mode is on, otherwise sample data)
+  // Get display stats (real data when available, otherwise sample data)
   const getDisplayStats = () => {
-    if (testMode && dbStats) {
+    if (dbStats) {
       return [
         { 
           title: 'Total Guests This Month', 
-          value: dbStats.totalGuests.toString(), 
+          value: dbStats.total_guests_this_month.toString(), 
           icon: '👥', 
-          color: 'linear-gradient(135deg, #3B82F6, #1D4ED8)',
+          color: gradients.primary,
           change: 'Real Data' 
         },
         { 
           title: 'Total Income', 
-          value: dbStats.totalIncome.toLocaleString(), 
+          value: dbStats.total_income.toLocaleString(), 
           currency: 'Rs.', 
           icon: '💰', 
-          color: 'linear-gradient(135deg, #22C55E, #16A34A)',
+          color: gradients.success,
           change: 'Real Data' 
         },
         { 
           title: 'Total Expenses', 
-          value: dbStats.totalExpenses.toLocaleString(), 
+          value: dbStats.total_expenses.toLocaleString(), 
           currency: 'Rs.', 
           icon: '💸', 
-          color: 'linear-gradient(135deg, #EF4444, #DC2626)',
+          color: gradients.error,
           change: 'Real Data' 
         },
         { 
           title: 'Profit/Loss', 
-          value: dbStats.profitLoss.toLocaleString(), 
+          value: dbStats.profit_loss.toLocaleString(), 
           currency: 'Rs.', 
-          icon: dbStats.profitLoss >= 0 ? '📈' : '📉', 
-          color: dbStats.profitLoss >= 0 
-            ? 'linear-gradient(135deg, #10B981, #059669)'
-            : 'linear-gradient(135deg, #EF4444, #DC2626)',
+          icon: dbStats.profit_loss >= 0 ? '📈' : '📉', 
+          color: dbStats.profit_loss >= 0 
+            ? gradients.info
+            : gradients.error,
           change: 'Real Data' 
         },
         { 
           title: 'Total Food Orders', 
-          value: dbStats.totalFoodOrders.toString(), 
+          value: dbStats.total_food_orders.toString(), 
           icon: '🍽️', 
-          color: 'linear-gradient(135deg, #F59E0B, #D97706)',
+          color: gradients.warning,
           change: 'Real Data' 
         },
         { 
           title: 'Active Guests', 
-          value: dbStats.activeGuests.toString(), 
+          value: dbStats.active_guests.toString(), 
           icon: '👥', 
-          color: 'linear-gradient(135deg, #8B5CF6, #7C3AED)',
+          color: gradients.accent,
           change: 'Real Data' 
         }
       ];
     }
-    
-    // Return sample data
-    return stats;
-  };
 
-  // Sample data for stats - Professional hotel management dashboard
-  const stats = [
-    { 
-      title: 'Total Guests This Month', 
-      value: '248', 
-      icon: '👥', 
-      color: 'linear-gradient(135deg, #3B82F6, #1D4ED8)',
-      change: '+18%' 
-    },
-    { 
-      title: 'Total Income', 
-      value: '2,450,000', 
-      currency: 'Rs.', 
-      icon: '💰', 
-      color: 'linear-gradient(135deg, #22C55E, #16A34A)',
-      change: '+25%' 
-    },
-    { 
-      title: 'Total Expenses', 
-      value: '850,000', 
-      currency: 'Rs.', 
-      icon: '💸', 
-      color: 'linear-gradient(135deg, #EF4444, #DC2626)',
-      change: '+8%' 
-    },
-    { 
-      title: 'Profit/Loss', 
-      value: '1,600,000', 
-      currency: 'Rs.', 
-      icon: '📈', 
-      color: 'linear-gradient(135deg, #10B981, #059669)',
-      change: '+35%' 
-    },
-    { 
-      title: 'Total Food Orders', 
-      value: '432', 
-      icon: '🍽️', 
-      color: 'linear-gradient(135deg, #F59E0B, #D97706)',
-      change: '+22%' 
-    },
-    { 
-      title: 'Active Guests', 
-      value: '67', 
-      icon: '👥', 
-      color: 'linear-gradient(135deg, #8B5CF6, #7C3AED)',
-      change: '+12%' 
-    }
-  ];
+    // Sample data fallback
+    return [
+      { 
+        title: 'Total Guests This Month', 
+        value: '42', 
+        icon: '👥', 
+        color: gradients.primary,
+        change: '+12%' 
+      },
+      { 
+        title: 'Total Income', 
+        value: '84,500', 
+        currency: 'Rs.', 
+        icon: '💰', 
+        color: gradients.success,
+        change: '+8%' 
+      },
+      { 
+        title: 'Total Expenses', 
+        value: '12,300', 
+        currency: 'Rs.', 
+        icon: '💸', 
+        color: gradients.error,
+        change: '-4%' 
+      },
+      { 
+        title: 'Profit/Loss', 
+        value: '72,200', 
+        currency: 'Rs.', 
+        icon: '📈', 
+        color: gradients.info,
+        change: '+15%' 
+      },
+      { 
+        title: 'Total Food Orders', 
+        value: '156', 
+        icon: '🍽️', 
+        color: gradients.warning,
+        change: '+23%' 
+      },
+      { 
+        title: 'Active Guests', 
+        value: '8', 
+        icon: '👥', 
+        color: gradients.accent,
+        change: '+5%' 
+      }
+    ];
+  };
 
   const navigationItems = [
     { title: 'Add Guest', icon: '➕' },
@@ -165,12 +190,90 @@ const Dashboard: React.FC = () => {
     { title: 'Settings', icon: '⚙️' }
   ];
 
+  const renderDashboardContent = () => {
+    return (
+      <div style={{ padding: '2rem' }}>
+        {/* Page Title */}
+        <div style={{ marginBottom: '2rem' }}>
+          <h1 style={{
+            color: colors.text,
+            fontSize: '2rem',
+            fontWeight: 'bold',
+            margin: '0 0 0.5rem 0'
+          }}>
+            Total Overview
+          </h1>
+        </div>
+
+        {/* Stats Grid */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+          gap: '1.5rem',
+          marginBottom: '2rem'
+        }}>
+          {getDisplayStats().map((stat, index) => (
+            <div
+              key={index}
+              style={{
+                background: stat.color,
+                color: 'white',
+                padding: '1.5rem',
+                borderRadius: '12px',
+                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                position: 'relative',
+                overflow: 'hidden'
+              }}
+            >
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                marginBottom: '0.5rem'
+              }}>
+                <div>
+                  <h3 style={{
+                    fontSize: '0.875rem',
+                    fontWeight: '500',
+                    margin: '0 0 0.5rem 0',
+                    opacity: 0.9
+                  }}>
+                    {stat.title}
+                  </h3>
+                  <p style={{
+                    fontSize: '2rem',
+                    fontWeight: 'bold',
+                    margin: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}>
+                    {stat.currency && <span style={{ fontSize: '1.2rem' }}>{stat.currency}</span>}
+                    {stat.value}
+                  </p>
+                </div>
+                <span style={{ fontSize: '2rem', opacity: 0.8 }}>{stat.icon}</span>
+              </div>
+              <p style={{
+                fontSize: '0.875rem',
+                margin: 0,
+                opacity: 0.8
+              }}>
+                {stat.change}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div style={{
       width: '100vw',
       height: '100vh',
-      backgroundColor: '#1E1E2E',
-      color: '#FFFFFF',
+      backgroundColor: colors.primary,
+      color: colors.text,
       overflow: 'hidden',
       display: 'flex',
       flexDirection: 'column'
@@ -181,17 +284,17 @@ const Dashboard: React.FC = () => {
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: '1rem 2rem',
-        backgroundColor: '#2D2D44',
-        borderBottom: '1px solid #3D3D5C'
+        backgroundColor: '#0a1920',
+        borderBottom: `1px solid ${colors.border}`
       }}>
-        {/* Left side - Logo and Menu */}
+        {/* Left side - Menu */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <button
             onClick={toggleSidebar}
             style={{
-              backgroundColor: '#F59E0B',
+              backgroundColor: colors.accent,
               border: 'none',
-              color: '#000',
+              color: theme === 'dark' ? '#000' : '#FFFFFF',
               padding: '0.5rem',
               borderRadius: '6px',
               cursor: 'pointer',
@@ -205,376 +308,230 @@ const Dashboard: React.FC = () => {
           >
             ☰
           </button>
-          <div style={{
-            backgroundColor: '#F59E0B',
-            color: '#000',
-            padding: '0.5rem 1rem',
-            borderRadius: '6px',
-            fontWeight: 'bold',
-            fontSize: '1.1rem'
-          }}>
-            🏨 Hotel Dashboard
-          </div>
         </div>
 
-        {/* Right side - Date and Logout */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '0.5rem',
-            color: '#A0A0B0' 
-          }}>
-            <span>📅</span>
-            <span>Thursday, August 14, 2025</span>
-          </div>
-          <button
-            onClick={logout}
-            style={{
-              backgroundColor: '#DC2626',
-              border: 'none',
-              color: 'white',
-              padding: '0.5rem 1rem',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '0.9rem',
-              fontWeight: '500',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem'
-            }}
-          >
-            <span>🚪</span>
-            Log Out
-          </button>
-        </div>
-      </div>
-
-      {/* Sidebar Overlay */}
-      {sidebarOpen && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            zIndex: 998
-          }}
-          onClick={toggleSidebar}
-        />
-      )}
-
-      {/* Sidebar */}
-      <div
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: sidebarOpen ? 0 : '-300px',
-          width: '300px',
-          height: '100vh',
-          backgroundColor: '#2D2D44',
-          transition: 'left 0.3s ease-in-out',
-          zIndex: 999,
-          boxShadow: sidebarOpen ? '4px 0 20px rgba(0, 0, 0, 0.3)' : 'none',
-          padding: '2rem'
-        }}
-      >
+        {/* Center - Logo */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: '2rem',
-          paddingBottom: '1rem',
-          borderBottom: '1px solid #3D3D5C'
+          justifyContent: 'center',
+          flex: 1
         }}>
-          <h2 style={{
-            color: '#F59E0B',
-            fontSize: '1.5rem',
-            fontWeight: 'bold',
-            margin: 0
-          }}>
-            Navigation
-          </h2>
-          <button
-            onClick={toggleSidebar}
+          <img 
+            src={logoImage} 
+            alt="Hotel Logo"
             style={{
-              background: 'none',
-              border: 'none',
-              color: '#FFFFFF',
-              fontSize: '1.5rem',
-              cursor: 'pointer'
+              height: '50px',
+              width: 'auto',
+              objectFit: 'contain'
             }}
-          >
-            ✕
-          </button>
+          />
         </div>
 
-        {navigationItems.map((item, index) => (
+        {/* Right side - Theme toggle, User info and logout */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <button
-            key={index}
+            onClick={toggleTheme}
             style={{
+              backgroundColor: colors.surface,
+              border: `1px solid ${colors.border}`,
+              color: colors.text,
+              padding: '0.5rem',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '1.2rem',
+              width: '40px',
+              height: '40px',
               display: 'flex',
               alignItems: 'center',
-              gap: '1rem',
-              padding: '1rem',
-              backgroundColor: 'transparent',
+              justifyContent: 'center'
+            }}
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
+          <span style={{ color: colors.textMuted }}>Admin</span>
+          <button
+            onClick={logout}
+            style={{
+              backgroundColor: colors.error,
               border: 'none',
               color: '#FFFFFF',
-              fontSize: '1rem',
+              padding: '0.5rem 1rem',
+              borderRadius: '6px',
               cursor: 'pointer',
-              borderRadius: '8px',
-              width: '100%',
-              textAlign: 'left',
-              marginBottom: '0.5rem',
-              transition: 'background-color 0.2s'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#3D3D5C';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
+              fontSize: '0.875rem',
+              fontWeight: '500'
             }}
           >
-            <span style={{ fontSize: '1.2rem' }}>{item.icon}</span>
-            <span>{item.title}</span>
+            Logout
           </button>
-        ))}
+        </div>
       </div>
 
-      {/* Main Content */}
-      <div style={{
-        flex: 1,
-        padding: '2rem',
-        backgroundColor: '#F5F5F5',
-        overflow: 'auto'
-      }}>
-        {/* Page Title */}
-        <div style={{ marginBottom: '2rem' }}>
-          <h1 style={{
-            color: '#333',
-            fontSize: '2rem',
-            fontWeight: 'bold',
-            margin: '0 0 0.5rem 0'
-          }}>
-            Total Overview
-          </h1>
-        </div>
-
-        {/* Database Test Section */}
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        {/* Sidebar */}
         <div style={{
-          backgroundColor: '#fff',
-          padding: '1.5rem',
-          borderRadius: '12px',
-          marginBottom: '2rem',
-          border: '1px solid #E5E7EB',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+          width: sidebarOpen ? '250px' : '0',
+          backgroundColor: colors.secondary,
+          transition: 'width 0.3s ease',
+          overflow: 'hidden',
+          borderRight: `1px solid ${colors.border}`
         }}>
-          <h2 style={{ 
-            color: '#333', 
-            fontSize: '1.2rem', 
-            fontWeight: '600', 
-            marginBottom: '1rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem'
-          }}>
-            🗄️ Database Connection Test
-          </h2>
-          
-          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <button
-              onClick={testDatabase}
-              disabled={loading}
-              style={{
-                backgroundColor: loading ? '#9CA3AF' : '#3B82F6',
-                color: 'white',
-                padding: '0.5rem 1rem',
-                borderRadius: '6px',
-                border: 'none',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                fontWeight: '500'
-              }}
-            >
-              {loading ? '🔄 Testing...' : '🔍 Test Database'}
-            </button>
-
-            <button
-              onClick={() => setTestMode(!testMode)}
-              style={{
-                backgroundColor: testMode ? '#10B981' : '#6B7280',
-                color: 'white',
-                padding: '0.5rem 1rem',
-                borderRadius: '6px',
-                border: 'none',
-                cursor: 'pointer',
-                fontWeight: '500'
-              }}
-            >
-              {testMode ? '📊 Show Real Data' : '📋 Show Sample Data'}
-            </button>
-          </div>
-
-          {dbError && (
+          <div style={{ padding: '1rem', width: '250px' }}>
             <div style={{
-              backgroundColor: '#FEF2F2',
-              border: '1px solid #FECACA',
-              color: '#DC2626',
-              padding: '0.75rem',
-              borderRadius: '6px',
-              marginTop: '1rem'
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '1rem',
+              paddingBottom: '1rem',
+              borderBottom: `1px solid ${colors.border}`
             }}>
-              ❌ Error: {dbError}
-            </div>
-          )}
-
-          {dbStats && (
-            <div style={{
-              backgroundColor: '#F0FDF4',
-              border: '1px solid #BBF7D0',
-              color: '#16A34A',
-              padding: '0.75rem',
-              borderRadius: '6px',
-              marginTop: '1rem'
-            }}>
-              ✅ Database Connected! 
-              <br />
-              <small>
-                Real Data: {dbStats.totalGuests} guests, {formatCurrency(dbStats.totalIncome)} income, 
-                {formatCurrency(dbStats.totalExpenses)} expenses, {dbStats.totalFoodOrders} orders
-              </small>
-            </div>
-          )}
-        </div>
-
-        {/* Stats Cards */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-          gap: '1.5rem',
-          marginBottom: '2rem'
-        }}>
-          {getDisplayStats().map((stat, index) => (
-            <div
-              key={index}
-              style={{
-                background: stat.color,
-                padding: '2rem',
-                borderRadius: '12px',
-                color: 'white',
-                position: 'relative',
-                minHeight: '120px',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between'
-              }}
-            >
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                marginBottom: '1rem'
+              <h3 style={{
+                color: colors.accent,
+                fontSize: '1.1rem',
+                fontWeight: '600',
+                margin: 0
               }}>
-                <span style={{ fontSize: '2rem' }}>{stat.icon}</span>
-                <div style={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.2)',
-                  padding: '0.25rem 0.5rem',
-                  borderRadius: '12px',
-                  fontSize: '0.8rem',
-                  fontWeight: 'bold'
-                }}>
-                  {stat.change}
-                </div>
-              </div>
-              
-              <div>
-                <h3 style={{
-                  fontSize: '0.9rem',
-                  margin: '0 0 0.5rem 0',
-                  opacity: 0.9,
-                  fontWeight: '500'
-                }}>
-                  {stat.title}
-                </h3>
-                
-                <p style={{
-                  fontSize: '2.5rem',
-                  fontWeight: 'bold',
-                  margin: 0,
-                  lineHeight: 1
-                }}>
-                  {stat.value}
-                  {stat.currency && (
-                    <span style={{ 
-                      fontSize: '1rem', 
-                      marginLeft: '0.5rem',
-                      opacity: 0.8 
-                    }}>
-                      {stat.currency}
-                    </span>
-                  )}
-                </p>
-              </div>
+                Navigation
+              </h3>
+              <button
+                onClick={toggleSidebar}
+                style={{
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  color: colors.textMuted,
+                  fontSize: '1.2rem',
+                  cursor: 'pointer'
+                }}
+              >
+                ✕
+              </button>
             </div>
-          ))}
+
+            {navigationItems.map((item, index) => (
+              <button
+                key={index}
+                onClick={() => handleNavigation(item.title)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '1rem',
+                  padding: '1rem',
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  color: colors.text,
+                  fontSize: '1rem',
+                  cursor: 'pointer',
+                  borderRadius: '8px',
+                  width: '100%',
+                  textAlign: 'left',
+                  marginBottom: '0.5rem',
+                  transition: 'background-color 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = colors.surface;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                }}
+              >
+                <span style={{ fontSize: '1.2rem' }}>{item.icon}</span>
+                <span>{item.title}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Bottom Charts Section */}
+        {/* Main Content */}
         <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
-          gap: '2rem'
+          flex: 1,
+          backgroundColor: currentPage === 'dashboard' ? (theme === 'light' ? '#F5F5F5' : colors.primary) : colors.primary,
+          overflow: 'auto'
         }}>
-          {/* Revenue Chart */}
-          <div style={{
-            backgroundColor: 'white',
-            padding: '2rem',
-            borderRadius: '12px',
-            boxShadow: '0 2px 10px rgba(0, 0, 0, 0.1)'
-          }}>
-            <h3 style={{ color: '#333', marginBottom: '1rem' }}>Revenue</h3>
+          {currentPage === 'dashboard' && renderDashboardContent()}
+          {currentPage === 'add-guest' && (
+            <AddGuest 
+              onBack={goBackToDashboard} 
+              onGuestAdded={refreshData}
+            />
+          )}
+          {currentPage === 'add-food-order' && (
+            <AddFoodOrder 
+              onBack={goBackToDashboard} 
+              onOrderAdded={refreshData}
+            />
+          )}
+          {currentPage === 'add-expense' && (
+            <AddExpense 
+              onBack={goBackToDashboard} 
+              onExpenseAdded={refreshData}
+            />
+          )}
+          {currentPage === 'active-guests' && (
+            <ActiveGuests 
+              onBack={goBackToDashboard}
+              onAddOrder={() => {
+                setCurrentPage('add-food-order');
+              }}
+            />
+          )}
+          {currentPage === 'manage-menu-rooms' && (
+            <ManageMenuRooms 
+              onBack={() => {
+                goBackToDashboard();
+                refreshData();
+              }}
+            />
+          )}
+          {currentPage === 'history' && (
+            <History 
+              onBack={goBackToDashboard}
+            />
+          )}
+          {currentPage === 'monthly-report' && (
+            <MonthlyReport 
+              onBack={goBackToDashboard}
+            />
+          )}
+          {currentPage === 'settings' && (
+            <Settings />
+          )}
+          {/* TODO: Add other page components */}
+          {currentPage !== 'dashboard' && 
+           currentPage !== 'add-guest' && 
+           currentPage !== 'add-food-order' && 
+           currentPage !== 'add-expense' && 
+           currentPage !== 'active-guests' && 
+           currentPage !== 'history' && 
+           currentPage !== 'monthly-report' && 
+           currentPage !== 'manage-menu-rooms' && 
+           currentPage !== 'settings' && (
             <div style={{
-              fontSize: '2rem',
-              fontWeight: 'bold',
-              color: '#333',
-              marginBottom: '1rem'
+              padding: '2rem',
+              color: colors.text,
+              textAlign: 'center'
             }}>
-              5,987.34
+              <h1>Coming Soon</h1>
+              <p style={{ color: colors.textSecondary }}>This feature is under development.</p>
+              <button
+                onClick={goBackToDashboard}
+                style={{
+                  backgroundColor: colors.accent,
+                  color: theme === 'dark' ? '#000' : '#FFFFFF',
+                  border: 'none',
+                  padding: '0.75rem 1.5rem',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '1rem',
+                  fontWeight: '600',
+                  marginTop: '1rem'
+                }}
+              >
+                Back to Dashboard
+              </button>
             </div>
-            <div style={{
-              height: '200px',
-              backgroundColor: '#F8F9FA',
-              borderRadius: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#666'
-            }}>
-              📊 Revenue Chart
-            </div>
-          </div>
-
-          {/* Revenue Statistics */}
-          <div style={{
-            backgroundColor: 'white',
-            padding: '2rem',
-            borderRadius: '12px',
-            boxShadow: '0 2px 10px rgba(0, 0, 0, 0.1)'
-          }}>
-            <h3 style={{ color: '#333', marginBottom: '1rem' }}>Revenue Statistics</h3>
-            <div style={{
-              height: '200px',
-              backgroundColor: '#F8F9FA',
-              borderRadius: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#666'
-            }}>
-              📈 Statistics Chart
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

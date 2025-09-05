@@ -1,20 +1,47 @@
 import { invoke } from "@tauri-apps/api/core";
 
+// Extend Window interface for Tauri
+declare global {
+  interface Window {
+    __TAURI_INTERNALS__?: any;
+  }
+}
+
+// Check if we're running in Tauri environment
+const isTauri = typeof window !== 'undefined' && window.__TAURI_INTERNALS__;
+
+if (!isTauri) {
+  console.warn('Tauri APIs not available - running in web mode');
+}
+
 // ============================================================================
-// TYPE DEFINITIONS - IPC Contract Types
+// TYPE DEFINITIONS - IPC Contract
+// ============================================================================
+
+/**
+ * Print a receipt for a food order
+ * @param orderId - ID of the order to print receipt for
+ * @returns Success message
+ */
+export const printOrderReceipt = (orderId: number): Promise<string> => 
+  invoke("print_order_receipt", { orderId });
+
 // ============================================================================
 
 // Room Management
 export interface Room {
   id: number;
   number: string;
+  room_type: string;
   daily_rate: number;
   is_occupied: boolean;
   guest_id?: number;
+  guest_name?: string;
 }
 
 export interface NewRoom {
   number: string;
+  room_type: string;
   daily_rate: number;
 }
 
@@ -23,18 +50,29 @@ export interface Guest {
   id: number;
   name: string;
   phone?: string;
-  room_id: number;
+  room_id?: number;  // Changed to optional to support walk-in customers
   check_in: string;
   check_out?: string;
   daily_rate: number;
-  total_bill: number;
-  is_active: boolean;
+  status: string; // 'active' or 'checked_out'
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ActiveGuestRow {
+  guest_id: number;
+  name: string;
+  room_number?: string;  // Optional for walk-in customers
+  check_in: string;
+  check_out?: string;
+  daily_rate: number;
+  is_walkin: boolean;  // New field to identify walk-in customers
 }
 
 export interface NewGuest {
   name: string;
   phone?: string;
-  room_id: number;
+  room_id?: number;  // Optional for walk-in customers
   check_in: string;
   check_out?: string;
   daily_rate: number;
@@ -58,6 +96,7 @@ export interface NewMenuItem {
 
 export interface OrderItem {
   menu_item_id: number;
+  item_name: string;
   quantity: number;
   unit_price: number;
 }
@@ -71,9 +110,53 @@ export interface FoodOrder {
   items: OrderItem[];
 }
 
+export interface FoodOrderSummary {
+  id: number;
+  created_at: string;
+  paid: boolean;
+  paid_at?: string;
+  total_amount: number;
+  items: string; // comma-separated list like "Pizza x2, Burger x1"
+  guest_id?: number;
+  guest_name?: string;
+}
+
+export interface FoodOrderInfo {
+  id: number;
+  guest_id?: number;
+  customer_type: string;
+  customer_name?: string;
+  created_at: string;
+  paid: boolean;
+  paid_at?: string;
+  total_amount: number;
+}
+
+export interface OrderItemDetail {
+  id: number;
+  menu_item_id?: number;
+  item_name: string;
+  quantity: number;
+  unit_price: number;
+  line_total: number;
+}
+
+export interface FoodOrderDetails {
+  order: FoodOrderInfo;
+  items: OrderItemDetail[];
+}
+
 export interface NewFoodOrder {
-  guest_id: number;
+  guest_id: number | null;  // Allow null for walk-in customers
   items: OrderItem[];
+}
+
+// Guest with orders for display purposes
+export interface GuestWithOrders extends Guest {
+  food_orders?: FoodOrder[];
+  room_number?: number;
+  check_in_date?: string;
+  check_out_date?: string;
 }
 
 // Expenses
@@ -119,8 +202,8 @@ export interface AdminUser {
 
 // Export & Print
 export interface ExportFilters {
-  start_date?: string;
-  end_date?: string;
+  date_from?: string;
+  date_to?: string;
   guest_id?: number;
   room_id?: number;
   category?: string;
@@ -153,8 +236,20 @@ export interface DatabaseStats {
  * const roomId = await addRoom({ number: "101", daily_rate: 150.0 });
  * ```
  */
-export const addRoom = (room: NewRoom): Promise<number> => 
-  invoke("add_room", { number: room.number, dailyRate: room.daily_rate });
+export const addRoom = async (room: NewRoom): Promise<number> => {
+  const params = { 
+    number: room.number, 
+    roomType: room.room_type,  // Use camelCase to match expected parameter
+    dailyRate: room.daily_rate  // Use camelCase to match expected parameter
+  };
+  
+  try {
+    const result = await invoke("add_room", params);
+    return result as number;
+  } catch (error) {
+    throw error;
+  }
+};
 
 /**
  * Get all rooms in the hotel
@@ -169,21 +264,40 @@ export const getRooms = (): Promise<Room[]> =>
   invoke("get_rooms");
 
 /**
+ * Get available rooms for guest assignment/editing
+ * @param guestId - Optional guest ID to include their current room
+ * @returns Array of available rooms
+ * @example
+ * ```ts
+ * const availableRooms = await getAvailableRoomsForGuest(123);
+ * console.log(`Found ${availableRooms.length} available rooms`);
+ * ```
+ */
+export const getAvailableRoomsForGuest = (guestId?: number): Promise<Room[]> => 
+  invoke("get_available_rooms_for_guest", { guestId: guestId || null });
+
+/**
  * Update room details
  * @param roomId - ID of the room to update
  * @param updates - Fields to update
  * @returns Success status
  */
 export const updateRoom = (roomId: number, updates: Partial<NewRoom>): Promise<boolean> => 
-  invoke("update_room", { roomId, ...updates });
+  invoke("update_room", { room_id: roomId, number: updates.number, daily_rate: updates.daily_rate });
 
 /**
  * Delete a room (only if not occupied)
  * @param roomId - ID of the room to delete
  * @returns Success status
  */
-export const deleteRoom = (roomId: number): Promise<boolean> => 
-  invoke("delete_room", { roomId });
+export const deleteRoom = async (roomId: number): Promise<boolean> => {
+  try {
+    const result = await invoke("delete_room", { id: roomId });
+    return result as boolean;
+  } catch (error) {
+    throw error;
+  }
+};
 
 // Guest Management APIs
 /**
@@ -201,14 +315,29 @@ export const deleteRoom = (roomId: number): Promise<boolean> =>
  * });
  * ```
  */
-export const addGuest = (guest: NewGuest): Promise<number> => 
-  invoke("add_guest", { ...guest });
+export const addGuest = async (guest: NewGuest): Promise<number> => {
+  const params = { 
+    name: guest.name,
+    phone: guest.phone,
+    roomId: guest.room_id || null,  // Use camelCase to match expected parameter
+    checkIn: guest.check_in,        // Use camelCase to match expected parameter
+    checkOut: guest.check_out,      // Use camelCase to match expected parameter
+    dailyRate: guest.daily_rate     // Use camelCase to match expected parameter
+  };
+  
+  try {
+    const result = await invoke("add_guest", params);
+    return result as number;
+  } catch (error) {
+    throw error;
+  }
+};
 
 /**
  * Get all currently active guests
  * @returns Array of active guests with their details
  */
-export const getActiveGuests = (): Promise<Guest[]> => 
+export const getActiveGuests = (): Promise<ActiveGuestRow[]> => 
   invoke("get_active_guests");
 
 /**
@@ -240,6 +369,23 @@ export const getGuest = (guestId: number): Promise<Guest> =>
 export const checkoutGuest = (guestId: number, checkOutDate: string): Promise<number> => 
   invoke("checkout_guest", { guestId, checkOutDate });
 
+/**
+ * Update guest information
+ * @param guestId - ID of the guest to update
+ * @param updates - Fields to update
+ * @returns Success status
+ */
+export const updateGuest = (guestId: number, updates: Partial<NewGuest>): Promise<boolean> => 
+  invoke("update_guest", { 
+    guest_id: guestId,
+    name: updates.name,
+    phone: updates.phone,
+    room_id: updates.room_id,
+    check_in: updates.check_in,
+    check_out: updates.check_out === undefined ? null : updates.check_out,
+    daily_rate: updates.daily_rate
+  });
+
 // Menu Management APIs
 /**
  * Get all menu items
@@ -262,7 +408,12 @@ export const getMenuItems = (): Promise<MenuItem[]> =>
  * ```
  */
 export const addMenuItem = (item: NewMenuItem): Promise<number> => 
-  invoke("add_menu_item", { ...item });
+  invoke("add_menu_item", { 
+    name: item.name, 
+    price: item.price, 
+    category: item.category, 
+    isAvailable: item.is_available 
+  });
 
 /**
  * Update menu item details
@@ -270,16 +421,36 @@ export const addMenuItem = (item: NewMenuItem): Promise<number> =>
  * @param updates - Fields to update
  * @returns Success status
  */
-export const updateMenuItem = (itemId: number, updates: Partial<NewMenuItem>): Promise<boolean> => 
-  invoke("update_menu_item", { itemId, ...updates });
+export const updateMenuItem = async (itemId: number, updates: Partial<NewMenuItem>): Promise<boolean> => {
+  const params = { 
+    itemId: itemId,  // Try camelCase since error mentions 'itemId'
+    name: updates.name,
+    price: updates.price,
+    category: updates.category,
+    is_available: updates.is_available  // Use snake_case to match backend
+  };
+  
+  try {
+    const result = await invoke("update_menu_item", params);
+    return result as boolean;
+  } catch (error) {
+    throw error;
+  }
+};
 
 /**
  * Delete a menu item
  * @param itemId - ID of the menu item to delete
  * @returns Success status
  */
-export const deleteMenuItem = (itemId: number): Promise<boolean> => 
-  invoke("delete_menu_item", { itemId });
+export const deleteMenuItem = async (itemId: number): Promise<boolean> => {
+  try {
+    const result = await invoke("delete_menu_item", { itemId: itemId });
+    return result as boolean;
+  } catch (error) {
+    throw error;
+  }
+};
 
 // Food Order APIs
 /**
@@ -291,20 +462,33 @@ export const deleteMenuItem = (itemId: number): Promise<boolean> =>
  * const orderId = await addFoodOrder({
  *   guest_id: 123,
  *   items: [
- *     { menu_item_id: 1, quantity: 2, unit_price: 12.99 },
- *     { menu_item_id: 5, quantity: 1, unit_price: 8.50 }
+ *     { menu_item_id: 1, item_name: "Chicken Burger", quantity: 2, unit_price: 12.99 },
+ *     { menu_item_id: 5, item_name: "French Fries", quantity: 1, unit_price: 8.50 }
  *   ]
  * });
  * ```
  */
-export const addFoodOrder = (order: NewFoodOrder): Promise<number> => 
-  invoke("add_food_order", { order });
+export const addFoodOrder = async (order: NewFoodOrder): Promise<number> => {
+  const params = { 
+    guestId: order.guest_id,
+    customerType: order.guest_id ? 'active' : 'walkin',
+    customerName: order.guest_id ? undefined : 'Walk-in Customer',
+    items: order.items
+  };
+  
+  try {
+    const result = await invoke("add_food_order", params);
+    return result as number;
+  } catch (error) {
+    throw error;
+  }
+};
 
 /**
  * Get all food orders
- * @returns Array of all food orders with details
+ * @returns Array of all food orders with summary details
  */
-export const getFoodOrders = (): Promise<FoodOrder[]> => 
+export const getFoodOrders = (): Promise<FoodOrderSummary[]> => 
   invoke("get_food_orders");
 
 /**
@@ -320,16 +504,40 @@ export const getGuestOrders = (guestId: number): Promise<FoodOrder[]> =>
  * @param guestId - ID of the guest
  * @returns Array of orders for that guest
  */
-export const getFoodOrdersByGuest = (guestId: number): Promise<FoodOrder[]> => 
-  getGuestOrders(guestId);
+export const getFoodOrdersByGuest = (guestId: number): Promise<FoodOrderSummary[]> => 
+  invoke("get_food_orders_by_guest", { guestId });
 
 /**
  * Mark a food order as paid
  * @param orderId - ID of the order to mark as paid
  * @returns Success status
  */
-export const markOrderPaid = (orderId: number): Promise<boolean> => 
+export const markOrderPaid = (orderId: number): Promise<string> => 
   invoke("mark_order_paid", { orderId });
+
+/**
+ * Toggle payment status of a food order (paid/unpaid)
+ * @param orderId - ID of the order to toggle payment status
+ * @returns Success message
+ */
+export const toggleFoodOrderPayment = (orderId: number): Promise<string> => 
+  invoke("toggle_food_order_payment", { orderId });
+
+/**
+ * Delete a food order and all its items
+ * @param orderId - ID of the order to delete
+ * @returns Success message
+ */
+export const deleteFoodOrder = (orderId: number): Promise<string> => 
+  invoke("delete_food_order", { orderId });
+
+/**
+ * Get detailed information about a food order including all items
+ * @param orderId - ID of the order to get details for
+ * @returns Order details with items
+ */
+export const getOrderDetails = (orderId: number): Promise<FoodOrderDetails> => 
+  invoke("get_order_details", { orderId });
 
 // Expense Management APIs
 /**
@@ -465,6 +673,23 @@ export const exportHistoryCsv = (tab: string, filters: ExportFilters = {}): Prom
   invoke("export_history_csv", { tab, filters });
 
 /**
+ * Export history data to CSV with file dialog (user chooses location)
+ * @param tab - Data type to export ("guests", "orders", "expenses", "rooms")
+ * @param filters - Optional filters for the export
+ * @returns File path of the generated CSV
+ * @example
+ * ```ts
+ * const filePath = await exportHistoryCsvWithDialog("guests", {
+ *   start_date: "2025-01-01",
+ *   end_date: "2025-08-16"
+ * });
+ * console.log(`CSV exported to: ${filePath}`);
+ * ```
+ */
+export const exportHistoryCsvWithDialog = (tab: string, filters: ExportFilters = {}): Promise<string> => 
+  invoke("export_history_csv_with_dialog", { tab, filters });
+
+/**
  * Generate HTML receipt for a food order
  * @param orderId - ID of the food order
  * @returns HTML string ready for printing
@@ -493,6 +718,63 @@ export const buildOrderReceiptHtml = (orderId: number): Promise<string> =>
  */
 export const buildFinalInvoiceHtml = (guestId: number): Promise<string> => 
   invoke("build_final_invoice_html", { guestId });
+
+/**
+ * Generate HTML for final invoice with discount information
+ * @param guestId - ID of the guest
+ * @param discountType - Type of discount ('flat' or 'percentage')
+ * @param discountAmount - Amount or percentage of discount
+ * @param discountDescription - Description/reason for discount
+ * @returns HTML string ready for printing with discount included
+ * @example
+ * ```ts
+ * const html = await buildFinalInvoiceHtmlWithDiscount(123, "percentage", 10, "Senior discount");
+ * const newWindow = window.open('', '_blank');
+ * newWindow?.document.write(html);
+ * newWindow?.print();
+ * ```
+ */
+export const buildFinalInvoiceHtmlWithDiscount = (
+  guestId: number, 
+  discountType: string, 
+  discountAmount: number, 
+  discountDescription: string
+): Promise<string> => 
+  invoke("build_final_invoice_html_with_discount", { 
+    guestId, 
+    discountType, 
+    discountAmount, 
+    discountDescription 
+  });
+
+/**
+ * Check out a guest with optional discount and calculate final bill
+ * @param guestId - ID of the guest to check out  
+ * @param checkOutDate - Date of checkout (YYYY-MM-DD format)
+ * @param discountType - Type of discount ('flat' or 'percentage')
+ * @param discountAmount - Amount or percentage of discount
+ * @param discountDescription - Description/reason for discount
+ * @returns Final bill amount after discount
+ * @example
+ * ```typescript
+ * const finalBill = await checkoutGuestWithDiscount(123, "2025-08-20", "percentage", 10, "Senior citizen discount");
+ * console.log(`Final bill: Rs ${finalBill.toFixed(2)}`);
+ * ```
+ */
+export const checkoutGuestWithDiscount = (
+  guestId: number, 
+  checkOutDate: string,
+  discountType: 'flat' | 'percentage' = 'flat',
+  discountAmount: number = 0,
+  discountDescription: string = ''
+): Promise<number> => 
+  invoke("checkout_guest_with_discount", { 
+    guestId, 
+    checkOutDate, 
+    discountType, 
+    discountAmount, 
+    discountDescription 
+  });
 
 // Database Management APIs
 /**
@@ -529,6 +811,7 @@ export const getDatabaseStats = (): Promise<DatabaseStats> =>
 
 export const mockRoom: NewRoom = {
   number: "101",
+  room_type: "Single Room",
   daily_rate: 150.0
 };
 
@@ -550,8 +833,8 @@ export const mockMenuItem: NewMenuItem = {
 export const mockFoodOrder: NewFoodOrder = {
   guest_id: 1,
   items: [
-    { menu_item_id: 1, quantity: 2, unit_price: 12.99 },
-    { menu_item_id: 2, quantity: 1, unit_price: 8.50 }
+    { menu_item_id: 1, item_name: "Chicken Burger", quantity: 2, unit_price: 12.99 },
+    { menu_item_id: 2, item_name: "French Fries", quantity: 1, unit_price: 8.50 }
   ]
 };
 
@@ -629,3 +912,37 @@ export const handleApiError = (error: any): string => {
   }
   return "An unexpected error occurred. Please try again.";
 };
+
+// ============================================================================
+// TAX SETTINGS
+// ============================================================================
+
+/**
+ * Set the tax rate for invoices
+ * @param rate - Tax rate percentage (0-100)
+ * @returns Success message
+ */
+export const setTaxRate = (rate: number): Promise<string> => 
+  invoke("set_tax_rate", { rate });
+
+/**
+ * Get the current tax rate
+ * @returns Tax rate percentage
+ */
+export const getTaxRate = (): Promise<number> => 
+  invoke("get_tax_rate");
+
+/**
+ * Set whether tax is enabled for invoices
+ * @param enabled - Whether tax should be applied
+ * @returns Success message
+ */
+export const setTaxEnabled = (enabled: boolean): Promise<string> => 
+  invoke("set_tax_enabled", { enabled });
+
+/**
+ * Get whether tax is currently enabled
+ * @returns Whether tax is enabled
+ */
+export const getTaxEnabled = (): Promise<boolean> => 
+  invoke("get_tax_enabled");

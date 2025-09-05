@@ -2,8 +2,11 @@ import React from 'react';
 import './App.css';
 
 import Dashboard from './components/Dashboard';
+import NotificationToast from './components/NotificationToast';
 import OfflineLoginPage from './components/OfflineLoginPage';
+import { NotificationProvider } from './context/NotificationContext';
 import { AuthProvider, useAuth } from './context/SimpleAuthContext';
+import { ThemeProvider } from './context/ThemeContext';
 
 const AppContent: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -38,7 +41,12 @@ const AppContent: React.FC = () => {
   
   if (isAuthenticated) {
     console.log('✅ User is authenticated - showing Dashboard');
-    return <Dashboard />;
+    return (
+      <>
+        <Dashboard />
+        <NotificationToast />
+      </>
+    );
   } else {
     console.log('❌ User not authenticated - showing Login Page');
     return <OfflineLoginPage />;
@@ -48,9 +56,13 @@ const AppContent: React.FC = () => {
 function App() {
   console.log('🚀 App component rendering');
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <ThemeProvider>
+      <NotificationProvider>
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
+      </NotificationProvider>
+    </ThemeProvider>
   );
 }
 

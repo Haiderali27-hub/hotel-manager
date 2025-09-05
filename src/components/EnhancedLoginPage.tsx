@@ -485,8 +485,8 @@ const EnhancedLoginPage: React.FC = () => {
               <span>Offline Secure Access</span>
             </div>
             <div className="default-credentials">
-              <small>Default: admin / hotel123</small>
-              <small>Security Answer: Manager</small>
+              <small>Default: yasinheaven / YHSHotel@2025!</small>
+              <small>Security Answer: Center Yasin</small>
             </div>
           </div>
         </div>

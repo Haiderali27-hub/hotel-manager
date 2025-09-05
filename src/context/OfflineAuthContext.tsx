@@ -137,8 +137,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (request: LoginRequest): Promise<{ success: boolean; message: string }> => {
     try {
       // Mock authentication - in real app, this would call Tauri command
-      // Default credentials: admin / admin123
-      if (request.username === 'admin' && request.password === 'admin123') {
+      // Default credentials: yasinheaven / YHSHotel@2025!
+      if (request.username === 'yasinheaven' && request.password === 'YHSHotel@2025!') {
         // Create session
         const sessionToken = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         const expiryTime = new Date(Date.now() + 8 * 60 * 60 * 1000); // 8 hours
@@ -189,10 +189,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const getSecurityQuestion = async (username: string): Promise<{ success: boolean; question?: string; message: string }> => {
     try {
       // Mock security question - in real app, this would call Tauri command
-      if (username === 'admin') {
+      if (username === 'yasinheaven') {
         return {
           success: true,
-          question: 'What is your favorite hotel chain?',
+          question: 'What is the name of your village?',
           message: 'Security question retrieved successfully'
         };
       } else {
@@ -213,7 +213,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const resetPassword = async (username: string, securityAnswer: string, newPassword: string): Promise<{ success: boolean; message: string }> => {
     try {
       // Mock password reset - in real app, this would call Tauri command
-      if (username === 'admin' && securityAnswer.toLowerCase() === 'hilton') {
+      if (username === 'yasinheaven' && securityAnswer.toLowerCase() === 'center yasin') {
         // In a real app, you would update the password in the database here
         console.log(`Password reset for ${username} with new password: ${newPassword}`);
         

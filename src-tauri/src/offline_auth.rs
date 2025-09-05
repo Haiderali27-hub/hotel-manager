@@ -70,6 +70,16 @@ impl AuthManager {
         computed_hash == stored_hash
     }
 
+    fn verify_combined_hash(&self, input: &str, stored_combined: &str) -> bool {
+        // Handle the format "hash:salt" that comes from JavaScript hashPassword function
+        if let Some((stored_hash, stored_salt)) = stored_combined.split_once(':') {
+            let computed_hash = self.hash_password_pbkdf2(input, stored_salt);
+            computed_hash == stored_hash
+        } else {
+            false
+        }
+    }
+
     pub fn login(&self, request: LoginRequest) -> SqliteResult<LoginResponse> {
         let conn = self.get_connection()?;
 
@@ -197,24 +207,25 @@ impl AuthManager {
     pub fn reset_password(&self, request: PasswordResetRequest) -> SqliteResult<PasswordResetResponse> {
         let conn = self.get_connection()?;
 
-        // Get security answer
+        // Get security answer hash (stored in format "hash:salt")
         let stored_answer_result: Result<String, rusqlite::Error> = conn.query_row(
-            "SELECT security_answer FROM admin_auth WHERE username = ?1",
+            "SELECT security_answer_hash FROM admin_auth WHERE username = ?1",
             [&request.username],
             |row| row.get(0),
         );
 
         match stored_answer_result {
-            Ok(stored_answer) => {
-                if stored_answer.to_lowercase() == request.security_answer.to_lowercase() {
+            Ok(stored_answer_hash) => {
+                // Verify the security answer using the combined hash:salt format
+                if self.verify_combined_hash(&request.security_answer, &stored_answer_hash) {
                     // Generate new salt and hash for the new password
-                    let salt = Uuid::new_v4().to_string();
-                    let password_hash = self.hash_password_pbkdf2(&request.new_password, &salt);
+                    let new_salt = Uuid::new_v4().to_string();
+                    let password_hash = self.hash_password_pbkdf2(&request.new_password, &new_salt);
 
                     // Update password and reset failed attempts
                     conn.execute(
                         "UPDATE admin_auth SET password_hash = ?1, salt = ?2, failed_attempts = 0, locked_until = NULL WHERE username = ?3",
-                        [&password_hash, &salt, &request.username],
+                        [&password_hash, &new_salt, &request.username],
                     )?;
 
                     self.log_security_event(&conn, &request.username, "password_reset_successful")?;

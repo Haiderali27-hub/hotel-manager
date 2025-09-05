@@ -1,74 +1,27 @@
-use std::fs;
-use std::path::Path;
-use base64::{Engine as _, engine::general_purpose};
+use base64::{Engine, prelude::BASE64_STANDARD};
 
-// Include the logo as a compile-time embedded resource
-const LOGO_DATA: &[u8] = include_bytes!("../logo.png");
+// Include the JPG logo as a compile-time embedded resource for final invoices
+const LOGO_DATA: &[u8] = include_bytes!("../logoforcheckout.jpg");
 
 fn get_logo_base64() -> String {
-    // First try the embedded logo
+    // Use the embedded JPG logo for final invoices (ICO is too large at 410KB)
     if !LOGO_DATA.is_empty() {
-        let embedded_logo = base64::prelude::BASE64_STANDARD.encode(LOGO_DATA);
-        println!("✅ Using embedded logo data, size: {} bytes, base64 length: {}", LOGO_DATA.len(), embedded_logo.len());
+        let embedded_logo = BASE64_STANDARD.encode(LOGO_DATA);
+        println!("✅ Using embedded JPG logo data, size: {} bytes, base64 length: {}", LOGO_DATA.len(), embedded_logo.len());
         
-        // Validate base64 string doesn't contain problematic characters
-        if embedded_logo.contains('\n') || embedded_logo.contains('\r') {
-            println!("⚠️ WARNING: Base64 contains newline characters");
+        // Check if the logo starts with JPEG header
+        if LOGO_DATA.len() >= 3 && &LOGO_DATA[0..3] == b"\xFF\xD8\xFF" {
+            println!("✅ Valid JPEG header detected");
+        } else {
+            println!("❌ WARNING: Invalid JPEG header!");
+            println!("First 16 bytes: {:?}", &LOGO_DATA[..16.min(LOGO_DATA.len())]);
         }
         
-        // Try to decode and re-encode to verify integrity
-        match base64::prelude::BASE64_STANDARD.decode(&embedded_logo) {
-            Ok(decoded) => {
-                println!("✅ Base64 validation successful, decoded size: {}", decoded.len());
-                if decoded.len() == LOGO_DATA.len() {
-                    println!("✅ Decoded data matches original size");
-                } else {
-                    println!("❌ WARNING: Decoded size mismatch!");
-                }
-            },
-            Err(e) => {
-                println!("❌ ERROR: Base64 validation failed: {}", e);
-                return "".to_string();
-            }
-        }
-        
-        let preview = if embedded_logo.len() > 50 { &embedded_logo[..50] } else { &embedded_logo };
-        println!("📝 Base64 preview: {}...", preview);
         return embedded_logo;
     }
     
-    println!("⚠️  Warning: Embedded logo data is empty, trying file paths...");
-    
-    // Fallback: Try to read the logo file from different possible locations
-    let logo_paths = [
-        // Development paths
-        "src/assets/Logo/logo.png",
-        "assets/Logo/logo.png", 
-        "../src/assets/Logo/logo.png",
-        "../../src/assets/Logo/logo.png",
-        // Try relative to current working directory
-        "./src/assets/Logo/logo.png",
-        "./assets/Logo/logo.png",
-        // Try the copied logo
-        "logo.png",
-        "../logo.png",
-    ];
-    
-    for path in &logo_paths {
-        if Path::new(path).exists() {
-            if let Ok(logo_data) = fs::read(path) {
-                let base64_data = general_purpose::STANDARD.encode(&logo_data);
-                println!("✅ Logo found at: {}, size: {} bytes, base64 length: {}", path, logo_data.len(), base64_data.len());
-                return base64_data;
-            }
-        }
-    }
-    
-    println!("❌ ERROR: Logo file not found in any of the expected locations");
-    println!("🔍 Current working directory: {:?}", std::env::current_dir());
-    
-    // Return empty string if logo not found
-    String::new()
+    println!("⚠️  Warning: Embedded logo data is empty");
+    return "".to_string();
 }
 
 /// Print a food order receipt
@@ -621,12 +574,25 @@ pub fn build_final_invoice_html_with_discount(
         }}
         
         .logo {{
-            max-width: 120px;
-            height: auto;
+            width: 120px;
+            height: 60px;
             margin: 0 auto 15px;
             display: block;
-            background: yellow;
-            padding: 0px;
+            border: 2px solid #333;
+            background: #fff;
+            padding: 5px;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            object-fit: contain;
+        }}
+        
+        .logo::after {{
+            content: "LOGO";
+            display: block;
+            text-align: center;
+            color: #666;
+            font-size: 12px;
+            margin-top: 20px;
         }}
         
         .hotel-name {{
@@ -774,13 +740,27 @@ pub fn build_final_invoice_html_with_discount(
             .table-header {{
                 background: #fff !important;
             }}
+            
+            .logo {{
+                max-width: 100px !important;
+                height: auto !important;
+                border: 1px solid #000 !important;
+                background: #fff !important;
+                padding: 3px !important;
+                display: block !important;
+                margin: 0 auto 10px !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }}
         }}
     </style>
 </head>
 <body>
     <div class="invoice">
         <div class="header">
-            <img src="data:image/png;base64,{}" alt="Yasin Heaven Star Hotel Logo" class="logo">
+            <div class="logo-container" style="text-align: center; margin-bottom: 20px; padding: 10px;">
+                <img src="data:image/jpeg;base64,{}" alt="Hotel Logo" style="width: auto; height: 60px; max-width: 120px; object-fit: contain; display: block; margin: 0 auto; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+            </div>
             <div class="hotel-name">Yasin Heaven Star Hotel</div>
             <div class="hotel-address">Main Yasin Ghizer Gilgit Baltistan, Pakistan</div>
             <div class="hotel-address">Phone: +92 355 4650686</div>
@@ -877,7 +857,7 @@ pub fn build_final_invoice_html_with_discount(
     </div>
 </body>
 </html>"#,
-        logo_base64,                  // Logo base64 data
+        logo_base64,                  // Logo image data
         html_escape(&name),           // Customer name
         formatted_date,               // Current date
         html_escape(&room_number),    // Room number
@@ -925,11 +905,20 @@ pub fn build_final_invoice_html_with_discount(
     if html.len() > 500 {
         println!("🔍 FINAL INVOICE HTML PREVIEW (first 500 chars): {}", &html[..500]);
     }
-    if html.contains("data:image/png;base64,") {
+    
+    // Debug: Write the complete HTML to a file for inspection
+    let debug_path = "C:/Users/DELL/Desktop/hotel-app/debug_invoice.html";
+    if let Ok(mut file) = std::fs::File::create(debug_path) {
+        use std::io::Write;
+        let _ = file.write_all(html.as_bytes());
+        println!("📄 Complete HTML written to {} for inspection", debug_path);
+    }
+    
+    if html.contains("data:image/jpeg;base64,") {
         println!("✅ Logo image tag found in FINAL INVOICE HTML!");
         // Find the logo src and print the first 100 characters of base64
-        if let Some(start) = html.find("data:image/png;base64,") {
-            let base64_start = start + "data:image/png;base64,".len();
+        if let Some(start) = html.find("data:image/jpeg;base64,") {
+            let base64_start = start + "data:image/jpeg;base64,".len();
             if let Some(end) = html[base64_start..].find("\"") {
                 let base64_sample = &html[base64_start..base64_start + end.min(100)];
                 println!("🔍 Base64 in HTML (first 100 chars): {}", base64_sample);

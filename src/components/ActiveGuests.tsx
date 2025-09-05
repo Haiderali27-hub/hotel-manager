@@ -221,28 +221,6 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
     return new Date(dateString).toLocaleDateString();
   };
 
-  const handleCheckoutComplete = () => {
-    setShowCheckout(false);
-    setSelectedGuestForCheckout(null);
-    loadActiveGuests(); // Refresh the guest list
-  };
-
-  const handleToggleGuestOrders = (guestId: number) => {
-    setExpandedGuest(expandedGuest === guestId ? null : guestId);
-  };
-
-  const handlePrintReceipt = async (orderId: number) => {
-    try {
-      setError(null); // Clear any previous errors
-      await printOrderReceipt(orderId);
-      // Receipt will be printed automatically
-      console.log(`Receipt printed for order ${orderId}`);
-    } catch (err) {
-      setError('Failed to print receipt');
-      console.error('Print error:', err);
-    }
-  };
-
   const handleTogglePayment = async (orderId: number) => {
     setError(null);
     try {

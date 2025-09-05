@@ -142,7 +142,7 @@ export const LoginPage: React.FC = () => {
               <span>Secure Admin Access</span>
             </div>
             <div className="default-credentials">
-              <small>Default: admin / hotel123</small>
+              <small>Default: yasinheaven / YHSHotel@2025!</small>
             </div>
           </div>
         </div>

@@ -498,13 +498,26 @@ export const deleteMenuItem = async (itemId: number): Promise<boolean> => {
  * });
  * ```
  */
-export const addFoodOrder = (order: NewFoodOrder): Promise<number> => 
-  invoke("add_food_order", { 
-    guest_id: order.guest_id,
-    customer_type: order.guest_id ? 'active' : 'walkin',
-    customer_name: order.guest_id ? undefined : 'Walk-in Customer',
+export const addFoodOrder = async (order: NewFoodOrder): Promise<number> => {
+  const params = { 
+    guestId: order.guest_id,
+    customerType: order.guest_id ? 'active' : 'walkin',
+    customerName: order.guest_id ? undefined : 'Walk-in Customer',
     items: order.items
-  });
+  };
+  
+  console.log('🐛 DEBUG addFoodOrder - Sending parameters:', params);
+  console.log('🐛 DEBUG addFoodOrder - Original order object:', order);
+  
+  try {
+    const result = await invoke("add_food_order", params);
+    console.log('✅ DEBUG addFoodOrder - Success:', result);
+    return result as number;
+  } catch (error) {
+    console.error('❌ DEBUG addFoodOrder - Error:', error);
+    throw error;
+  }
+};
 
 /**
  * Get all food orders

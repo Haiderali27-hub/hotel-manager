@@ -854,6 +854,12 @@ pub fn dashboard_stats() -> Result<DashboardStats, String> {
 
 #[command]
 pub fn add_food_order(guest_id: Option<i64>, customer_type: String, customer_name: Option<String>, items: Vec<OrderItemInput>) -> Result<i64, String> {
+    println!("🐛 DEBUG add_food_order - Received parameters:");
+    println!("  guest_id: {:?}", guest_id);
+    println!("  customer_type: {:?}", customer_type);
+    println!("  customer_name: {:?}", customer_name);
+    println!("  items count: {:?}", items.len());
+    
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     if items.is_empty() {
@@ -862,8 +868,10 @@ pub fn add_food_order(guest_id: Option<i64>, customer_type: String, customer_nam
     
     // Calculate total
     let total_amount: f64 = items.iter().map(|item| item.unit_price * item.quantity as f64).sum();
+    println!("🐛 DEBUG add_food_order - Total amount: {:?}", total_amount);
     
     // Insert order
+    println!("🐛 DEBUG add_food_order - Inserting food order...");
     let _rows_affected = conn.execute(
         "INSERT INTO food_orders (guest_id, customer_type, customer_name, created_at, paid, total_amount) 
          VALUES (?1, ?2, ?3, ?4, 0, ?5)",

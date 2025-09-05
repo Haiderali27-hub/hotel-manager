@@ -335,10 +335,10 @@ export const addGuest = async (guest: NewGuest): Promise<number> => {
   const params = { 
     name: guest.name,
     phone: guest.phone,
-    room_id: guest.room_id || null,  // Use snake_case to match backend
-    check_in: guest.check_in,
-    check_out: guest.check_out,
-    daily_rate: guest.daily_rate
+    roomId: guest.room_id || null,  // Use camelCase to match expected parameter
+    checkIn: guest.check_in,        // Use camelCase to match expected parameter
+    checkOut: guest.check_out,      // Use camelCase to match expected parameter
+    dailyRate: guest.daily_rate     // Use camelCase to match expected parameter
   };
   
   console.log('🐛 DEBUG addGuest - Sending parameters:', params);

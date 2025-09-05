@@ -5,7 +5,7 @@ use tauri::{AppHandle, Wry};
 
 /// Export data to CSV file with user-selected location
 #[tauri::command]
-pub async fn export_history_csv_with_dialog(app: AppHandle<Wry>, tab: String, filters: Value) -> Result<String, String> {
+pub async fn export_history_csv_with_dialog(_app: AppHandle<Wry>, tab: String, filters: Value) -> Result<String, String> {
     use rfd::AsyncFileDialog;
     
     // Generate timestamped filename

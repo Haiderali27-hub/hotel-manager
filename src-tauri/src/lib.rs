@@ -1,7 +1,6 @@
 mod models;
 mod db;
 mod offline_auth;
-mod test;
 mod simple_commands;
 mod database_reset;
 mod export;
@@ -15,7 +14,6 @@ use offline_auth::{
     login_admin, get_security_question, reset_admin_password,
     validate_admin_session, logout_admin, cleanup_sessions, logout_all_sessions
 };
-use test::test_command;
 use simple_commands::{
     add_room, get_rooms, get_available_rooms_for_guest, update_room, delete_room,
         add_guest, get_active_guests, get_all_guests, get_guest, checkout_guest, checkout_guest_with_discount, update_guest,
@@ -27,7 +25,7 @@ use simple_commands::{
 };
 use database_reset::{reset_database, get_database_path, get_database_stats};
 use export::{export_history_csv, export_history_csv_with_dialog, create_database_backup};
-use print_templates::{build_order_receipt_html, build_final_invoice_html, build_final_invoice_html_with_discount, print_order_receipt, test_logo_loading};
+use print_templates::{build_order_receipt_html, build_final_invoice_html, build_final_invoice_html_with_discount, print_order_receipt};
 use settings::{
     backup_database, export_json_backup, get_reset_security_question, 
     validate_admin_password, validate_security_answer, reset_application_data
@@ -60,8 +58,6 @@ pub fn run() {
             logout_admin,
             cleanup_sessions,
             logout_all_sessions,
-            // Test
-            test_command,
             // Room management
             add_room,
             get_rooms,
@@ -109,7 +105,6 @@ pub fn run() {
             build_final_invoice_html,
             build_final_invoice_html_with_discount,
             print_order_receipt,
-            test_logo_loading,
             // Settings
             set_tax_rate,
             get_tax_rate,

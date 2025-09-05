@@ -26,13 +26,6 @@ if (!isTauri) {
 export const printOrderReceipt = (orderId: number): Promise<string> => 
   invoke("print_order_receipt", { orderId });
 
-/**
- * Test logo loading functionality
- * @returns Status message about logo loading
- */
-export const testLogoLoading = (): Promise<string> => 
-  invoke("test_logo_loading");
-
 // ============================================================================
 
 // Room Management
@@ -250,15 +243,10 @@ export const addRoom = async (room: NewRoom): Promise<number> => {
     dailyRate: room.daily_rate  // Use camelCase to match expected parameter
   };
   
-  console.log('🐛 DEBUG addRoom - Sending parameters:', params);
-  console.log('🐛 DEBUG addRoom - Original room object:', room);
-  
   try {
     const result = await invoke("add_room", params);
-    console.log('✅ DEBUG addRoom - Success:', result);
     return result as number;
   } catch (error) {
-    console.error('❌ DEBUG addRoom - Error:', error);
     throw error;
   }
 };
@@ -303,14 +291,10 @@ export const updateRoom = (roomId: number, updates: Partial<NewRoom>): Promise<b
  * @returns Success status
  */
 export const deleteRoom = async (roomId: number): Promise<boolean> => {
-  console.log('🐛 DEBUG deleteRoom - Sending parameters:', { id: roomId });
-  
   try {
     const result = await invoke("delete_room", { id: roomId });
-    console.log('✅ DEBUG deleteRoom - Success:', result);
     return result as boolean;
   } catch (error) {
-    console.error('❌ DEBUG deleteRoom - Error:', error);
     throw error;
   }
 };
@@ -341,15 +325,10 @@ export const addGuest = async (guest: NewGuest): Promise<number> => {
     dailyRate: guest.daily_rate     // Use camelCase to match expected parameter
   };
   
-  console.log('🐛 DEBUG addGuest - Sending parameters:', params);
-  console.log('🐛 DEBUG addGuest - Original guest object:', guest);
-  
   try {
     const result = await invoke("add_guest", params);
-    console.log('✅ DEBUG addGuest - Success:', result);
     return result as number;
   } catch (error) {
-    console.error('❌ DEBUG addGuest - Error:', error);
     throw error;
   }
 };
@@ -451,15 +430,10 @@ export const updateMenuItem = async (itemId: number, updates: Partial<NewMenuIte
     is_available: updates.is_available  // Use snake_case to match backend
   };
   
-  console.log('🐛 DEBUG updateMenuItem - Sending parameters:', params);
-  console.log('🐛 DEBUG updateMenuItem - Original updates:', updates);
-  
   try {
     const result = await invoke("update_menu_item", params);
-    console.log('✅ DEBUG updateMenuItem - Success:', result);
     return result as boolean;
   } catch (error) {
-    console.error('❌ DEBUG updateMenuItem - Error:', error);
     throw error;
   }
 };
@@ -470,14 +444,10 @@ export const updateMenuItem = async (itemId: number, updates: Partial<NewMenuIte
  * @returns Success status
  */
 export const deleteMenuItem = async (itemId: number): Promise<boolean> => {
-  console.log('🐛 DEBUG deleteMenuItem - Sending parameters:', { itemId: itemId });
-  
   try {
     const result = await invoke("delete_menu_item", { itemId: itemId });
-    console.log('✅ DEBUG deleteMenuItem - Success:', result);
     return result as boolean;
   } catch (error) {
-    console.error('❌ DEBUG deleteMenuItem - Error:', error);
     throw error;
   }
 };
@@ -506,15 +476,10 @@ export const addFoodOrder = async (order: NewFoodOrder): Promise<number> => {
     items: order.items
   };
   
-  console.log('🐛 DEBUG addFoodOrder - Sending parameters:', params);
-  console.log('🐛 DEBUG addFoodOrder - Original order object:', order);
-  
   try {
     const result = await invoke("add_food_order", params);
-    console.log('✅ DEBUG addFoodOrder - Success:', result);
     return result as number;
   } catch (error) {
-    console.error('❌ DEBUG addFoodOrder - Error:', error);
     throw error;
   }
 };

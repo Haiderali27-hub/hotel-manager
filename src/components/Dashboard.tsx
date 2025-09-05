@@ -20,9 +20,6 @@ const Dashboard: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [dbStats, setDbStats] = useState<DashboardStats | null>(null);
-  const [dbError, setDbError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [testMode, setTestMode] = useState(false);
 
   const toggleSidebar = () => {
     setSidebarOpen(!sidebarOpen);
@@ -64,36 +61,23 @@ const Dashboard: React.FC = () => {
     setCurrentPage('dashboard');
   };
 
-  const refreshData = () => {
-    testDatabase();
-  };
-
-  // Test database connection
-  const testDatabase = async () => {
-    setLoading(true);
-    setDbError(null);
+  const refreshData = async () => {
     try {
-      console.log('🔍 Testing database connection...');
       const stats = await DatabaseService.getDashboardStats();
-      console.log('✅ Database response:', stats);
       setDbStats(stats);
-      setTestMode(true);
     } catch (error) {
-      console.error('❌ Database error:', error);
-      setDbError(error instanceof Error ? error.message : 'Database connection failed');
-    } finally {
-      setLoading(false);
+      console.error('Database error:', error);
     }
   };
 
   // Load database data on component mount
   useEffect(() => {
-    testDatabase();
+    refreshData();
   }, []);
 
-  // Get display stats (real data when available and test mode is on, otherwise sample data)
+  // Get display stats (real data when available, otherwise sample data)
   const getDisplayStats = () => {
-    if (testMode && dbStats) {
+    if (dbStats) {
       return [
         { 
           title: 'Total Guests This Month', 
@@ -219,87 +203,6 @@ const Dashboard: React.FC = () => {
           }}>
             Total Overview
           </h1>
-        </div>
-
-        {/* Database Test Section */}
-        <div style={{
-          backgroundColor: colors.card,
-          padding: '1.5rem',
-          borderRadius: '12px',
-          marginBottom: '2rem',
-          border: `1px solid ${colors.border}`,
-          boxShadow: `0 1px 3px ${colors.shadow}`
-        }}>
-          <h2 style={{ 
-            color: colors.text, 
-            fontSize: '1.2rem', 
-            fontWeight: '600', 
-            marginBottom: '1rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem'
-          }}>
-            🗄️ Database Connection Test
-          </h2>
-          
-          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <button
-              onClick={testDatabase}
-              disabled={loading}
-              style={{
-                backgroundColor: loading ? colors.textMuted : colors.accent,
-                color: loading ? colors.text : (theme === 'dark' ? '#000' : '#FFFFFF'),
-                padding: '0.5rem 1rem',
-                borderRadius: '6px',
-                border: 'none',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                fontWeight: '500'
-              }}
-            >
-              {loading ? '🔄 Testing...' : '🔍 Test Database'}
-            </button>
-
-            <button
-              onClick={() => setTestMode(!testMode)}
-              style={{
-                backgroundColor: testMode ? colors.success : colors.textMuted,
-                color: '#FFFFFF',
-                padding: '0.5rem 1rem',
-                borderRadius: '6px',
-                border: 'none',
-                cursor: 'pointer',
-                fontWeight: '500'
-              }}
-            >
-              {testMode ? '📊 Show Real Data' : '📋 Show Sample Data'}
-            </button>
-          </div>
-
-          {dbError && (
-            <div style={{
-              marginTop: '1rem',
-              padding: '1rem',
-              backgroundColor: colors.errorBg,
-              border: `1px solid ${colors.error}`,
-              borderRadius: '6px',
-              color: colors.error
-            }}>
-              ❌ {dbError}
-            </div>
-          )}
-
-          {dbStats && testMode && (
-            <div style={{
-              marginTop: '1rem',
-              padding: '1rem',
-              backgroundColor: colors.successBg,
-              border: `1px solid ${colors.success}`,
-              borderRadius: '6px',
-              color: colors.success
-            }}>
-              ✅ Database connected successfully! Real data loaded.
-            </div>
-          )}
         </div>
 
         {/* Stats Grid */}

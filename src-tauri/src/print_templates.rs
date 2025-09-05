@@ -71,17 +71,6 @@ fn get_logo_base64() -> String {
     String::new()
 }
 
-/// Test command to verify logo loading
-#[tauri::command]
-pub fn test_logo_loading() -> Result<String, String> {
-    let logo_base64 = get_logo_base64();
-    if logo_base64.is_empty() {
-        Ok("ERROR: Logo not found or could not be loaded".to_string())
-    } else {
-        Ok(format!("SUCCESS: Logo loaded, base64 length: {} chars", logo_base64.len()))
-    }
-}
-
 /// Print a food order receipt
 #[tauri::command]
 pub fn print_order_receipt(order_id: i64) -> Result<String, String> {

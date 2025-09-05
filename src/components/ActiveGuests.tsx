@@ -207,12 +207,6 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
     setShowCheckout(true);
   };
 
-  const handleCheckoutComplete = () => {
-    setShowCheckout(false);
-    setSelectedGuestForCheckout(null);
-    loadActiveGuests(); // Refresh the guest list
-  };
-
   const resetEditForm = () => {
     setEditingGuest(null);
     setEditName('');
@@ -225,6 +219,12 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString();
+  };
+
+  const handleCheckoutComplete = () => {
+    setShowCheckout(false);
+    setSelectedGuestForCheckout(null);
+    loadActiveGuests(); // Refresh the guest list
   };
 
   const handleToggleGuestOrders = (guestId: number) => {

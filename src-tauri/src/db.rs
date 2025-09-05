@@ -172,15 +172,16 @@ fn create_initial_schema(conn: &Connection) -> SqliteResult<()> {
 
 fn create_update_triggers(conn: &Connection) -> SqliteResult<()> {
     // Trigger for rooms table
-    conn.execute(
-        "CREATE TRIGGER IF NOT EXISTS trigger_rooms_updated_at 
-         AFTER UPDATE ON rooms
-         FOR EACH ROW 
-         BEGIN
-            UPDATE rooms SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-         END",
-        [],
-    )?;
+    // NOTE: Rooms table doesn't have updated_at column, so no trigger needed
+    // conn.execute(
+    //     "CREATE TRIGGER IF NOT EXISTS trigger_rooms_updated_at 
+    //      AFTER UPDATE ON rooms
+    //      FOR EACH ROW 
+    //      BEGIN
+    //         UPDATE rooms SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+    //      END",
+    //     [],
+    // )?;
     
     // Trigger for guests table
     conn.execute(
@@ -193,16 +194,16 @@ fn create_update_triggers(conn: &Connection) -> SqliteResult<()> {
         [],
     )?;
     
-    // Trigger for menu_items table
-    conn.execute(
-        "CREATE TRIGGER IF NOT EXISTS trigger_menu_items_updated_at 
-         AFTER UPDATE ON menu_items
-         FOR EACH ROW 
-         BEGIN
-            UPDATE menu_items SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-         END",
-        [],
-    )?;
+    // NOTE: menu_items table doesn't have updated_at column, so no trigger needed
+    // conn.execute(
+    //     "CREATE TRIGGER IF NOT EXISTS trigger_menu_items_updated_at 
+    //      AFTER UPDATE ON menu_items
+    //      FOR EACH ROW 
+    //      BEGIN
+    //         UPDATE menu_items SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+    //      END",
+    //     [],
+    // )?;
     
     // Trigger for admin_settings table
     conn.execute(

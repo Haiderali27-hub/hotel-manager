@@ -58,13 +58,6 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Helper function to get guest name by ID
-  const getGuestName = (guestId: number | null | undefined): string => {
-    if (!guestId) return 'Walk-in';
-    const guest = guests.find(g => g.id === guestId);
-    return guest ? guest.name : `Guest #${guestId}`;
-  };
-
   // Helper function to get room number by room ID
   const getRoomNumber = (roomId: number | null | undefined): string => {
     if (!roomId) return 'Walk-in';

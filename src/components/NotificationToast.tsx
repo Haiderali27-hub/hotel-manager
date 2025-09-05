@@ -22,21 +22,6 @@ const NotificationToast: React.FC = () => {
     }
   };
 
-  const getColorForType = (type: Notification['type']) => {
-    switch (type) {
-      case 'success':
-        return '#10b981'; // green-500
-      case 'error':
-        return '#ef4444'; // red-500
-      case 'warning':
-        return '#f59e0b'; // amber-500
-      case 'info':
-        return '#3b82f6'; // blue-500
-      default:
-        return colors.primary;
-    }
-  };
-
   const getBorderColorForType = (type: Notification['type']) => {
     switch (type) {
       case 'success':

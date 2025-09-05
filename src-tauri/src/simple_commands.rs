@@ -8,6 +8,11 @@ use chrono::{NaiveDate, Utc, Datelike};
 
 #[command]
 pub fn add_room(number: String, room_type: String, daily_rate: f64) -> Result<String, String> {
+    println!("🐛 DEBUG add_room - Received parameters:");
+    println!("  number: {:?}", number);
+    println!("  room_type: {:?}", room_type);
+    println!("  daily_rate: {:?}", daily_rate);
+    
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     // Validate input
@@ -21,14 +26,19 @@ pub fn add_room(number: String, room_type: String, daily_rate: f64) -> Result<St
         return Err("Daily rate must be greater than 0".to_string());
     }
     
+    println!("🐛 DEBUG add_room - Executing INSERT query...");
     let result = conn.execute(
         "INSERT INTO rooms (number, room_type, daily_rate, is_occupied, is_active) VALUES (?1, ?2, ?3, 0, 1)",
         params![number.trim(), room_type.trim(), daily_rate],
     );
     
     match result {
-        Ok(_) => Ok(format!("Room {} added successfully", number)),
+        Ok(rows_affected) => {
+            println!("✅ DEBUG add_room - Success! Rows affected: {}", rows_affected);
+            Ok(format!("Room {} added successfully", number))
+        },
         Err(e) => {
+            println!("❌ DEBUG add_room - SQL Error: {}", e);
             if e.to_string().contains("UNIQUE constraint failed") {
                 Err(format!("Room {} already exists", number))
             } else {
@@ -138,9 +148,6 @@ pub fn update_room(room_id: i64, number: Option<String>, daily_rate: Option<f64>
         return Err("No fields to update".to_string());
     }
     
-    // Add updated_at timestamp
-    update_parts.push("updated_at = CURRENT_TIMESTAMP");
-    
     let query = format!("UPDATE rooms SET {} WHERE id = ?", update_parts.join(", "));
     params.push(Box::new(room_id));
     
@@ -163,29 +170,43 @@ pub fn update_room(room_id: i64, number: Option<String>, daily_rate: Option<f64>
 
 #[command]
 pub fn delete_room(id: i64) -> Result<String, String> {
+    println!("🐛 DEBUG delete_room - Received id: {:?}", id);
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     // Check if room is in use by active guests
+    println!("🐛 DEBUG delete_room - Checking for active guests...");
     let guest_count: i64 = conn.query_row(
         "SELECT COUNT(*) FROM guests WHERE room_id = ?1 AND status = 'active'",
         params![id],
         |row| row.get(0)
-    ).map_err(|e| e.to_string())?;
+    ).map_err(|e| {
+        println!("❌ DEBUG delete_room - Error checking guests: {}", e);
+        e.to_string()
+    })?;
+    
+    println!("🐛 DEBUG delete_room - Active guests count: {}", guest_count);
     
     if guest_count > 0 {
         return Err("Cannot delete room with active guests".to_string());
     }
     
     // Soft delete by setting is_active = 0
+    println!("🐛 DEBUG delete_room - Executing UPDATE query...");
     let affected = conn.execute(
         "UPDATE rooms SET is_active = 0 WHERE id = ?1",
         params![id],
-    ).map_err(|e| e.to_string())?;
+    ).map_err(|e| {
+        println!("❌ DEBUG delete_room - SQL Error: {}", e);
+        e.to_string()
+    })?;
+    
+    println!("🐛 DEBUG delete_room - Rows affected: {}", affected);
     
     if affected == 0 {
         return Err("Room not found".to_string());
     }
     
+    println!("✅ DEBUG delete_room - Success!");
     Ok("Room deleted successfully".to_string())
 }
 
@@ -193,6 +214,14 @@ pub fn delete_room(id: i64) -> Result<String, String> {
 
 #[command]
 pub fn add_guest(name: String, phone: Option<String>, room_id: Option<i64>, check_in: String, check_out: Option<String>, daily_rate: f64) -> Result<i64, String> {
+    println!("🐛 DEBUG add_guest - Received parameters:");
+    println!("  name: {:?}", name);
+    println!("  phone: {:?}", phone);
+    println!("  room_id: {:?}", room_id);
+    println!("  check_in: {:?}", check_in);
+    println!("  check_out: {:?}", check_out);
+    println!("  daily_rate: {:?}", daily_rate);
+    
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     // Validate inputs
@@ -624,6 +653,13 @@ pub fn get_menu_items() -> Result<Vec<MenuItem>, String> {
 
 #[command]
 pub fn update_menu_item(item_id: i64, name: Option<String>, price: Option<f64>, category: Option<String>, is_available: Option<bool>) -> Result<String, String> {
+    println!("🐛 DEBUG update_menu_item - Received parameters:");
+    println!("  item_id: {:?}", item_id);
+    println!("  name: {:?}", name);
+    println!("  price: {:?}", price);
+    println!("  category: {:?}", category);
+    println!("  is_available: {:?}", is_available);
+    
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     // Build dynamic update query
@@ -682,38 +718,59 @@ pub fn update_menu_item(item_id: i64, name: Option<String>, price: Option<f64>, 
 
 #[command]
 pub fn delete_menu_item(item_id: i64) -> Result<String, String> {
+    println!("🐛 DEBUG delete_menu_item - Received item_id: {:?}", item_id);
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     // Check if menu item is used in any orders
+    println!("🐛 DEBUG delete_menu_item - Checking for existing orders...");
     let order_count: i64 = conn.query_row(
         "SELECT COUNT(*) FROM order_items WHERE menu_item_id = ?1",
         params![item_id],
         |row| row.get(0)
-    ).map_err(|e| e.to_string())?;
+    ).map_err(|e| {
+        println!("❌ DEBUG delete_menu_item - Error checking orders: {}", e);
+        e.to_string()
+    })?;
+    
+    println!("🐛 DEBUG delete_menu_item - Order count: {}", order_count);
     
     if order_count > 0 {
         // Soft delete by setting is_available = 0
+        println!("🐛 DEBUG delete_menu_item - Item used in orders, doing soft delete...");
         let affected = conn.execute(
-            "UPDATE menu_items SET is_available = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?1",
+            "UPDATE menu_items SET is_available = 0 WHERE id = ?1",
             params![item_id],
-        ).map_err(|e| e.to_string())?;
+        ).map_err(|e| {
+            println!("❌ DEBUG delete_menu_item - Error in soft delete: {}", e);
+            e.to_string()
+        })?;
+        
+        println!("🐛 DEBUG delete_menu_item - Soft delete affected rows: {}", affected);
         
         if affected == 0 {
             return Err("Menu item not found".to_string());
         }
         
+        println!("✅ DEBUG delete_menu_item - Soft delete success!");
         Ok("Menu item deactivated (used in existing orders)".to_string())
     } else {
         // Hard delete if not used in any orders
+        println!("🐛 DEBUG delete_menu_item - Item not used, doing hard delete...");
         let affected = conn.execute(
             "DELETE FROM menu_items WHERE id = ?1",
             params![item_id],
-        ).map_err(|e| e.to_string())?;
+        ).map_err(|e| {
+            println!("❌ DEBUG delete_menu_item - Error in hard delete: {}", e);
+            e.to_string()
+        })?;
+        
+        println!("🐛 DEBUG delete_menu_item - Hard delete affected rows: {}", affected);
         
         if affected == 0 {
             return Err("Menu item not found".to_string());
         }
         
+        println!("✅ DEBUG delete_menu_item - Hard delete success!");
         Ok("Menu item deleted successfully".to_string())
     }
 }

@@ -9,8 +9,8 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({ children }) => {
   const { isAuthenticated, logout } = useAuth();
 
   useEffect(() => {
-    let inactivityTimer: NodeJS.Timeout | null = null;
-    let warningTimer: NodeJS.Timeout | null = null;
+    let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
+    let warningTimer: ReturnType<typeof setTimeout> | null = null;
 
     const resetInactivityTimer = () => {
       if (inactivityTimer) clearTimeout(inactivityTimer);

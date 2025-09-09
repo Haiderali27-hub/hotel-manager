@@ -35,7 +35,7 @@ const OfflineLoginPage: React.FC = () => {
   const [showResetPassword, setShowResetPassword] = useState(false);
   const [securityQuestion, setSecurityQuestion] = useState<string>('');
   const [showHardcodedPassword, setShowHardcodedPassword] = useState(false);
-  const [passwordTimer, setPasswordTimer] = useState<NodeJS.Timeout | null>(null);
+  const [passwordTimer, setPasswordTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;

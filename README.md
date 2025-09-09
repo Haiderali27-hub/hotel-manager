@@ -82,6 +82,15 @@ A comprehensive desktop hotel management application built with **Tauri**, **Rea
 - **Username**: `yasinheaven`
 - **Password**: `YHSHotel@2025!`
 
+## 📚 User Documentation
+
+### For End Users
+- **[🚀 Quick Start Guide](QUICK_START.md)**: Get up and running in 10 minutes
+- **[📖 Complete User Guide](USER_GUIDE.md)**: Comprehensive guide for daily operations
+
+### For Developers
+- Continue reading this README for technical setup and development information
+
 ## 🚀 Quick Start Guide
 
 ### 1. First Login

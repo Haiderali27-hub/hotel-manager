@@ -20,9 +20,19 @@ const Dashboard: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [dbStats, setDbStats] = useState<DashboardStats | null>(null);
+  const [showNavDropdown, setShowNavDropdown] = useState(false);
 
   const toggleSidebar = () => {
     setSidebarOpen(!sidebarOpen);
+  };
+
+  const toggleNavDropdown = () => {
+    setShowNavDropdown(!showNavDropdown);
+  };
+
+  const handleQuickNavigation = (page: string) => {
+    setCurrentPage(page);
+    setShowNavDropdown(false);
   };
 
   const handleNavigation = (title: string) => {
@@ -74,6 +84,23 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     refreshData();
   }, []);
+
+  // Handle click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showNavDropdown) {
+        const target = event.target as Element;
+        if (!target.closest('[data-nav-dropdown]')) {
+          setShowNavDropdown(false);
+        }
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showNavDropdown]);
 
   // Get display stats (real data when available, otherwise sample data)
   const getDisplayStats = () => {
@@ -310,22 +337,192 @@ const Dashboard: React.FC = () => {
           </button>
         </div>
 
-        {/* Center - Logo */}
+        {/* Center - Logo with Navigation */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          flex: 1
+          flex: 1,
+          position: 'relative'
         }}>
-          <img 
-            src={logoImage} 
-            alt="Hotel Logo"
+          <div
+            data-nav-dropdown
+            onClick={toggleNavDropdown}
             style={{
-              height: '50px',
-              width: 'auto',
-              objectFit: 'contain'
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              padding: '0.5rem',
+              borderRadius: '6px',
+              transition: 'background-color 0.2s',
+              backgroundColor: showNavDropdown ? colors.surface : 'transparent'
             }}
-          />
+            title="Quick navigation menu"
+          >
+            <img 
+              src={logoImage} 
+              alt="Hotel Logo"
+              style={{
+                height: '50px',
+                width: 'auto',
+                objectFit: 'contain'
+              }}
+            />
+          </div>
+
+          {/* Navigation Dropdown */}
+          {showNavDropdown && (
+            <div 
+              data-nav-dropdown
+              style={{
+                position: 'absolute',
+                top: '100%',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                marginTop: '0.5rem',
+                backgroundColor: colors.surface,
+                border: `1px solid ${colors.border}`,
+                borderRadius: '8px',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                zIndex: 1000,
+                minWidth: '200px',
+                padding: '0.5rem 0'
+              }}
+            >
+              <div
+                onClick={() => handleQuickNavigation('dashboard')}
+                style={{
+                  padding: '0.75rem 1rem',
+                  cursor: 'pointer',
+                  backgroundColor: currentPage === 'dashboard' ? colors.accent : 'transparent',
+                  color: currentPage === 'dashboard' ? (theme === 'dark' ? '#000' : '#FFFFFF') : colors.text,
+                  transition: 'background-color 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  if (currentPage !== 'dashboard') {
+                    e.currentTarget.style.backgroundColor = colors.border;
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (currentPage !== 'dashboard') {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }
+                }}
+              >
+                🏠 Dashboard
+              </div>
+              <div
+                onClick={() => handleQuickNavigation('add-guest')}
+                style={{
+                  padding: '0.75rem 1rem',
+                  cursor: 'pointer',
+                  backgroundColor: currentPage === 'add-guest' ? colors.accent : 'transparent',
+                  color: currentPage === 'add-guest' ? (theme === 'dark' ? '#000' : '#FFFFFF') : colors.text,
+                  transition: 'background-color 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  if (currentPage !== 'add-guest') {
+                    e.currentTarget.style.backgroundColor = colors.border;
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (currentPage !== 'add-guest') {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }
+                }}
+              >
+                👤 Add Guest
+              </div>
+              <div
+                onClick={() => handleQuickNavigation('active-guests')}
+                style={{
+                  padding: '0.75rem 1rem',
+                  cursor: 'pointer',
+                  backgroundColor: currentPage === 'active-guests' ? colors.accent : 'transparent',
+                  color: currentPage === 'active-guests' ? (theme === 'dark' ? '#000' : '#FFFFFF') : colors.text,
+                  transition: 'background-color 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  if (currentPage !== 'active-guests') {
+                    e.currentTarget.style.backgroundColor = colors.border;
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (currentPage !== 'active-guests') {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }
+                }}
+              >
+                🏨 Active Guests
+              </div>
+              <div
+                onClick={() => handleQuickNavigation('add-food-order')}
+                style={{
+                  padding: '0.75rem 1rem',
+                  cursor: 'pointer',
+                  backgroundColor: currentPage === 'add-food-order' ? colors.accent : 'transparent',
+                  color: currentPage === 'add-food-order' ? (theme === 'dark' ? '#000' : '#FFFFFF') : colors.text,
+                  transition: 'background-color 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  if (currentPage !== 'add-food-order') {
+                    e.currentTarget.style.backgroundColor = colors.border;
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (currentPage !== 'add-food-order') {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }
+                }}
+              >
+                🍽️ Add Food Order
+              </div>
+              <div
+                onClick={() => handleQuickNavigation('manage-menu-rooms')}
+                style={{
+                  padding: '0.75rem 1rem',
+                  cursor: 'pointer',
+                  backgroundColor: currentPage === 'manage-menu-rooms' ? colors.accent : 'transparent',
+                  color: currentPage === 'manage-menu-rooms' ? (theme === 'dark' ? '#000' : '#FFFFFF') : colors.text,
+                  transition: 'background-color 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  if (currentPage !== 'manage-menu-rooms') {
+                    e.currentTarget.style.backgroundColor = colors.border;
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (currentPage !== 'manage-menu-rooms') {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }
+                }}
+              >
+                ⚙️ Manage Menu/Rooms
+              </div>
+              <div
+                onClick={() => handleQuickNavigation('history')}
+                style={{
+                  padding: '0.75rem 1rem',
+                  cursor: 'pointer',
+                  backgroundColor: currentPage === 'history' ? colors.accent : 'transparent',
+                  color: currentPage === 'history' ? (theme === 'dark' ? '#000' : '#FFFFFF') : colors.text,
+                  transition: 'background-color 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  if (currentPage !== 'history') {
+                    e.currentTarget.style.backgroundColor = colors.border;
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (currentPage !== 'history') {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }
+                }}
+              >
+                📊 History
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right side - Theme toggle, User info and logout */}

@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 use chrono::{Utc, Duration};
+use std::path::PathBuf;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LoginRequest {
@@ -41,8 +42,44 @@ pub struct AuthManager {
     db_path: String,
 }
 
+// Helper function to get the correct database path for both dev and production
+fn get_database_path() -> String {
+    // Check if we're in development (db folder exists in current directory)
+    if let Ok(current_dir) = std::env::current_dir() {
+        let dev_db_path = current_dir.join("db").join("hotel.db");
+        if dev_db_path.exists() {
+            return dev_db_path.to_string_lossy().to_string();
+        }
+        
+        // If not in development, look for database in the executable directory
+        if let Ok(exe_path) = std::env::current_exe() {
+            if let Some(exe_dir) = exe_path.parent() {
+                let prod_db_path = exe_dir.join("hotel.db");
+                
+                // Create database file if it doesn't exist by copying from dev location
+                if !prod_db_path.exists() {
+                    if dev_db_path.exists() {
+                        std::fs::copy(&dev_db_path, &prod_db_path).ok();
+                    }
+                }
+                
+                return prod_db_path.to_string_lossy().to_string();
+            }
+        }
+    }
+    
+    // Final fallback
+    "db/hotel.db".to_string()
+}
+
 impl AuthManager {
-    pub fn new(db_path: &str) -> Self {
+    pub fn new() -> Self {
+        Self {
+            db_path: get_database_path(),
+        }
+    }
+
+    pub fn new_with_path(db_path: &str) -> Self {
         Self {
             db_path: db_path.to_string(),
         }
@@ -85,7 +122,7 @@ impl AuthManager {
 
         // Check if account is locked
         let locked_until: Option<String> = conn.query_row(
-            "SELECT locked_until FROM admin_auth WHERE username = ?1",
+            "SELECT locked_until FROM admin_auth WHERE LOWER(username) = LOWER(?1)",
             [&request.username],
             |row| row.get(0),
         ).unwrap_or(None);
@@ -105,7 +142,7 @@ impl AuthManager {
 
         // Get user credentials
         let user_result: Result<(String, String, i32), rusqlite::Error> = conn.query_row(
-            "SELECT password_hash, salt, failed_attempts FROM admin_auth WHERE username = ?1",
+            "SELECT password_hash, salt, failed_attempts FROM admin_auth WHERE LOWER(username) = LOWER(?1)",
             [&request.username],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         );
@@ -115,7 +152,7 @@ impl AuthManager {
                 if self.verify_password(&request.password, &stored_hash, &salt) {
                     // Successful login - reset failed attempts and clear lock
                     conn.execute(
-                        "UPDATE admin_auth SET failed_attempts = 0, locked_until = NULL WHERE username = ?1",
+                        "UPDATE admin_auth SET failed_attempts = 0, locked_until = NULL WHERE LOWER(username) = LOWER(?1)",
                         [&request.username],
                     )?;
 
@@ -143,7 +180,7 @@ impl AuthManager {
                         // Lock account for 15 minutes
                         let lock_until = Utc::now() + Duration::minutes(15);
                         conn.execute(
-                            "UPDATE admin_auth SET failed_attempts = ?1, locked_until = ?2 WHERE username = ?3",
+                            "UPDATE admin_auth SET failed_attempts = ?1, locked_until = ?2 WHERE LOWER(username) = LOWER(?3)",
                             [&new_failed_attempts.to_string(), &lock_until.to_rfc3339(), &request.username],
                         )?;
                         
@@ -156,7 +193,7 @@ impl AuthManager {
                         })
                     } else {
                         conn.execute(
-                            "UPDATE admin_auth SET failed_attempts = ?1 WHERE username = ?2",
+                            "UPDATE admin_auth SET failed_attempts = ?1 WHERE LOWER(username) = LOWER(?2)",
                             [&new_failed_attempts.to_string(), &request.username],
                         )?;
                         
@@ -185,7 +222,7 @@ impl AuthManager {
         let conn = self.get_connection()?;
 
         let question_result: Result<String, rusqlite::Error> = conn.query_row(
-            "SELECT security_question FROM admin_auth WHERE username = ?1",
+            "SELECT security_question FROM admin_auth WHERE LOWER(username) = LOWER(?1)",
             [username],
             |row| row.get(0),
         );
@@ -209,7 +246,7 @@ impl AuthManager {
 
         // Get security answer hash (stored in format "hash:salt")
         let stored_answer_result: Result<String, rusqlite::Error> = conn.query_row(
-            "SELECT security_answer_hash FROM admin_auth WHERE username = ?1",
+            "SELECT security_answer_hash FROM admin_auth WHERE LOWER(username) = LOWER(?1)",
             [&request.username],
             |row| row.get(0),
         );
@@ -224,7 +261,7 @@ impl AuthManager {
 
                     // Update password and reset failed attempts
                     conn.execute(
-                        "UPDATE admin_auth SET password_hash = ?1, salt = ?2, failed_attempts = 0, locked_until = NULL WHERE username = ?3",
+                        "UPDATE admin_auth SET password_hash = ?1, salt = ?2, failed_attempts = 0, locked_until = NULL WHERE LOWER(username) = LOWER(?3)",
                         [&password_hash, &new_salt, &request.username],
                     )?;
 
@@ -316,7 +353,7 @@ impl AuthManager {
 // Tauri commands for the frontend
 #[tauri::command]
 pub async fn login_admin(request: LoginRequest) -> Result<LoginResponse, String> {
-    let auth_manager = AuthManager::new("db/hotel.db");
+    let auth_manager = AuthManager::new();
     
     match auth_manager.login(request) {
         Ok(response) => Ok(response),
@@ -326,7 +363,7 @@ pub async fn login_admin(request: LoginRequest) -> Result<LoginResponse, String>
 
 #[tauri::command]
 pub async fn get_security_question(username: String) -> Result<SecurityQuestionResponse, String> {
-    let auth_manager = AuthManager::new("db/hotel.db");
+    let auth_manager = AuthManager::new();
     
     match auth_manager.get_security_question(&username) {
         Ok(response) => Ok(response),
@@ -336,7 +373,7 @@ pub async fn get_security_question(username: String) -> Result<SecurityQuestionR
 
 #[tauri::command]
 pub async fn reset_admin_password(request: PasswordResetRequest) -> Result<PasswordResetResponse, String> {
-    let auth_manager = AuthManager::new("db/hotel.db");
+    let auth_manager = AuthManager::new();
     
     match auth_manager.reset_password(request) {
         Ok(response) => Ok(response),
@@ -346,7 +383,7 @@ pub async fn reset_admin_password(request: PasswordResetRequest) -> Result<Passw
 
 #[tauri::command]
 pub async fn validate_admin_session(session_token: String) -> Result<bool, String> {
-    let auth_manager = AuthManager::new("db/hotel.db");
+    let auth_manager = AuthManager::new();
     
     match auth_manager.validate_session(&session_token) {
         Ok(is_valid) => Ok(is_valid),
@@ -356,7 +393,7 @@ pub async fn validate_admin_session(session_token: String) -> Result<bool, Strin
 
 #[tauri::command]
 pub async fn logout_admin(session_token: String) -> Result<(), String> {
-    let auth_manager = AuthManager::new("db/hotel.db");
+    let auth_manager = AuthManager::new();
     
     match auth_manager.logout(&session_token) {
         Ok(_) => Ok(()),
@@ -366,7 +403,7 @@ pub async fn logout_admin(session_token: String) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn cleanup_sessions() -> Result<(), String> {
-    let auth_manager = AuthManager::new("db/hotel.db");
+    let auth_manager = AuthManager::new();
     
     match auth_manager.cleanup_expired_sessions() {
         Ok(_) => Ok(()),
@@ -376,7 +413,7 @@ pub async fn cleanup_sessions() -> Result<(), String> {
 
 #[tauri::command]
 pub async fn logout_all_sessions() -> Result<(), String> {
-    let auth_manager = AuthManager::new("db/hotel.db");
+    let auth_manager = AuthManager::new();
     
     // Clear all active sessions for security when app closes
     match auth_manager.get_connection() {

@@ -127,17 +127,17 @@ const EnhancedLoginPage: React.FC = () => {
   };
 
   const handleForgotPassword = async () => {
-    if (!resetData.username.trim()) {
-      setError('Please enter username');
-      return;
-    }
+    // Remove username requirement - use hardcoded username for this admin system
+    const adminUsername = 'yasinheaven';
 
     setIsLoading(true);
     try {
-      const result = await getSecurityQuestion(resetData.username.trim());
+      const result = await getSecurityQuestion(adminUsername);
       if (result.success && result.question) {
         setSecurityQuestion(result.question);
         setSuccess('Security question loaded');
+        // Set the username in resetData for password reset
+        setResetData(prev => ({ ...prev, username: adminUsername }));
       } else {
         setError(result.message);
       }

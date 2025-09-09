@@ -90,6 +90,12 @@ html, body {
   justify-content: center;
   gap: 12px;
   margin-bottom: 8px;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.hotel-logo:hover {
+  transform: scale(1.05);
+  opacity: 0.8;
 }
 
 .logo-image {
@@ -264,12 +270,15 @@ html, body {
   display: block;
   color: #1976d2;
   margin-bottom: 8px;
+  font-size: 1.1rem;
+  font-weight: 600;
 }
 
 .security-question p {
   margin: 0;
-  color: #333;
+  color: #000;
   font-style: italic;
+  font-weight: 500;
 }
 
 .error-message {

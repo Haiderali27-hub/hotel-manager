@@ -183,54 +183,9 @@ fn insert_seed_data(conn: &Connection) -> Result<(), String> {
         DELETE FROM menu_items;
         DELETE FROM admin_settings;
         
-        -- Rooms (20 rooms across different tiers)
-        INSERT INTO rooms (number, daily_rate) VALUES
-          ('101', 120.00), ('102', 120.00), ('103', 120.00), ('104', 120.00), ('105', 120.00),
-          ('106', 120.00), ('107', 120.00), ('108', 120.00),
-          ('201', 180.00), ('202', 180.00), ('203', 180.00), ('204', 180.00), ('205', 180.00),
-          ('206', 180.00), ('207', 180.00), ('208', 180.00),
-          ('301', 250.00), ('302', 250.00), ('303', 280.00), ('304', 320.00);
+        -- No default rooms - users can add their own rooms
         
-        -- Menu items (30+ diverse items)
-        INSERT INTO menu_items (name, price, category, is_available) VALUES
-          -- Breakfast
-          ('Continental Breakfast', 18.50, 'Breakfast', 1),
-          ('Full English Breakfast', 24.00, 'Breakfast', 1),
-          ('Pancakes with Maple Syrup', 16.00, 'Breakfast', 1),
-          ('Fresh Fruit Bowl', 12.00, 'Breakfast', 1),
-          ('Avocado Toast', 14.50, 'Breakfast', 1),
-          -- Main Courses
-          ('Grilled Chicken Breast', 28.00, 'Main Course', 1),
-          ('Beef Tenderloin Steak', 42.00, 'Main Course', 1),
-          ('Pan-Seared Salmon', 32.00, 'Main Course', 1),
-          ('Vegetarian Pasta Primavera', 22.00, 'Main Course', 1),
-          ('Lamb Curry with Rice', 26.00, 'Main Course', 1),
-          ('Fish and Chips', 24.00, 'Main Course', 1),
-          ('Chicken Caesar Salad', 20.00, 'Main Course', 1),
-          -- Appetizers
-          ('Garlic Bread', 8.50, 'Appetizer', 1),
-          ('Buffalo Wings (6pc)', 16.00, 'Appetizer', 1),
-          ('Cheese Platter', 22.00, 'Appetizer', 1),
-          ('Soup of the Day', 11.00, 'Appetizer', 1),
-          ('Nachos Supreme', 18.00, 'Appetizer', 1),
-          -- Desserts
-          ('Chocolate Brownie', 12.00, 'Dessert', 1),
-          ('Tiramisu', 14.00, 'Dessert', 1),
-          ('Ice Cream (3 scoops)', 9.00, 'Dessert', 1),
-          ('Cheesecake', 13.50, 'Dessert', 1),
-          -- Beverages
-          ('Coffee', 4.50, 'Beverage', 1),
-          ('Tea Selection', 4.00, 'Beverage', 1),
-          ('Fresh Orange Juice', 7.00, 'Beverage', 1),
-          ('Coca Cola', 3.50, 'Beverage', 1),
-          ('Mineral Water', 3.00, 'Beverage', 1),
-          ('Red Wine (Glass)', 12.00, 'Beverage', 1),
-          ('White Wine (Glass)', 11.00, 'Beverage', 1),
-          ('Local Beer', 6.50, 'Beverage', 1),
-          -- Room Service
-          ('Club Sandwich', 19.00, 'Room Service', 1),
-          ('Burger and Fries', 21.00, 'Room Service', 1),
-          ('Pizza Margherita', 18.00, 'Room Service', 1);
+        -- No default menu items - users can add their own menu items
         
         -- Active guests (6 currently checked in)
         INSERT INTO guests (name, phone, room_id, check_in, check_out, daily_rate, is_active) VALUES
@@ -318,7 +273,7 @@ fn insert_seed_data(conn: &Connection) -> Result<(), String> {
           ('hotel_name', 'Grand Vista Hotel'),
           ('hotel_address', '123 Main Street, Downtown'),
           ('hotel_phone', '+1-555-HOTEL-1'),
-          ('currency_symbol', '$'),
+          ('currency_symbol', 'Rs'),
           ('timezone', 'America/New_York'),
           ('check_in_time', '15:00'),
           ('check_out_time', '11:00');

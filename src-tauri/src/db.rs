@@ -242,40 +242,9 @@ fn create_indexes(conn: &Connection) -> SqliteResult<()> {
 }
 
 fn seed_initial_data(conn: &Connection) -> SqliteResult<()> {
-    // Insert sample rooms
-    let rooms = vec![
-        "101", "102", "103", "104", "105",
-        "201", "202", "203", "204", "205",
-        "301", "302", "303", "304", "305"
-    ];
+    // No default rooms - users can add their own rooms
     
-    for room_num in rooms {
-        conn.execute(
-            "INSERT OR IGNORE INTO rooms (number, is_active) VALUES (?1, 1)",
-            rusqlite::params![room_num],
-        )?;
-    }
-    
-    // Insert sample menu items
-    let menu_items = vec![
-        ("Tea", 50.0),
-        ("Coffee", 80.0),
-        ("Breakfast Combo", 350.0),
-        ("Lunch Special", 450.0),
-        ("Dinner Combo", 550.0),
-        ("Sandwich", 200.0),
-        ("Burger", 300.0),
-        ("Pizza Slice", 250.0),
-        ("Cold Drink", 60.0),
-        ("Fresh Juice", 120.0),
-    ];
-    
-    for (name, price) in menu_items {
-        conn.execute(
-            "INSERT OR IGNORE INTO menu_items (name, price, is_active) VALUES (?1, ?2, 1)",
-            rusqlite::params![name, price],
-        )?;
-    }
+    // No default menu items - users can add their own menu items
     
     println!("Initial data seeded successfully");
     Ok(())

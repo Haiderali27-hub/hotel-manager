@@ -549,94 +549,109 @@ async fn create_automatic_backup_before_reset() -> Result<String, String> {
 
 // Seed default data after reset
 fn seed_default_data(conn: &rusqlite::Transaction) -> Result<(), String> {
-    // Add default rooms with correct column names
-    let rooms = vec![
-        ("101", "Standard Room", 8000.0),
-        ("102", "Standard Room", 8000.0),
-        ("103", "Standard Room", 8000.0),
-        ("104", "Deluxe Room", 10000.0),
-        ("105", "Deluxe Room", 10000.0),
-        ("106", "Suite", 15000.0),
-        ("107", "Standard Room", 8000.0),
-        ("108", "Standard Room", 8000.0),
-        ("109", "Deluxe Room", 10000.0),
-        ("110", "Suite", 15000.0),
-    ];
+    // No default rooms - users can add their own rooms
     
-    for (number, room_type, daily_rate) in rooms {
-        conn.execute(
-            "INSERT INTO rooms (number, room_type, daily_rate, is_occupied, is_active) VALUES (?, ?, ?, 0, 1)",
-            [number, room_type, &daily_rate.to_string()],
-        ).map_err(|e| format!("Failed to insert room {}: {}", number, e))?;
-    }
-    
-    // Add default menu items with correct column names
-    let menu_items = vec![
-        ("Dal Chawal", 300.0),
-        ("Chicken Karahi", 800.0),
-        ("Mutton Karahi", 1200.0),
-        ("Chicken Biryani", 600.0),
-        ("Mutton Biryani", 800.0),
-        ("Naan", 25.0),
-        ("Roti", 15.0),
-        ("Tea", 50.0),
-        ("Coffee", 80.0),
-        ("Cold Drink", 60.0),
-        ("Water Bottle", 30.0),
-        ("Kheer", 200.0),
-    ];
-    
-    for (name, price) in menu_items {
-        conn.execute(
-            "INSERT INTO menu_items (name, price, is_active) VALUES (?, ?, 1)",
-            [name, &price.to_string()],
-        ).map_err(|e| format!("Failed to insert menu item {}: {}", name, e))?;
-    }
+    // No default menu items - users can add their own menu items
     
     Ok(())
 }
 
-// Open file browser to select backup file
+// Find latest backup file automatically
 #[command]
 pub async fn select_backup_file() -> Result<String, String> {
-    // For now, let's provide a simple way to get common backup file locations
-    // Since Tauri v2 file dialog requires additional setup
-    
     use crate::db::get_db_path;
     
     let db_path = get_db_path();
     let app_dir = db_path.parent().ok_or("Failed to get app directory")?;
-    let backup_dir = app_dir.join("backups");
     
-    // Check if backup directory exists and get latest backup
-    if backup_dir.exists() {
-        let mut backup_files = Vec::new();
-        
-        if let Ok(entries) = std::fs::read_dir(&backup_dir) {
-            for entry in entries.flatten() {
-                if let Some(file_name) = entry.file_name().to_str() {
-                    if file_name.ends_with(".db") && file_name.contains("hotel_backup") {
-                        backup_files.push(entry.path());
+    // Check multiple backup directories
+    let backup_dirs = vec![
+        app_dir.join("backups"),
+        app_dir.join("..").join("backups").canonicalize().unwrap_or(app_dir.join("backups")),
+    ];
+    
+    let mut all_backup_files = Vec::new();
+    
+    for backup_dir in backup_dirs {
+        if backup_dir.exists() {
+            if let Ok(entries) = std::fs::read_dir(&backup_dir) {
+                for entry in entries.flatten() {
+                    if let Some(file_name) = entry.file_name().to_str() {
+                        if file_name.ends_with(".db") && file_name.contains("hotel_backup") {
+                            all_backup_files.push(entry.path());
+                        }
                     }
                 }
             }
         }
-        
-        // Sort by modification time and return the most recent
-        backup_files.sort_by_key(|path| {
-            std::fs::metadata(path)
-                .and_then(|m| m.modified())
-                .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
-        });
-        
-        if let Some(latest_backup) = backup_files.last() {
-            return Ok(latest_backup.to_string_lossy().to_string());
+    }
+    
+    // Sort by modification time and return the most recent
+    all_backup_files.sort_by_key(|path| {
+        std::fs::metadata(path)
+            .and_then(|m| m.modified())
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+    });
+    
+    if let Some(latest_backup) = all_backup_files.last() {
+        return Ok(latest_backup.to_string_lossy().to_string());
+    }
+    
+    // If no backups found, provide helpful error message
+    let user_dir = std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\Users\\Default".to_string());
+    Err(format!("No backup files found. Please check these locations:\n1. App backup directory: {}\\backups\n2. Desktop: {}\\Desktop\n3. Downloads folder", app_dir.display(), user_dir))
+}
+
+// Open file browser to manually select backup file
+#[command] 
+pub async fn browse_backup_file() -> Result<String, String> {
+    use crate::db::get_db_path;
+    
+    let db_path = get_db_path();
+    let app_dir = db_path.parent().ok_or("Failed to get app directory")?;
+    
+    // Check multiple backup directories and list available files
+    let backup_dirs = vec![
+        app_dir.join("backups"),
+        app_dir.join("..").join("backups").canonicalize().unwrap_or(app_dir.join("backups")),
+    ];
+    
+    let mut available_backups = Vec::new();
+    
+    for backup_dir in backup_dirs {
+        if backup_dir.exists() {
+            if let Ok(entries) = std::fs::read_dir(&backup_dir) {
+                for entry in entries.flatten() {
+                    if let Some(file_name) = entry.file_name().to_str() {
+                        if file_name.ends_with(".db") && file_name.contains("hotel_backup") {
+                            available_backups.push(entry.path().to_string_lossy().to_string());
+                        }
+                    }
+                }
+            }
         }
     }
     
-    // If no backups found in app directory, suggest common locations
-    let user_dir = std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\Users\\Default".to_string());
-    let desktop_path = format!("{}\\Desktop\\hotel_backup_YYYYMMDD_HHMMSS.db", user_dir);
-    
-    Err(format!("No backup files found. Please check these locations:\n1. App backup directory: {}\n2. Desktop: {}\n3. Downloads folder", backup_dir.display(), desktop_path))
+    if available_backups.is_empty() {
+        Err("No backup files found. Please use the 'Find Latest' button to automatically find your latest backup, or manually enter the full path to your backup file.\n\nBackup files should be named like 'hotel_backup_YYYYMMDD_HHMMSS.db'".to_string())
+    } else {
+        // Sort by modification time and show available files
+        let mut backup_info = String::from("✅ Found backup files! Please copy and paste one of these paths:\n\n");
+        
+        // Sort by file name (which includes timestamp)
+        available_backups.sort();
+        available_backups.reverse(); // Show newest first
+        
+        for (i, backup) in available_backups.iter().enumerate() {
+            backup_info.push_str(&format!("📁 {}\n\n", backup));
+            if i >= 4 { // Show max 5 files to avoid cluttering
+                backup_info.push_str(&format!("... and {} more files\n\n", available_backups.len() - 5));
+                break;
+            }
+        }
+        
+        backup_info.push_str("💡 Instructions:\n1. Copy one of the paths above\n2. Paste it in the text field\n3. Or use 'Find Latest' for automatic selection");
+        
+        Err(backup_info)
+    }
 }

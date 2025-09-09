@@ -190,10 +190,10 @@ pub fn delete_room(id: i64) -> Result<String, String> {
         return Err("Cannot delete room with active guests".to_string());
     }
     
-    // Soft delete by setting is_active = 0
-    println!("🐛 DEBUG delete_room - Executing UPDATE query...");
+    // Hard delete the room so the room number can be reused
+    println!("🐛 DEBUG delete_room - Executing DELETE query...");
     let affected = conn.execute(
-        "UPDATE rooms SET is_active = 0 WHERE id = ?1",
+        "DELETE FROM rooms WHERE id = ?1",
         params![id],
     ).map_err(|e| {
         println!("❌ DEBUG delete_room - SQL Error: {}", e);
@@ -208,6 +208,20 @@ pub fn delete_room(id: i64) -> Result<String, String> {
     
     println!("✅ DEBUG delete_room - Success!");
     Ok("Room deleted successfully".to_string())
+}
+
+#[command]
+pub fn cleanup_soft_deleted_rooms() -> Result<String, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    // Remove any soft-deleted rooms that might be blocking UNIQUE constraints
+    let affected = conn.execute(
+        "DELETE FROM rooms WHERE is_active = 0",
+        [],
+    ).map_err(|e| e.to_string())?;
+    
+    println!("🧹 Cleaned up {} soft-deleted rooms", affected);
+    Ok(format!("Cleaned up {} soft-deleted rooms", affected))
 }
 
 // ===== GUEST COMMANDS =====

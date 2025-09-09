@@ -15,8 +15,7 @@ interface SecurityQuestionData {
 
 const OfflineLoginPage: React.FC = () => {
   const { 
-    login, 
-    getSecurityQuestion
+    login
   } = useAuth();
 
   const [formData, setFormData] = useState<LoginFormData>({
@@ -78,30 +77,6 @@ const OfflineLoginPage: React.FC = () => {
     } catch (err) {
       setError('An unexpected error occurred. Please try again.');
       console.error('Login error:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleForgotPassword = async () => {
-    if (!formData.username) {
-      setError('Please enter your username first');
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const result = await getSecurityQuestion(formData.username);
-      if (result.success && result.question) {
-        setSecurityQuestion(result.question);
-        setShowResetPassword(true);
-        setError('');
-        setSecurityData(prev => ({ ...prev, username: formData.username }));
-      } else {
-        setError(result.message || 'Unable to retrieve security question');
-      }
-    } catch (err) {
-      setError('Error retrieving security question');
     } finally {
       setIsLoading(false);
     }
@@ -254,16 +229,7 @@ const OfflineLoginPage: React.FC = () => {
                 )}
               </button>
 
-              <div className="login-links">
-                <button
-                  type="button"
-                  className="link-button"
-                  onClick={handleForgotPassword}
-                  disabled={isLoading}
-                >
-                  Forgot Password?
-                </button>
-              </div>
+              {/* Forgot Password button removed as requested */}
             </form>
           ) : (
             // Security Question Form

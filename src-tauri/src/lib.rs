@@ -15,7 +15,7 @@ use offline_auth::{
     validate_admin_session, logout_admin, cleanup_sessions, logout_all_sessions
 };
 use simple_commands::{
-    add_room, get_rooms, get_available_rooms_for_guest, update_room, delete_room,
+    add_room, get_rooms, get_available_rooms_for_guest, update_room, delete_room, cleanup_soft_deleted_rooms,
         add_guest, get_active_guests, get_all_guests, get_guest, checkout_guest, checkout_guest_with_discount, update_guest,
     add_menu_item, get_menu_items, update_menu_item, delete_menu_item,
         dashboard_stats, add_food_order, get_food_orders, get_food_orders_by_guest, mark_order_paid,
@@ -28,7 +28,7 @@ use export::{export_history_csv, export_history_csv_with_dialog, create_database
 use print_templates::{build_order_receipt_html, build_final_invoice_html, build_final_invoice_html_with_discount, print_order_receipt};
 use settings::{
     backup_database, export_json_backup, restore_database_from_backup, get_reset_security_question, 
-    validate_security_answer, reset_application_data
+    validate_security_answer, reset_application_data, select_backup_file, browse_backup_file
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -64,6 +64,7 @@ pub fn run() {
             get_available_rooms_for_guest,
             update_room,
             delete_room,
+            cleanup_soft_deleted_rooms,
             // Guest management
             add_guest,
             get_active_guests,
@@ -114,6 +115,8 @@ pub fn run() {
             backup_database,
             export_json_backup,
             restore_database_from_backup,
+            select_backup_file,
+            browse_backup_file,
             get_reset_security_question,
             validate_security_answer,
             reset_application_data

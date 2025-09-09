@@ -13,7 +13,6 @@ const isTauri = typeof window !== 'undefined' && window.__TAURI_INTERNALS__;
 if (!isTauri) {
   console.warn('Tauri APIs not available - running in web mode');
 }
-
 // ============================================================================
 // TYPE DEFINITIONS - IPC Contract
 // ============================================================================
@@ -286,7 +285,7 @@ export const updateRoom = (roomId: number, updates: Partial<NewRoom>): Promise<b
   invoke("update_room", { room_id: roomId, number: updates.number, daily_rate: updates.daily_rate });
 
 /**
- * Delete a room (only if not occupied)
+ * Delete a room from the system
  * @param roomId - ID of the room to delete
  * @returns Success status
  */
@@ -294,6 +293,19 @@ export const deleteRoom = async (roomId: number): Promise<boolean> => {
   try {
     const result = await invoke("delete_room", { id: roomId });
     return result as boolean;
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Clean up any soft-deleted rooms that might be blocking room number reuse
+ * @returns Number of rooms cleaned up
+ */
+export const cleanupSoftDeletedRooms = async (): Promise<string> => {
+  try {
+    const result = await invoke("cleanup_soft_deleted_rooms");
+    return result as string;
   } catch (error) {
     throw error;
   }

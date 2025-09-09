@@ -8,18 +8,14 @@ interface LoginFormData {
   password: string;
 }
 
-interface PasswordResetData {
+interface SecurityQuestionData {
   username: string;
   securityAnswer: string;
-  newPassword: string;
-  confirmPassword: string;
 }
 
 const OfflineLoginPage: React.FC = () => {
   const { 
-    login, 
-    getSecurityQuestion, 
-    resetPassword 
+    login
   } = useAuth();
 
   const [formData, setFormData] = useState<LoginFormData>({
@@ -27,11 +23,9 @@ const OfflineLoginPage: React.FC = () => {
     password: '',
   });
   
-  const [resetData, setResetData] = useState<PasswordResetData>({
+  const [securityData, setSecurityData] = useState<SecurityQuestionData>({
     username: '',
     securityAnswer: '',
-    newPassword: '',
-    confirmPassword: '',
   });
 
   const [isLoading, setIsLoading] = useState(false);
@@ -40,6 +34,8 @@ const OfflineLoginPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showResetPassword, setShowResetPassword] = useState(false);
   const [securityQuestion, setSecurityQuestion] = useState<string>('');
+  const [showHardcodedPassword, setShowHardcodedPassword] = useState(false);
+  const [passwordTimer, setPasswordTimer] = useState<NodeJS.Timeout | null>(null);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -50,9 +46,9 @@ const OfflineLoginPage: React.FC = () => {
     setError('');
   };
 
-  const handleResetInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSecurityInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setResetData(prev => ({
+    setSecurityData(prev => ({
       ...prev,
       [name]: value
     }));
@@ -86,72 +82,35 @@ const OfflineLoginPage: React.FC = () => {
     }
   };
 
-  const handleForgotPassword = async () => {
-    if (!formData.username) {
-      setError('Please enter your username first');
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const result = await getSecurityQuestion(formData.username);
-      if (result.success && result.question) {
-        setSecurityQuestion(result.question);
-        setShowResetPassword(true);
-        setError('');
-        setResetData(prev => ({ ...prev, username: formData.username }));
-      } else {
-        setError(result.message || 'Unable to retrieve security question');
-      }
-    } catch (err) {
-      setError('Error retrieving security question');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handlePasswordReset = async (e: React.FormEvent) => {
+  const handleSecurityAnswer = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
 
     try {
-      if (!resetData.securityAnswer || !resetData.newPassword || !resetData.confirmPassword) {
-        setError('Please fill in all fields');
+      if (!securityData.securityAnswer) {
+        setError('Please enter your security answer');
         return;
       }
 
-      if (resetData.newPassword !== resetData.confirmPassword) {
-        setError('New passwords do not match');
-        return;
-      }
-
-      if (resetData.newPassword.length < 6) {
-        setError('Password must be at least 6 characters long');
-        return;
-      }
-
-      const result = await resetPassword(
-        resetData.username,
-        resetData.securityAnswer,
-        resetData.newPassword
-      );
-
-      if (result.success) {
-        setSuccess('Password reset successful! You can now login with your new password.');
-        setShowResetPassword(false);
-        setResetData({
-          username: '',
-          securityAnswer: '',
-          newPassword: '',
-          confirmPassword: '',
-        });
-        setSecurityQuestion('');
+      // Simple hardcoded check for the security answer
+      if (securityData.securityAnswer.toLowerCase().trim() === 'center yasin') {
+        setShowHardcodedPassword(true);
+        setSuccess('Correct! Your password is: YHSHotel@2025!');
+        
+        // Hide the password after 10 seconds
+        const timer = setTimeout(() => {
+          setShowHardcodedPassword(false);
+          setSuccess('');
+          handleBackToLogin();
+        }, 10000);
+        
+        setPasswordTimer(timer);
       } else {
-        setError(result.message);
+        setError('Incorrect security answer. Please try again.');
       }
     } catch (err) {
-      setError('An error occurred while resetting password');
+      setError('An error occurred while verifying your answer');
     } finally {
       setIsLoading(false);
     }
@@ -166,12 +125,17 @@ const OfflineLoginPage: React.FC = () => {
     setError('');
     setSuccess('');
     setSecurityQuestion('');
-    setResetData({
+    setShowHardcodedPassword(false);
+    setSecurityData({
       username: '',
       securityAnswer: '',
-      newPassword: '',
-      confirmPassword: '',
     });
+    
+    // Clear any existing timer
+    if (passwordTimer) {
+      clearTimeout(passwordTimer);
+      setPasswordTimer(null);
+    }
   };
 
   return (
@@ -265,20 +229,11 @@ const OfflineLoginPage: React.FC = () => {
                 )}
               </button>
 
-              <div className="login-links">
-                <button
-                  type="button"
-                  className="link-button"
-                  onClick={handleForgotPassword}
-                  disabled={isLoading}
-                >
-                  Forgot Password?
-                </button>
-              </div>
+              {/* Forgot Password button removed as requested */}
             </form>
           ) : (
-            // Password Reset Form
-            <form className="login-form" onSubmit={handlePasswordReset}>
+            // Security Question Form
+            <form className="login-form" onSubmit={handleSecurityAnswer}>
               <div className="security-question">
                 <strong>Security Question:</strong>
                 <p>{securityQuestion}</p>
@@ -294,51 +249,23 @@ const OfflineLoginPage: React.FC = () => {
                     name="securityAnswer"
                     className="form-input"
                     placeholder="Enter your answer"
-                    value={resetData.securityAnswer}
-                    onChange={handleResetInputChange}
+                    value={securityData.securityAnswer}
+                    onChange={handleSecurityInputChange}
                     disabled={isLoading}
                     required
                   />
                 </div>
               </div>
 
-              <div className="form-group">
-                <label htmlFor="newPassword" className="form-label">New Password</label>
-                <div className="input-wrapper">
-                  <span className="input-icon">🔑</span>
-                  <input
-                    type="password"
-                    id="newPassword"
-                    name="newPassword"
-                    className="form-input"
-                    placeholder="Enter new password (min 6 characters)"
-                    value={resetData.newPassword}
-                    onChange={handleResetInputChange}
-                    disabled={isLoading}
-                    required
-                    minLength={6}
-                  />
+              {showHardcodedPassword && (
+                <div className="password-display">
+                  <div className="password-box">
+                    <strong>Your Password:</strong>
+                    <div className="password-text">YHSHotel@2025!</div>
+                    <small>This message will disappear in 10 seconds</small>
+                  </div>
                 </div>
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="confirmPassword" className="form-label">Confirm New Password</label>
-                <div className="input-wrapper">
-                  <span className="input-icon">🔑</span>
-                  <input
-                    type="password"
-                    id="confirmPassword"
-                    name="confirmPassword"
-                    className="form-input"
-                    placeholder="Confirm new password"
-                    value={resetData.confirmPassword}
-                    onChange={handleResetInputChange}
-                    disabled={isLoading}
-                    required
-                    minLength={6}
-                  />
-                </div>
-              </div>
+              )}
 
               {error && (
                 <div className="error-message">
@@ -357,15 +284,17 @@ const OfflineLoginPage: React.FC = () => {
               <button
                 type="submit"
                 className={`login-button ${isLoading ? 'loading' : ''}`}
-                disabled={isLoading}
+                disabled={isLoading || showHardcodedPassword}
               >
                 {isLoading ? (
                   <div className="loading-spinner">
                     <div className="spinner"></div>
-                    <span>Resetting Password...</span>
+                    <span>Verifying Answer...</span>
                   </div>
+                ) : showHardcodedPassword ? (
+                  'Password Shown Above'
                 ) : (
-                  'Reset Password'
+                  'Verify Answer'
                 )}
               </button>
 
@@ -386,13 +315,6 @@ const OfflineLoginPage: React.FC = () => {
             <div className="security-note">
               <span className="security-icon">🔒</span>
               <span>Offline Secure Authentication</span>
-            </div>
-            
-            <div className="default-credentials">
-              <small>Default Admin Credentials:</small>
-              <small><strong>Username:</strong> admin</small>
-              <small><strong>Password:</strong> admin123</small>
-              <small><strong>Security Answer:</strong> Hilton</small>
             </div>
           </div>
         </div>

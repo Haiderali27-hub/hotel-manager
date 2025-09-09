@@ -94,6 +94,19 @@ const Settings: React.FC = () => {
     }
   };
 
+  // Browse for backup file
+  const browseBackupFile = async () => {
+    try {
+      const selectedFile = await invoke<string>('browse_backup_file');
+      setRestoreFilePath(selectedFile);
+      showSuccess('Backup File Selected', 'Backup file has been selected successfully.');
+    } catch (error) {
+      console.error('Browse backup result:', error);
+      // The "error" actually contains helpful information about available files
+      showSuccess('📁 Available Backup Files', `${error}`);
+    }
+  };
+
   // Handle database backup
   const handleBackupDB = async () => {
     try {
@@ -488,7 +501,14 @@ const Settings: React.FC = () => {
                         className="browse-btn"
                         type="button"
                       >
-                        � Find Latest
+                        🔍 Find Latest
+                      </button>
+                      <button 
+                        onClick={browseBackupFile}
+                        className="browse-btn"
+                        type="button"
+                      >
+                        📁 Browse
                       </button>
                     </div>
                     <small>⚠️ File must end with .db extension</small>

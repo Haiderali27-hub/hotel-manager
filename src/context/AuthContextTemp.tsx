@@ -58,7 +58,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const login = async (request: LoginRequest) => {
     // Mock validation for demo
-    if (request.username === 'admin' && request.password === 'hotel123') {
+    if (request.username === 'yasinheaven' && request.password === 'YHSHotel@2025!') {
       
       if (!request.otp) {
         // Password is correct, but OTP is required
@@ -100,7 +100,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const generateOTP = async (username: string) => {
-    if (username === 'admin') {
+    if (username === 'yasinheaven') {
       // Generate a 6-digit OTP
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
       setCurrentOTP(otp);
@@ -122,10 +122,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const getSecurityQuestion = async (username: string) => {
-    if (username === 'admin') {
+    if (username === 'yasinheaven') {
       return {
         success: true,
-        question: 'What is the default role of the first user?',
+        question: 'What is the name of your village?',
         message: 'Security question retrieved',
       };
     } else {
@@ -137,7 +137,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const resetPassword = async (username: string, securityAnswer: string, newPassword: string) => {
-    if (username === 'admin' && securityAnswer.toLowerCase() === 'manager') {
+    if (username === 'yasinheaven' && securityAnswer.toLowerCase() === 'center yasin') {
       console.log('Password would be reset to:', newPassword);
       return {
         success: true,
@@ -152,7 +152,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const changePassword = async (currentPassword: string, newPassword: string) => {
-    if (currentPassword === 'hotel123') {
+    if (currentPassword === 'YHSHotel@2025!') {
       console.log('Password would be changed to:', newPassword);
       return {
         success: true,

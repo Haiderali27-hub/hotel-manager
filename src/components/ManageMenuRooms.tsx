@@ -3,6 +3,7 @@ import type { MenuItem, Room } from '../api/client';
 import {
     addMenuItem,
     addRoom,
+    cleanupSoftDeletedRooms,
     deleteMenuItem,
     deleteRoom,
     getMenuItems,
@@ -277,6 +278,24 @@ const ManageMenuRooms: React.FC<ManageMenuRoomsProps> = ({ onBack }) => {
         }
     };
 
+    const handleCleanupSoftDeletedRooms = async () => {
+        if (confirm('Are you sure you want to cleanup all soft-deleted rooms? This will permanently remove them from the database.')) {
+            try {
+                setLoading(true);
+                const result = await cleanupSoftDeletedRooms();
+                showSuccess('Cleanup Complete', result);
+                setError(null);
+                loadData(); // Reload rooms to reflect changes
+            } catch (err) {
+                const errorMessage = err instanceof Error ? err.message : 'Failed to cleanup soft-deleted rooms';
+                setError(errorMessage);
+                showError('Cleanup Failed', errorMessage);
+            } finally {
+                setLoading(false);
+            }
+        }
+    };
+
     const handleDeleteRoom = async (id: number) => {
         const room = rooms.find(r => r.id === id);
         const roomInfo = room ? `Room ${room.number}` : 'This room';
@@ -524,7 +543,7 @@ const ManageMenuRooms: React.FC<ManageMenuRoomsProps> = ({ onBack }) => {
             {activeTab === 'rooms' && (
                 <div>
                     {/* Add Room Button */}
-                    <div style={{ marginBottom: '2rem' }}>
+                    <div style={{ marginBottom: '2rem', display: 'flex', gap: '1rem' }}>
                         <button
                             onClick={() => setShowRoomForm(true)}
                             style={{
@@ -539,6 +558,21 @@ const ManageMenuRooms: React.FC<ManageMenuRoomsProps> = ({ onBack }) => {
                             }}
                         >
                             + Add Room
+                        </button>
+                        <button
+                            onClick={handleCleanupSoftDeletedRooms}
+                            style={{
+                                backgroundColor: colors.warning,
+                                color: '#FFFFFF',
+                                border: 'none',
+                                padding: '0.75rem 1.5rem',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                fontSize: '1rem',
+                                fontWeight: '600'
+                            }}
+                        >
+                            🧹 Cleanup Deleted Rooms
                         </button>
                     </div>
 
@@ -590,7 +624,7 @@ const ManageMenuRooms: React.FC<ManageMenuRoomsProps> = ({ onBack }) => {
                                     <div>{index + 1}</div>
                                     <div>Room {room.number}</div>
                                     <div>{room.room_type}</div>
-                                    <div>${room.daily_rate}/night</div>
+                                    <div>Rs {room.daily_rate}/night</div>
                                     <div>
                                         {room.is_occupied ? (
                                             <span style={{
@@ -846,7 +880,7 @@ const ManageMenuRooms: React.FC<ManageMenuRoomsProps> = ({ onBack }) => {
 
                         <div style={{ marginBottom: '1.5rem' }}>
                             <label style={{ display: 'block', marginBottom: '0.5rem', color: colors.text }}>
-                                Daily Rate ($)
+                                Daily Rate (Rs)
                             </label>
                             <input
                                 type="number"

@@ -80,9 +80,9 @@ pub fn delete_room(id: i64) -> Result<(), String> {
         return Err("Cannot delete room with active guests".to_string());
     }
     
-    // Soft delete by setting is_active = 0
+    // Hard delete the room so the room number can be reused
     let affected = conn.execute(
-        "UPDATE rooms SET is_active = 0 WHERE id = ?1",
+        "DELETE FROM rooms WHERE id = ?1",
         params![id],
     ).map_err(|e| e.to_string())?;
     

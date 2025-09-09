@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
 interface LoginRequest {
@@ -55,32 +56,68 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       console.log('Login attempt for username:', request.username);
       
-      // Simple authentication check
-      if (request.username === 'admin' && request.password === 'admin123') {
-        console.log('Login successful');
+      // Try Tauri backend first
+      try {
+        const result = await invoke('login_admin', {
+          request: {
+            username: request.username,
+            password: request.password
+          }
+        }) as { success: boolean; message: string; session_token?: string };
+
+        if (result.success) {
+          console.log('Tauri backend login successful');
+          setIsAuthenticated(true);
+          setAdminId(1);
+          
+          if (result.session_token) {
+            const expiryTime = new Date(Date.now() + 8 * 60 * 60 * 1000);
+            const currentTime = new Date().toISOString();
+            
+            localStorage.setItem('hotel_session_token', result.session_token);
+            localStorage.setItem('hotel_session_expiry', expiryTime.toISOString());
+            localStorage.setItem('hotel_last_activity', currentTime);
+          }
+          
+          return { 
+            success: true, 
+            message: result.message || 'Login successful' 
+          };
+        } else {
+          return { 
+            success: false, 
+            message: result.message || 'Invalid credentials' 
+          };
+        }
+      } catch (tauriError) {
+        console.log('Tauri backend unavailable, falling back to hardcoded auth:', tauriError);
         
-        setIsAuthenticated(true);
-        setAdminId(1);
-        
-        // Optional: Set session data for future use
-        const sessionToken = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        const expiryTime = new Date(Date.now() + 8 * 60 * 60 * 1000);
-        const currentTime = new Date().toISOString();
-        
-        localStorage.setItem('hotel_session_token', sessionToken);
-        localStorage.setItem('hotel_session_expiry', expiryTime.toISOString());
-        localStorage.setItem('hotel_last_activity', currentTime);
-        
-        return { 
-          success: true, 
-          message: 'Login successful' 
-        };
-      } else {
-        console.log('Login failed - invalid credentials');
-        return { 
-          success: false, 
-          message: 'Invalid username or password' 
-        };
+        // Fallback to hardcoded authentication
+        if (request.username === 'yasinheaven' && request.password === 'YHSHotel@2025!') {
+          console.log('Hardcoded login successful');
+          
+          setIsAuthenticated(true);
+          setAdminId(1);
+          
+          const sessionToken = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          const expiryTime = new Date(Date.now() + 8 * 60 * 60 * 1000);
+          const currentTime = new Date().toISOString();
+          
+          localStorage.setItem('hotel_session_token', sessionToken);
+          localStorage.setItem('hotel_session_expiry', expiryTime.toISOString());
+          localStorage.setItem('hotel_last_activity', currentTime);
+          
+          return { 
+            success: true, 
+            message: 'Login successful' 
+          };
+        } else {
+          console.log('Login failed - invalid credentials');
+          return { 
+            success: false, 
+            message: 'Invalid username or password' 
+          };
+        }
       }
     } catch (error) {
       console.error('Login error:', error);
@@ -111,17 +148,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const getSecurityQuestion = async (username: string): Promise<{ success: boolean; question?: string; message: string }> => {
     try {
-      if (username === 'admin') {
-        return {
-          success: true,
-          question: 'What is your favorite hotel chain?',
-          message: 'Security question retrieved successfully'
-        };
-      } else {
-        return {
-          success: false,
-          message: 'Username not found'
-        };
+      // Try Tauri backend first
+      try {
+        const result = await invoke('get_security_question', {
+          username: username
+        }) as { success: boolean; question?: string; message: string };
+
+        console.log('Tauri getSecurityQuestion result:', result);
+        return result;
+      } catch (tauriError) {
+        console.log('Tauri backend unavailable for security question, falling back to hardcoded:', tauriError);
+        
+        // Fallback to hardcoded
+        if (username === 'yasinheaven') {
+          return {
+            success: true,
+            question: 'What is the name of your village?',
+            message: 'Security question retrieved successfully'
+          };
+        } else {
+          return {
+            success: false,
+            message: 'Username not found'
+          };
+        }
       }
     } catch (error) {
       console.error('Get security question error:', error);
@@ -134,17 +184,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const resetPassword = async (username: string, securityAnswer: string, newPassword: string): Promise<{ success: boolean; message: string }> => {
     try {
-      if (username === 'admin' && securityAnswer.toLowerCase() === 'hilton') {
-        console.log(`Password reset for ${username} with new password: ${newPassword}`);
-        return {
-          success: true,
-          message: 'Password reset successfully'
-        };
-      } else {
-        return {
-          success: false,
-          message: 'Incorrect security answer'
-        };
+      // Try Tauri backend first
+      try {
+        const result = await invoke('reset_admin_password', {
+          request: {
+            username: username,
+            security_answer: securityAnswer,
+            new_password: newPassword
+          }
+        }) as { success: boolean; message: string };
+
+        console.log('Tauri resetPassword result:', result);
+        
+        // If successful, the password has been actually changed in the database
+        if (result.success) {
+          console.log(`Password actually reset in database for ${username}`);
+        }
+        
+        return result;
+      } catch (tauriError) {
+        console.log('Tauri backend unavailable for password reset, falling back to hardcoded:', tauriError);
+        
+        // Fallback to hardcoded (this won't actually change the database password)
+        if (username === 'yasinheaven' && securityAnswer.toLowerCase() === 'center yasin') {
+          console.log(`Mock password reset for ${username} - database not updated!`);
+          return {
+            success: true,
+            message: 'Password reset successfully (mock - database not updated)'
+          };
+        } else {
+          return {
+            success: false,
+            message: 'Incorrect security answer'
+          };
+        }
       }
     } catch (error) {
       console.error('Password reset error:', error);
@@ -157,7 +230,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const changePassword = async (currentPassword: string, newPassword: string): Promise<{ success: boolean; message: string }> => {
     try {
-      if (currentPassword === 'admin123') {
+      if (currentPassword === 'YHSHotel@2025!') {
         console.log(`Password changed to: ${newPassword}`);
         return {
           success: true,

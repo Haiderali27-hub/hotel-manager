@@ -85,9 +85,9 @@ function generateOTP() {
 }
 
 // Insert default admin user with security question
-const defaultPassword = 'hotel123';
-const defaultSecurityAnswer = 'Manager';
-const securityQuestion = 'What is the default role of the first user?';
+const defaultPassword = 'YHSHotel@2025!';
+const defaultSecurityAnswer = 'Center Yasin';
+const securityQuestion = 'What is the name of your village?';
 
 const passwordData = hashPassword(defaultPassword);
 const answerData = hashPassword(defaultSecurityAnswer);
@@ -107,7 +107,7 @@ db.prepare(`
   )
   VALUES (?, ?, ?, ?, ?, ?)
 `).run(
-  'admin', 
+  'yasinheaven', 
   passwordData.hash, 
   securityQuestion, 
   answerData.hash,
@@ -123,10 +123,10 @@ db.prepare(`
 
 console.log("Database and tables created successfully.");
 console.log("=== ADMIN CREDENTIALS ===");
-console.log("Username: admin");
-console.log("Password: hotel123");
+console.log("Username: yasinheaven");
+console.log("Password: YHSHotel@2025!");
 console.log("Security Question:", securityQuestion);
-console.log("Security Answer: Manager");
+console.log("Security Answer: Center Yasin");
 console.log("Initial OTP:", initialOTP);
 console.log("OTP expires in 10 minutes");
 console.log("========================");

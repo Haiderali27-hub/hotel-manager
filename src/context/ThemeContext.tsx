@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core';
 import type { ReactNode } from 'react';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
@@ -136,6 +137,25 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
       localStorage.removeItem('hotel-app-theme');
       setTheme(legacyTheme);
     }
+  }, []);
+
+  useEffect(() => {
+    const applyBrandPrimaryColor = async () => {
+      try {
+        const savedPrimary = await invoke<string | null>('get_primary_color');
+        if (!savedPrimary) return;
+
+        const normalized = savedPrimary.startsWith('#') ? savedPrimary : `#${savedPrimary}`;
+        document.documentElement.style.setProperty('--primary-color', normalized);
+        // Existing theme tokens across the app.
+        document.documentElement.style.setProperty('--bm-primary', normalized);
+        document.documentElement.style.setProperty('--bm-primary-alt', normalized);
+      } catch {
+        // Branding is optional; ignore if backend isn't available.
+      }
+    };
+
+    applyBrandPrimaryColor();
   }, []);
 
   // Save theme to localStorage when it changes

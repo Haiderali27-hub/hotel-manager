@@ -39,6 +39,14 @@ use settings::{
     validate_security_answer, reset_application_data, select_backup_file, browse_backup_file
 };
 
+use settings::{
+    store_business_logo, get_business_logo_path,
+    get_business_logo_data_url,
+    set_primary_color, get_primary_color,
+    set_receipt_header, get_receipt_header,
+    set_receipt_footer, get_receipt_footer
+};
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize database on startup
@@ -160,6 +168,17 @@ pub fn run() {
             get_reset_security_question,
             validate_security_answer,
             reset_application_data
+            ,
+            // White-labeling (Phase 3)
+            store_business_logo,
+            get_business_logo_path,
+            get_business_logo_data_url,
+            set_primary_color,
+            get_primary_color,
+            set_receipt_header,
+            get_receipt_header,
+            set_receipt_footer,
+            get_receipt_footer
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

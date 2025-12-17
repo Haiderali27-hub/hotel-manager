@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { open } from '@tauri-apps/plugin-dialog';
 import React, { useEffect, useState } from 'react';
 import { useCurrency } from '../context/CurrencyContext';
 import { useLabels } from '../context/LabelContext';
@@ -28,9 +29,117 @@ const Settings: React.FC = () => {
   const [restoreFilePath, setRestoreFilePath] = useState('');
   const [isRestoring, setIsRestoring] = useState(false);
 
+  const [businessLogoPath, setBusinessLogoPath] = useState<string>('');
+  const [businessLogoDataUrl, setBusinessLogoDataUrl] = useState<string>('');
+  const [primaryColor, setPrimaryColorState] = useState<string>('#2b576d');
+  const [receiptHeader, setReceiptHeader] = useState<string>('');
+  const [receiptFooter, setReceiptFooter] = useState<string>('');
+  const [isSavingReceiptHeader, setIsSavingReceiptHeader] = useState(false);
+  const [isSavingReceiptFooter, setIsSavingReceiptFooter] = useState(false);
+
   useEffect(() => {
     setPendingLocale(locale);
   }, [locale]);
+
+  useEffect(() => {
+    const loadBranding = async () => {
+      try {
+        const [logoPath, logoDataUrl, savedPrimary, savedHeader, savedFooter] = await Promise.all([
+          invoke<string | null>('get_business_logo_path'),
+          invoke<string | null>('get_business_logo_data_url'),
+          invoke<string | null>('get_primary_color'),
+          invoke<string | null>('get_receipt_header'),
+          invoke<string | null>('get_receipt_footer')
+        ]);
+
+        if (logoPath) setBusinessLogoPath(logoPath);
+        if (logoDataUrl) setBusinessLogoDataUrl(logoDataUrl);
+        if (savedPrimary) {
+          const normalized = savedPrimary.startsWith('#') ? savedPrimary : `#${savedPrimary}`;
+          setPrimaryColorState(normalized);
+        }
+        setReceiptHeader(savedHeader ?? '');
+        setReceiptFooter(savedFooter ?? '');
+      } catch (error) {
+        // Branding is optional; don't block Settings if unavailable.
+        console.warn('Branding settings not available:', error);
+      }
+    };
+
+    loadBranding();
+  }, []);
+
+  const handleUploadLogo = async () => {
+    try {
+      const selected = await open({
+        multiple: false,
+        directory: false,
+        title: 'Select Business Logo',
+        filters: [
+          { name: 'Image', extensions: ['png', 'jpg', 'jpeg', 'svg', 'webp'] }
+        ]
+      });
+
+      if (!selected || Array.isArray(selected)) return;
+
+      const storedPath = await invoke<string>('store_business_logo', {
+        sourcePath: selected
+      });
+
+      setBusinessLogoPath(storedPath);
+      try {
+        const logoDataUrl = await invoke<string | null>('get_business_logo_data_url');
+        setBusinessLogoDataUrl(logoDataUrl ?? '');
+      } catch {
+        // optional
+      }
+      showSuccess('Logo Updated', 'Business logo saved successfully');
+    } catch (error) {
+      console.error('Logo upload failed:', error);
+      showError('Logo Upload Failed', `${error}`);
+    }
+  };
+
+  const saveReceiptHeader = async () => {
+    setIsSavingReceiptHeader(true);
+    try {
+      await invoke('set_receipt_header', { value: receiptHeader });
+      showSuccess('Saved', 'Receipt header saved successfully');
+    } catch (error) {
+      console.error('Failed to save receipt header:', error);
+      showError('Save Failed', `${error}`);
+    } finally {
+      setIsSavingReceiptHeader(false);
+    }
+  };
+
+  const saveReceiptFooter = async () => {
+    setIsSavingReceiptFooter(true);
+    try {
+      await invoke('set_receipt_footer', { value: receiptFooter });
+      showSuccess('Saved', 'Receipt footer saved successfully');
+    } catch (error) {
+      console.error('Failed to save receipt footer:', error);
+      showError('Save Failed', `${error}`);
+    } finally {
+      setIsSavingReceiptFooter(false);
+    }
+  };
+
+  const handlePrimaryColorChange = async (hex: string) => {
+    setPrimaryColorState(hex);
+    try {
+      await invoke('set_primary_color', { color: hex });
+      // Apply immediately for this session.
+      document.documentElement.style.setProperty('--primary-color', hex);
+      document.documentElement.style.setProperty('--bm-primary', hex);
+      document.documentElement.style.setProperty('--bm-primary-alt', hex);
+      showSuccess('Color Updated', 'Primary color saved successfully');
+    } catch (error) {
+      console.error('Failed to save primary color:', error);
+      showError('Color Save Failed', `${error}`);
+    }
+  };
 
   // Handle restore database with safety steps
   const handleRestoreDatabase = async () => {
@@ -248,6 +357,97 @@ const Settings: React.FC = () => {
       </div>
 
       <div className="settings-content">
+        {/* Branding Section */}
+        <div className="settings-section">
+          <h2>🎨 Branding</h2>
+          <p>Customize your business look and feel.</p>
+
+          <div className="backup-info">
+            <div className="info-item">
+              <span className="info-label">Business Logo</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <button
+                  className="backup-button"
+                  onClick={handleUploadLogo}
+                  type="button"
+                >
+                  Upload Logo
+                </button>
+                {businessLogoDataUrl ? (
+                  <img
+                    src={businessLogoDataUrl}
+                    alt="Logo preview"
+                    style={{ height: 48, maxWidth: 140, objectFit: 'contain' }}
+                  />
+                ) : null}
+                {businessLogoPath ? (
+                  <span className="info-value" style={{ maxWidth: 520, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {businessLogoPath}
+                  </span>
+                ) : (
+                  <span className="info-value">No logo set</span>
+                )}
+              </div>
+            </div>
+
+            <div className="info-item">
+              <span className="info-label">Primary Color</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <input
+                  type="color"
+                  value={primaryColor}
+                  onChange={(e) => handlePrimaryColorChange(e.target.value)}
+                  style={{ width: 44, height: 34, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' }}
+                  aria-label="Primary color"
+                />
+                <span className="info-value">{primaryColor.toUpperCase()}</span>
+              </div>
+            </div>
+
+            <div className="info-item">
+              <span className="info-label">Receipt Header</span>
+              <textarea
+                value={receiptHeader}
+                onChange={(e) => setReceiptHeader(e.target.value)}
+                placeholder="Shown near the top of receipts (optional)"
+                className="restore-path-input"
+                style={{ minHeight: 80, resize: 'vertical' }}
+              />
+              <div style={{ marginTop: 10 }}>
+                <button
+                  className="backup-button"
+                  onClick={saveReceiptHeader}
+                  type="button"
+                  disabled={isSavingReceiptHeader}
+                >
+                  {isSavingReceiptHeader ? 'Saving…' : 'Save Header'}
+                </button>
+              </div>
+            </div>
+
+            <div className="info-item">
+              <span className="info-label">Receipt Footer</span>
+              <textarea
+                value={receiptFooter}
+                onChange={(e) => setReceiptFooter(e.target.value)}
+                placeholder="Shown at the bottom of receipts (optional)"
+                className="restore-path-input"
+                style={{ minHeight: 80, resize: 'vertical' }}
+              />
+              <div style={{ marginTop: 10 }}>
+                <button
+                  className="backup-button"
+                  onClick={saveReceiptFooter}
+                  type="button"
+                  disabled={isSavingReceiptFooter}
+                >
+                  {isSavingReceiptFooter ? 'Saving…' : 'Save Footer'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Localization Section */}
         <div className="settings-section">
           <h2>🌍 Localization</h2>

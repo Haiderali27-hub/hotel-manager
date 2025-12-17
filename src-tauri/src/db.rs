@@ -200,12 +200,17 @@ fn create_initial_schema(conn: &Connection) -> SqliteResult<()> {
     )?;
     
     // Admin settings table for password storage with timestamps
+    // Phase 3 (White-labeling): add optional branding fields
     conn.execute(
         "CREATE TABLE IF NOT EXISTS admin_settings (
             id INTEGER PRIMARY KEY,
             password_hash TEXT NOT NULL,
             security_question TEXT,
             security_answer_hash TEXT,
+            business_logo_path TEXT,
+            primary_color TEXT,
+            receipt_header TEXT,
+            receipt_footer TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )",
@@ -496,6 +501,24 @@ fn migrate_database(conn: &Connection) -> SqliteResult<()> {
 
     // Ensure audit_log schema is compatible with offline_auth logging
     ensure_audit_log_schema(conn)?;
+
+    // Phase 3: White-labeling fields on admin_settings (safe no-op if already present)
+    let _ = conn.execute(
+        "ALTER TABLE admin_settings ADD COLUMN business_logo_path TEXT",
+        [],
+    );
+    let _ = conn.execute(
+        "ALTER TABLE admin_settings ADD COLUMN primary_color TEXT",
+        [],
+    );
+    let _ = conn.execute(
+        "ALTER TABLE admin_settings ADD COLUMN receipt_header TEXT",
+        [],
+    );
+    let _ = conn.execute(
+        "ALTER TABLE admin_settings ADD COLUMN receipt_footer TEXT",
+        [],
+    );
 
     println!("Database migration completed successfully");
     Ok(())

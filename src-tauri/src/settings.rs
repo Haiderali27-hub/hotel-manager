@@ -6,6 +6,184 @@ use rusqlite::{Connection, OptionalExtension};
 use std::collections::HashMap;
 use base64::Engine;
 
+fn is_valid_hex_color(value: &str) -> bool {
+    let s = value.trim();
+    let s = s.strip_prefix('#').unwrap_or(s);
+    (s.len() == 6 || s.len() == 3) && s.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+fn upsert_setting(conn: &Connection, key: &str, value: &str) -> Result<(), String> {
+    let now = chrono::Local::now().to_rfc3339();
+    conn.execute(
+        "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?1, ?2, ?3)",
+        rusqlite::params![key, value, now],
+    )
+    .map_err(|e| format!("Failed to save setting {}: {}", key, e))?;
+    Ok(())
+}
+
+fn get_setting(conn: &Connection, key: &str) -> Result<Option<String>, String> {
+    conn.query_row(
+        "SELECT value FROM settings WHERE key = ?1",
+        [key],
+        |row| row.get(0),
+    )
+    .optional()
+    .map_err(|e| format!("Failed to read setting {}: {}", key, e))
+}
+
+fn get_assets_dir() -> Result<std::path::PathBuf, String> {
+    // Store assets in a protected per-user app-data directory.
+    // This keeps the logo available even if the user deletes the original file.
+    let base = dirs::data_local_dir().ok_or("Failed to resolve app data directory".to_string())?;
+    Ok(base.join("hotel-app").join("assets"))
+}
+
+/// Copy an uploaded logo into app_data/assets and persist its path.
+/// Returns the stored logo path.
+#[command]
+pub async fn store_business_logo(source_path: String) -> Result<String, String> {
+    use crate::db::get_db_connection;
+
+    let source = std::path::PathBuf::from(source_path.trim());
+    if !source.exists() {
+        return Err("Selected logo file does not exist".to_string());
+    }
+    if !source.is_file() {
+        return Err("Selected logo path is not a file".to_string());
+    }
+
+    let assets_dir = get_assets_dir()?;
+    fs::create_dir_all(&assets_dir)
+        .map_err(|e| format!("Failed to create assets directory: {}", e))?;
+
+    let ext = source
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|s| s.to_lowercase())
+        .unwrap_or_else(|| "png".to_string());
+
+    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+    let filename = format!("business_logo_{}.{}", timestamp, ext);
+    let dest = assets_dir.join(filename);
+
+    fs::copy(&source, &dest)
+        .map_err(|e| format!("Failed to store logo file: {}", e))?;
+
+    let dest_str = dest.to_string_lossy().to_string();
+    let conn = get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+    upsert_setting(&conn, "business_logo_path", &dest_str)?;
+    Ok(dest_str)
+}
+
+#[command]
+pub async fn get_business_logo_path() -> Result<Option<String>, String> {
+    use crate::db::get_db_connection;
+    let conn = get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+    get_setting(&conn, "business_logo_path")
+}
+
+#[command]
+pub async fn get_business_logo_data_url() -> Result<Option<String>, String> {
+    use crate::db::get_db_connection;
+
+    let conn = get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+    let path = match get_setting(&conn, "business_logo_path")? {
+        Some(p) if !p.trim().is_empty() => p,
+        _ => return Ok(None),
+    };
+
+    let path_buf = std::path::PathBuf::from(path.trim());
+    if !path_buf.exists() || !path_buf.is_file() {
+        return Ok(None);
+    }
+
+    let bytes = std::fs::read(&path_buf)
+        .map_err(|e| format!("Failed to read stored logo: {}", e))?;
+    if bytes.is_empty() {
+        return Ok(None);
+    }
+
+    // Keep previews reasonably small.
+    const MAX_BYTES: usize = 5 * 1024 * 1024;
+    if bytes.len() > MAX_BYTES {
+        return Err("Logo file is too large to preview (max 5MB)".to_string());
+    }
+
+    let mime = match path_buf
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase()
+        .as_str()
+    {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "svg" => "image/svg+xml",
+        "webp" => "image/webp",
+        _ => "application/octet-stream",
+    };
+
+    let b64 = base64::engine::general_purpose::STANDARD.encode(bytes);
+    Ok(Some(format!("data:{};base64,{}", mime, b64)))
+}
+
+#[command]
+pub async fn set_primary_color(color: String) -> Result<(), String> {
+    use crate::db::get_db_connection;
+    let trimmed = color.trim();
+    if trimmed.is_empty() {
+        // allow clearing
+        let conn = get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+        upsert_setting(&conn, "primary_color", "")?;
+        return Ok(());
+    }
+    if !is_valid_hex_color(trimmed) {
+        return Err("Primary color must be a valid hex value like #2b576d".to_string());
+    }
+    let conn = get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+    upsert_setting(&conn, "primary_color", trimmed)
+}
+
+#[command]
+pub async fn get_primary_color() -> Result<Option<String>, String> {
+    use crate::db::get_db_connection;
+    let conn = get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+    let value = get_setting(&conn, "primary_color")?;
+    Ok(value.and_then(|v| {
+        let t = v.trim().to_string();
+        if t.is_empty() { None } else { Some(t) }
+    }))
+}
+
+#[command]
+pub async fn set_receipt_header(value: String) -> Result<(), String> {
+    use crate::db::get_db_connection;
+    let conn = get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+    upsert_setting(&conn, "receipt_header", value.trim())
+}
+
+#[command]
+pub async fn get_receipt_header() -> Result<Option<String>, String> {
+    use crate::db::get_db_connection;
+    let conn = get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+    get_setting(&conn, "receipt_header")
+}
+
+#[command]
+pub async fn set_receipt_footer(value: String) -> Result<(), String> {
+    use crate::db::get_db_connection;
+    let conn = get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+    upsert_setting(&conn, "receipt_footer", value.trim())
+}
+
+#[command]
+pub async fn get_receipt_footer() -> Result<Option<String>, String> {
+    use crate::db::get_db_connection;
+    let conn = get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+    get_setting(&conn, "receipt_footer")
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct SecurityQuestion {
     pub id: String,

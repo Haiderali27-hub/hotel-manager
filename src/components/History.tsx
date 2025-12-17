@@ -12,6 +12,7 @@ import {
     type Guest,
     type Room
 } from '../api/client';
+import { useCurrency } from '../context/CurrencyContext';
 import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
 
@@ -47,6 +48,7 @@ const formatDate = (dateStr: string | null | undefined): string => {
 const History: React.FC<HistoryProps> = ({ onBack }) => {
   const { colors } = useTheme();
   const { showSuccess, showError, showWarning } = useNotification();
+  const { formatMoney } = useCurrency();
   
   // Tab management
   const [activeTab, setActiveTab] = useState<'guests' | 'food-orders' | 'expenses'>('guests');
@@ -355,7 +357,7 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
                 {guest.status === 'active' ? 'Active' : 'Checked Out'}
               </span>
             </td>
-            <td style={tdStyle}>Rs {guest.daily_rate.toFixed(2)}</td>
+            <td style={tdStyle}>{formatMoney(guest.daily_rate)}</td>
           </tr>
         ))}
       </tbody>
@@ -380,7 +382,7 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
             <td style={tdStyle}>#{order.id}</td>
             <td style={tdStyle}>{order.guest_name || 'Walk-in'}</td>
             <td style={tdStyle}>{formatDate(order.created_at)}</td>
-            <td style={tdStyle}>Rs {order.total_amount.toFixed(2)}</td>
+            <td style={tdStyle}>{formatMoney(order.total_amount)}</td>
             <td style={tdStyle}>
               <span style={{
                 backgroundColor: order.paid ? '#28a745' : '#dc3545',
@@ -425,7 +427,7 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
               </span>
             </td>
             <td style={tdStyle}>{expense.description}</td>
-            <td style={tdStyle}>Rs {expense.amount.toFixed(2)}</td>
+            <td style={tdStyle}>{formatMoney(expense.amount)}</td>
           </tr>
         ))}
       </tbody>

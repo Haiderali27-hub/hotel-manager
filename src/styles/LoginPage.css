@@ -14,6 +14,18 @@ html, body {
   place-items: unset !important;
 }
 
+:root {
+  /* Business Manager palette (user-provided) */
+  --bm-accent: #dd9f52;
+  --bm-accent-soft: #dcc894;
+  --bm-primary: #2b576d;
+  --bm-primary-alt: #2c586e;
+  --bm-muted: #8da1af;
+  --bm-light: #bed0db;
+  --bm-focus-ring: rgba(221, 159, 82, 0.22);
+  --bm-primary-shadow: rgba(43, 87, 109, 0.28);
+}
+
 .login-container {
   width: 100vw;
   height: 100vh;
@@ -34,7 +46,7 @@ html, body {
 .login-background {
   width: 100vw;
   height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, var(--bm-primary) 0%, var(--bm-muted) 100%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -107,7 +119,7 @@ html, body {
 
 .logo-icon {
   font-size: 2.5rem;
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: linear-gradient(135deg, var(--bm-accent), var(--bm-accent-soft));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -117,7 +129,7 @@ html, body {
   margin: 0;
   font-size: 2rem;
   font-weight: 700;
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: linear-gradient(135deg, var(--bm-accent), var(--bm-accent-soft));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -176,8 +188,8 @@ html, body {
 
 .form-input:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: var(--bm-accent);
+  box-shadow: 0 0 0 3px var(--bm-focus-ring);
 }
 
 .form-input:disabled {
@@ -215,7 +227,7 @@ html, body {
 .otp-button {
   position: absolute;
   right: 8px;
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: linear-gradient(135deg, var(--bm-primary), var(--bm-primary-alt));
   color: white;
   border: none;
   padding: 8px 12px;
@@ -228,7 +240,7 @@ html, body {
 
 .otp-button:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 4px 12px var(--bm-primary-shadow);
 }
 
 .otp-button:disabled {
@@ -259,8 +271,8 @@ html, body {
 }
 
 .security-question {
-  background: #f0f8ff;
-  border: 1px solid #2196f3;
+  background: rgba(190, 208, 219, 0.4);
+  border: 1px solid var(--bm-primary);
   border-radius: 8px;
   padding: 16px;
   margin-bottom: 16px;
@@ -268,7 +280,7 @@ html, body {
 
 .security-question strong {
   display: block;
-  color: #1976d2;
+  color: var(--bm-primary);
   margin-bottom: 8px;
   font-size: 1.1rem;
   font-weight: 600;
@@ -316,7 +328,7 @@ html, body {
 }
 
 .login-button {
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: linear-gradient(135deg, var(--bm-primary), var(--bm-primary-alt));
   color: white;
   border: none;
   padding: 16px 24px;
@@ -332,7 +344,7 @@ html, body {
 
 .login-button:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 8px 25px var(--bm-primary-shadow);
 }
 
 .login-button:active:not(:disabled) {
@@ -379,7 +391,7 @@ html, body {
 .link-button {
   background: none;
   border: none;
-  color: #667eea;
+  color: var(--bm-primary);
   cursor: pointer;
   font-size: 0.9rem;
   text-decoration: underline;
@@ -387,7 +399,7 @@ html, body {
 }
 
 .link-button:hover:not(:disabled) {
-  color: #5a6fd8;
+  color: var(--bm-primary-alt);
 }
 
 .link-button:disabled {
@@ -528,8 +540,8 @@ html, body {
   }
   
   .security-question {
-    background: rgba(30, 60, 100, 0.3);
-    border-color: #2196f3;
+    background: rgba(43, 87, 109, 0.25);
+    border-color: var(--bm-accent-soft);
   }
 }
 

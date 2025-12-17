@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { addExpense, type NewExpense } from '../api/client';
+import { useCurrency } from '../context/CurrencyContext';
 import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
 
@@ -11,6 +12,7 @@ interface AddExpenseProps {
 const AddExpense: React.FC<AddExpenseProps> = ({ onBack, onExpenseAdded }) => {
   const { colors } = useTheme();
   const { showSuccess, showError } = useNotification();
+  const { formatMoney } = useCurrency();
   
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0], // Default to today
@@ -96,7 +98,7 @@ const AddExpense: React.FC<AddExpenseProps> = ({ onBack, onExpenseAdded }) => {
       
       showSuccess(
         'Expense Added',
-        `${finalCategory} expense of Rs ${parseFloat(formData.amount).toFixed(2)} has been recorded`
+        `${finalCategory} expense of ${formatMoney(parseFloat(formData.amount))} has been recorded`
       );
       
       // Reset form
@@ -251,7 +253,7 @@ const AddExpense: React.FC<AddExpenseProps> = ({ onBack, onExpenseAdded }) => {
 
             {/* Amount Field */}
             <div>
-              <label style={labelStyle}>Amount (Rs) *</label>
+              <label style={labelStyle}>Amount *</label>
               <input
                 type="number"
                 value={formData.amount}

@@ -14,6 +14,7 @@ import {
     type MenuItem,
     type NewFoodOrder
 } from '../api/client';
+import { useCurrency } from '../context/CurrencyContext';
 import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
 
@@ -45,6 +46,7 @@ interface FoodOrderWithDetails {
 const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ guest, onBack, onClose: _onClose, onCheckoutComplete }) => {
     const { colors } = useTheme();
     const { showSuccess, showError, showWarning } = useNotification();
+    const { currencyCode, formatMoney } = useCurrency();
     
     // Main data states
     const [foodOrders, setFoodOrders] = useState<FoodOrderWithDetails[]>([]);
@@ -308,7 +310,7 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ guest, onBack, onClose:
             
             showSuccess(
                 'Checkout Complete', 
-                `${guest.name} has been checked out. Final bill: Rs ${finalBill.toFixed(2)}`
+                `${guest.name} has been checked out. Final bill: ${formatMoney(finalBill)}`
             );
             
             onCheckoutComplete();
@@ -413,7 +415,7 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ guest, onBack, onClose:
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div>
                                 <div style={{ color: colors.textSecondary }}>
-                                    {calculateStayDays()} days × Rs {guest.daily_rate}/day
+                                    {calculateStayDays()} days × {formatMoney(guest.daily_rate)}/day
                                 </div>
                                 <div style={{ fontSize: '0.9rem', color: colors.textSecondary }}>
                                     Check-in: {new Date(guest.check_in).toLocaleDateString()}
@@ -421,7 +423,7 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ guest, onBack, onClose:
                                 </div>
                             </div>
                             <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>
-                                Rs {roomCharges.toFixed(2)}
+                                {formatMoney(roomCharges)}
                             </div>
                         </div>
                     </div>
@@ -481,7 +483,7 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ guest, onBack, onClose:
                                             <option value={0}>Select an item...</option>
                                             {menuItems.map(item => (
                                                 <option key={item.id} value={item.id}>
-                                                    {item.name} - Rs {item.price}
+                                                    {item.name} - {formatMoney(item.price)}
                                                 </option>
                                             ))}
                                         </select>
@@ -572,7 +574,7 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ guest, onBack, onClose:
                                                 fontWeight: 'bold',
                                                 textDecoration: order.paid ? 'line-through' : 'none'
                                             }}>
-                                                Rs {order.total_amount.toFixed(2)}
+                                                {formatMoney(order.total_amount)}
                                             </div>
                                             
                                             <button
@@ -656,7 +658,7 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ guest, onBack, onClose:
                             />
                             
                             <span style={{ color: colors.textSecondary }}>
-                                {discount.type === 'percentage' ? '%' : 'Rs'}
+                                {discount.type === 'percentage' ? '%' : currencyCode}
                             </span>
                             
                             <input
@@ -700,7 +702,7 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ guest, onBack, onClose:
                             borderBottom: `1px solid ${colors.border}`
                         }}>
                             <span>Room Charges:</span>
-                            <span>Rs {roomCharges.toFixed(2)}</span>
+                            <span>{formatMoney(roomCharges)}</span>
                         </div>
                         
                         <div style={{ 
@@ -711,7 +713,7 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ guest, onBack, onClose:
                             borderBottom: `1px solid ${colors.border}`
                         }}>
                             <span>Unpaid Food Orders:</span>
-                            <span>Rs {unpaidFoodTotal.toFixed(2)}</span>
+                            <span>{formatMoney(unpaidFoodTotal)}</span>
                         </div>
                         
                         {discount.amount > 0 && (
@@ -729,7 +731,7 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ guest, onBack, onClose:
                                 <span>
                                     -{discount.type === 'percentage' 
                                         ? `${discount.amount}%` 
-                                        : `Rs ${discount.amount.toFixed(2)}`}
+                                        : `${formatMoney(discount.amount)}`}
                                 </span>
                             </div>
                         )}
@@ -745,11 +747,11 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ guest, onBack, onClose:
                             }}>
                                 <span>Tax ({taxRate}%):</span>
                                 <span>
-                                    Rs {(((roomCharges + unpaidFoodTotal - (discount.amount > 0 
+                                    {formatMoney(((roomCharges + unpaidFoodTotal - (discount.amount > 0 
                                         ? (discount.type === 'percentage' 
                                             ? ((roomCharges + unpaidFoodTotal) * discount.amount) / 100
                                             : discount.amount)
-                                        : 0)) * taxRate) / 100).toFixed(2)}
+                                        : 0)) * taxRate) / 100)}
                                 </span>
                             </div>
                         )}
@@ -764,7 +766,7 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ guest, onBack, onClose:
                             borderTop: `2px solid ${colors.border}`
                         }}>
                             <span>Grand Total:</span>
-                            <span>Rs {grandTotal.toFixed(2)}</span>
+                            <span>{formatMoney(grandTotal)}</span>
                         </div>
                     </div>
                     

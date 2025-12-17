@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import React, { useEffect, useState } from 'react';
 import logoImage from '../assets/Logo/logo.png';
 import { useAuth } from '../context/SimpleAuthContext';
 import '../styles/LoginPage.css';
+import SetupWizard from './SetupWizard';
 
 interface LoginFormData {
   username: string;
@@ -11,12 +13,19 @@ interface LoginFormData {
 interface SecurityQuestionData {
   username: string;
   securityAnswer: string;
+  newPassword: string;
+  confirmNewPassword: string;
 }
 
 const OfflineLoginPage: React.FC = () => {
   const { 
-    login
+    login,
+    getSecurityQuestion,
+    resetPassword
   } = useAuth();
+
+  const [showSetupWizard, setShowSetupWizard] = useState(false);
+  const [isSetupComplete, setIsSetupComplete] = useState<boolean | null>(null);
 
   const [formData, setFormData] = useState<LoginFormData>({
     username: '',
@@ -26,6 +35,8 @@ const OfflineLoginPage: React.FC = () => {
   const [securityData, setSecurityData] = useState<SecurityQuestionData>({
     username: '',
     securityAnswer: '',
+    newPassword: '',
+    confirmNewPassword: '',
   });
 
   const [isLoading, setIsLoading] = useState(false);
@@ -34,8 +45,24 @@ const OfflineLoginPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showResetPassword, setShowResetPassword] = useState(false);
   const [securityQuestion, setSecurityQuestion] = useState<string>('');
-  const [showHardcodedPassword, setShowHardcodedPassword] = useState(false);
-  const [passwordTimer, setPasswordTimer] = useState<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadSetupStatus() {
+      try {
+        const setup = await invoke<boolean>('check_is_setup');
+        if (isMounted) setIsSetupComplete(setup);
+      } catch (e) {
+        console.error('Failed to check setup status (login page):', e);
+        // If we can't determine setup status, keep login usable.
+        if (isMounted) setIsSetupComplete(null);
+      }
+    }
+    loadSetupStatus();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -82,35 +109,80 @@ const OfflineLoginPage: React.FC = () => {
     }
   };
 
-  const handleSecurityAnswer = async (e: React.FormEvent) => {
+  const handleFetchSecurityQuestion = async () => {
+    setIsLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      if (!securityData.username.trim()) {
+        setError('Please enter your username');
+        return;
+      }
+
+      const result = await getSecurityQuestion(securityData.username.trim());
+      if (!result.success || !result.question) {
+        setError(result.message || 'Failed to retrieve security question');
+        return;
+      }
+
+      setSecurityQuestion(result.question);
+      setSuccess('Security question loaded.');
+    } catch (err) {
+      console.error('Get security question error:', err);
+      setError('Failed to retrieve security question');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
+    setSuccess('');
 
     try {
-      if (!securityData.securityAnswer) {
+      if (!securityData.username.trim()) {
+        setError('Please enter your username');
+        return;
+      }
+
+      if (!securityQuestion) {
+        setError('Please load your security question first');
+        return;
+      }
+
+      if (!securityData.securityAnswer.trim()) {
         setError('Please enter your security answer');
         return;
       }
 
-      // Simple hardcoded check for the security answer
-      if (securityData.securityAnswer.toLowerCase().trim() === 'center yasin') {
-        setShowHardcodedPassword(true);
-        setSuccess('Correct! Your password is: YHSHotel@2025!');
-        
-        // Hide the password after 10 seconds
-        const timer = setTimeout(() => {
-          setShowHardcodedPassword(false);
-          setSuccess('');
-          handleBackToLogin();
-        }, 10000);
-        
-        setPasswordTimer(timer);
-      } else {
-        setError('Incorrect security answer. Please try again.');
+      if (securityData.newPassword.length < 8) {
+        setError('New password must be at least 8 characters');
+        return;
       }
+
+      if (securityData.newPassword !== securityData.confirmNewPassword) {
+        setError('Passwords do not match');
+        return;
+      }
+
+      const result = await resetPassword(
+        securityData.username.trim(),
+        securityData.securityAnswer.trim(),
+        securityData.newPassword
+      );
+
+      if (!result.success) {
+        setError(result.message || 'Password reset failed');
+        return;
+      }
+
+      setSuccess('Password reset successfully. You can now log in.');
     } catch (err) {
-      setError('An error occurred while verifying your answer');
+      console.error('Reset password error:', err);
+      setError('An error occurred while resetting your password');
     } finally {
       setIsLoading(false);
     }
@@ -125,18 +197,27 @@ const OfflineLoginPage: React.FC = () => {
     setError('');
     setSuccess('');
     setSecurityQuestion('');
-    setShowHardcodedPassword(false);
     setSecurityData({
       username: '',
       securityAnswer: '',
+      newPassword: '',
+      confirmNewPassword: '',
     });
-    
-    // Clear any existing timer
-    if (passwordTimer) {
-      clearTimeout(passwordTimer);
-      setPasswordTimer(null);
-    }
   };
+
+  if (showSetupWizard) {
+    return (
+      <SetupWizard
+        onComplete={() => {
+          setShowSetupWizard(false);
+          setShowResetPassword(false);
+          setError('');
+          setSuccess('Setup completed. You can now log in.');
+          setIsSetupComplete(true);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="login-container">
@@ -144,8 +225,8 @@ const OfflineLoginPage: React.FC = () => {
         <div className="login-card">
           <div className="login-header">
             <div className="hotel-logo">
-              <img src={logoImage} alt="Yasin Heaven Star Hotel" className="logo-image" />
-              <h1>Yasin Heaven Star Hotel</h1>
+              <img src={logoImage} alt="Business Manager" className="logo-image" />
+              <h1>Business Manager</h1>
             </div>
             <p className="login-subtitle">
               {showResetPassword ? 'Reset Your Password' : 'Secure Admin Access'}
@@ -155,6 +236,15 @@ const OfflineLoginPage: React.FC = () => {
           {!showResetPassword ? (
             // Login Form
             <form className="login-form" onSubmit={handleSubmit}>
+              <div className="success-message" style={{ marginBottom: '14px' }}>
+                <span className="success-icon">ℹ️</span>
+                {isSetupComplete === false
+                  ? 'First time using this app on this device? Click First-time setup to create the admin account.'
+                  : isSetupComplete === true
+                    ? 'An admin account already exists on this device. Please log in, or use Forgot password if needed.'
+                    : 'Log in with your admin account. If this is the first time and setup is required, use First-time setup.'}
+              </div>
+
               <div className="form-group">
                 <label htmlFor="username" className="form-label">Username</label>
                 <div className="input-wrapper">
@@ -225,19 +315,77 @@ const OfflineLoginPage: React.FC = () => {
                     <span>Authenticating...</span>
                   </div>
                 ) : (
-                  'Login to Hotel Manager'
+                  'Login'
                 )}
               </button>
 
-              {/* Forgot Password button removed as requested */}
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={isLoading}
+                onClick={() => {
+                  setShowResetPassword(true);
+                  setError('');
+                  setSuccess('');
+                }}
+              >
+                Forgot password?
+              </button>
+
+              {isSetupComplete !== true && (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={isLoading}
+                  onClick={() => {
+                    setShowSetupWizard(true);
+                    setError('');
+                    setSuccess('');
+                  }}
+                >
+                  First-time setup
+                </button>
+              )}
             </form>
           ) : (
             // Security Question Form
-            <form className="login-form" onSubmit={handleSecurityAnswer}>
+            <form className="login-form" onSubmit={handleResetPassword}>
+              <div className="success-message" style={{ marginBottom: '14px' }}>
+                <span className="success-icon">ℹ️</span>
+                Use this only if you already created an admin account and forgot the password.
+              </div>
+
               <div className="security-question">
                 <strong>Security Question:</strong>
-                <p>{securityQuestion}</p>
+                <p>{securityQuestion || 'Load your security question first.'}</p>
               </div>
+
+              <div className="form-group">
+                <label htmlFor="resetUsername" className="form-label">Username</label>
+                <div className="input-wrapper">
+                  <span className="input-icon">👤</span>
+                  <input
+                    type="text"
+                    id="resetUsername"
+                    name="username"
+                    className="form-input"
+                    placeholder="Enter your username"
+                    value={securityData.username}
+                    onChange={handleSecurityInputChange}
+                    disabled={isLoading}
+                    required
+                  />
+                </div>
+              </div>
+
+              <button
+                type="button"
+                className={`login-button ${isLoading ? 'loading' : ''}`}
+                disabled={isLoading}
+                onClick={handleFetchSecurityQuestion}
+              >
+                {isLoading ? 'Loading...' : 'Load Security Question'}
+              </button>
 
               <div className="form-group">
                 <label htmlFor="securityAnswer" className="form-label">Your Answer</label>
@@ -257,15 +405,41 @@ const OfflineLoginPage: React.FC = () => {
                 </div>
               </div>
 
-              {showHardcodedPassword && (
-                <div className="password-display">
-                  <div className="password-box">
-                    <strong>Your Password:</strong>
-                    <div className="password-text">YHSHotel@2025!</div>
-                    <small>This message will disappear in 10 seconds</small>
-                  </div>
+              <div className="form-group">
+                <label htmlFor="newPassword" className="form-label">New Password</label>
+                <div className="input-wrapper">
+                  <span className="input-icon">🔒</span>
+                  <input
+                    type="password"
+                    id="newPassword"
+                    name="newPassword"
+                    className="form-input"
+                    placeholder="Minimum 8 characters"
+                    value={securityData.newPassword}
+                    onChange={handleSecurityInputChange}
+                    disabled={isLoading}
+                    required
+                  />
                 </div>
-              )}
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="confirmNewPassword" className="form-label">Confirm New Password</label>
+                <div className="input-wrapper">
+                  <span className="input-icon">🔒</span>
+                  <input
+                    type="password"
+                    id="confirmNewPassword"
+                    name="confirmNewPassword"
+                    className="form-input"
+                    placeholder="Re-enter new password"
+                    value={securityData.confirmNewPassword}
+                    onChange={handleSecurityInputChange}
+                    disabled={isLoading}
+                    required
+                  />
+                </div>
+              </div>
 
               {error && (
                 <div className="error-message">
@@ -284,17 +458,15 @@ const OfflineLoginPage: React.FC = () => {
               <button
                 type="submit"
                 className={`login-button ${isLoading ? 'loading' : ''}`}
-                disabled={isLoading || showHardcodedPassword}
+                disabled={isLoading}
               >
                 {isLoading ? (
                   <div className="loading-spinner">
                     <div className="spinner"></div>
-                    <span>Verifying Answer...</span>
+                    <span>Resetting...</span>
                   </div>
-                ) : showHardcodedPassword ? (
-                  'Password Shown Above'
                 ) : (
-                  'Verify Answer'
+                  'Reset Password'
                 )}
               </button>
 

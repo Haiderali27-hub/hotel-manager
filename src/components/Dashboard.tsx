@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import logoImage from '../assets/Logo/logo.png';
+import { useCurrency } from '../context/CurrencyContext';
 import { useAuth } from '../context/SimpleAuthContext';
 import { getGradientColors, useTheme } from '../context/ThemeContext';
 import type { DashboardStats } from '../services/DatabaseService';
@@ -16,6 +17,7 @@ import Settings from './SettingsNew';
 const Dashboard: React.FC = () => {
   const { logout } = useAuth();
   const { theme, colors, toggleTheme } = useTheme();
+  const { formatMoney } = useCurrency();
   const gradients = getGradientColors(theme);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState('dashboard');
@@ -115,24 +117,21 @@ const Dashboard: React.FC = () => {
         },
         { 
           title: 'Total Income', 
-          value: dbStats.total_income.toLocaleString(), 
-          currency: 'Rs.', 
+          value: formatMoney(dbStats.total_income, { maximumFractionDigits: 0 }),
           icon: '💰', 
           color: gradients.success,
           change: 'Real Data' 
         },
         { 
           title: 'Total Expenses', 
-          value: dbStats.total_expenses.toLocaleString(), 
-          currency: 'Rs.', 
+          value: formatMoney(dbStats.total_expenses, { maximumFractionDigits: 0 }),
           icon: '💸', 
           color: gradients.error,
           change: 'Real Data' 
         },
         { 
           title: 'Profit/Loss', 
-          value: dbStats.profit_loss.toLocaleString(), 
-          currency: 'Rs.', 
+          value: formatMoney(dbStats.profit_loss, { maximumFractionDigits: 0 }),
           icon: dbStats.profit_loss >= 0 ? '📈' : '📉', 
           color: dbStats.profit_loss >= 0 
             ? gradients.info
@@ -168,7 +167,6 @@ const Dashboard: React.FC = () => {
       { 
         title: 'Total Income', 
         value: '84,500', 
-        currency: 'Rs.', 
         icon: '💰', 
         color: gradients.success,
         change: '+8%' 
@@ -176,7 +174,6 @@ const Dashboard: React.FC = () => {
       { 
         title: 'Total Expenses', 
         value: '12,300', 
-        currency: 'Rs.', 
         icon: '💸', 
         color: gradients.error,
         change: '-4%' 
@@ -184,7 +181,6 @@ const Dashboard: React.FC = () => {
       { 
         title: 'Profit/Loss', 
         value: '72,200', 
-        currency: 'Rs.', 
         icon: '📈', 
         color: gradients.info,
         change: '+15%' 
@@ -275,7 +271,6 @@ const Dashboard: React.FC = () => {
                     alignItems: 'center',
                     gap: '0.5rem'
                   }}>
-                    {stat.currency && <span style={{ fontSize: '1.2rem' }}>{stat.currency}</span>}
                     {stat.value}
                   </p>
                 </div>

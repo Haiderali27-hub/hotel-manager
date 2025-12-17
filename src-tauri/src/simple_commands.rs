@@ -1368,15 +1368,8 @@ pub fn set_tax_rate(rate: f64) -> Result<String, String> {
         return Err("Tax rate must be between 0 and 100".to_string());
     }
     
-    // Create settings table if it doesn't exist
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        )",
-        [],
-    ).map_err(|e| e.to_string())?;
+    // Create/migrate settings table
+    ensure_settings_table(&conn)?;
     
     let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
     
@@ -1415,16 +1408,9 @@ pub fn get_tax_rate() -> Result<f64, String> {
 #[command]
 pub fn set_tax_enabled(enabled: bool) -> Result<String, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
-    
-    // Create settings table if it doesn't exist
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        )",
-        [],
-    ).map_err(|e| e.to_string())?;
+
+    // Create/migrate settings table
+    ensure_settings_table(&conn)?;
     
     let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
     
@@ -1458,4 +1444,102 @@ pub fn get_tax_enabled() -> Result<bool, String> {
             Ok(true)
         }
     }
+}
+
+// ===== CURRENCY / LOCALE SETTINGS =====
+
+fn ensure_settings_table(conn: &rusqlite::Connection) -> Result<(), String> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
+
+    // If the table was created by an older app version without `updated_at`, migrate it.
+    let has_updated_at: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('settings') WHERE name = 'updated_at'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    if has_updated_at == 0 {
+        conn.execute(
+            "ALTER TABLE settings ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''",
+            [],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[command]
+pub fn set_currency_code(code: String) -> Result<String, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_settings_table(&conn)?;
+
+    let normalized = code.trim().to_uppercase();
+    if normalized.len() != 3 || !normalized.chars().all(|c| c.is_ascii_alphabetic()) {
+        return Err("Currency code must be a 3-letter ISO code (e.g., USD, EUR)".to_string());
+    }
+
+    let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    conn.execute(
+        "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('currency_code', ?1, ?2)",
+        rusqlite::params![normalized, now],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok("Currency updated".to_string())
+}
+
+#[command]
+pub fn get_currency_code() -> Result<String, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_settings_table(&conn)?;
+
+    let mut stmt = conn
+        .prepare("SELECT value FROM settings WHERE key = 'currency_code'")
+        .map_err(|e| e.to_string())?;
+
+    let result: Result<String, _> = stmt.query_row([], |row| row.get(0));
+    Ok(result.unwrap_or_else(|_| "USD".to_string()))
+}
+
+#[command]
+pub fn set_locale(locale: String) -> Result<String, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_settings_table(&conn)?;
+
+    let normalized = locale.trim();
+    if normalized.is_empty() {
+        return Err("Locale cannot be empty (e.g., en-US, fr-FR)".to_string());
+    }
+
+    let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    conn.execute(
+        "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('locale', ?1, ?2)",
+        rusqlite::params![normalized, now],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok("Locale updated".to_string())
+}
+
+#[command]
+pub fn get_locale() -> Result<String, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_settings_table(&conn)?;
+
+    let mut stmt = conn
+        .prepare("SELECT value FROM settings WHERE key = 'locale'")
+        .map_err(|e| e.to_string())?;
+
+    let result: Result<String, _> = stmt.query_row([], |row| row.get(0));
+    Ok(result.unwrap_or_else(|_| "en-US".to_string()))
 }

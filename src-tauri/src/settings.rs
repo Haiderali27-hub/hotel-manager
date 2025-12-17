@@ -548,7 +548,7 @@ async fn create_automatic_backup_before_reset() -> Result<String, String> {
 }
 
 // Seed default data after reset
-fn seed_default_data(conn: &rusqlite::Transaction) -> Result<(), String> {
+fn seed_default_data(_conn: &rusqlite::Transaction) -> Result<(), String> {
     // No default rooms - users can add their own rooms
     
     // No default menu items - users can add their own menu items

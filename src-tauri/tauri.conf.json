@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "hotel-app",
+  "productName": "business-manager",
   "version": "0.1.0",
   "identifier": "com.hotelmanager.app",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Hotel Manager - Admin Portal",
+        "title": "Business Manager",
         "width": 1200,
         "height": 800,
         "resizable": true,

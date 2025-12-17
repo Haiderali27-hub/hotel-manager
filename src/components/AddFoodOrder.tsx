@@ -10,6 +10,7 @@ import {
     type NewFoodOrder,
     type OrderItem
 } from '../api/client';
+import { useCurrency } from '../context/CurrencyContext';
 import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
 
@@ -26,6 +27,7 @@ interface OrderItemWithDetails extends OrderItem {
 const AddFoodOrder: React.FC<AddFoodOrderProps> = ({ onBack, onOrderAdded }) => {
   const { colors, theme } = useTheme();
   const { showSuccess, showError, showWarning } = useNotification();
+  const { formatMoney } = useCurrency();
   const [customerType, setCustomerType] = useState<'active' | 'walkin'>('active');
   const [selectedGuestId, setSelectedGuestId] = useState<number>(0);
   const [walkinCustomerName, setWalkinCustomerName] = useState('Walk-in');
@@ -162,7 +164,7 @@ const AddFoodOrder: React.FC<AddFoodOrderProps> = ({ onBack, onOrderAdded }) => 
       
       showSuccess(
         'Food Order Created!',
-        `Order #${orderId} has been created for ${customerInfo} (Total: Rs ${getTotalAmount().toFixed(2)})`
+        `Order #${orderId} has been created for ${customerInfo} (Total: ${formatMoney(getTotalAmount())})`
       );
       
       setLastOrderId(orderId);
@@ -433,7 +435,7 @@ const AddFoodOrder: React.FC<AddFoodOrderProps> = ({ onBack, onOrderAdded }) => 
               <option value={0}>Select food item</option>
               {menuItems.map(item => (
                 <option key={item.id} value={item.id}>
-                  {item.name} - Rs.{item.price}
+                  {item.name} - {formatMoney(item.price)}
                 </option>
               ))}
             </select>
@@ -494,11 +496,11 @@ const AddFoodOrder: React.FC<AddFoodOrderProps> = ({ onBack, onOrderAdded }) => 
                   <div>
                     <span style={{ fontWeight: '500' }}>{item.menu_item.name}</span>
                     <span style={{ color: colors.textMuted, marginLeft: '0.5rem' }}>
-                      x{item.quantity} @ Rs.{item.unit_price}
+                      x{item.quantity} @ {formatMoney(item.unit_price)}
                     </span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <span style={{ fontWeight: '600' }}>Rs.{item.total_price}</span>
+                    <span style={{ fontWeight: '600' }}>{formatMoney(item.total_price)}</span>
                     <button
                       type="button"
                       onClick={() => handleRemoveItem(index)}
@@ -528,7 +530,7 @@ const AddFoodOrder: React.FC<AddFoodOrderProps> = ({ onBack, onOrderAdded }) => 
                 fontWeight: '600'
               }}>
                 <span>Total Amount:</span>
-                <span style={{ color: '#22C55E' }}>Rs.{getTotalAmount()}</span>
+                <span style={{ color: '#22C55E' }}>{formatMoney(getTotalAmount())}</span>
               </div>
             </div>
           )}

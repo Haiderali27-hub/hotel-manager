@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { addGuest, getRooms, type NewGuest, type Room } from '../api/client';
+import { useCurrency } from '../context/CurrencyContext';
 import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
 
@@ -12,6 +13,7 @@ interface AddGuestProps {
 const AddGuest: React.FC<AddGuestProps> = ({ onBack, onGuestAdded, refreshTrigger }) => {
   const { colors } = useTheme();
   const { showSuccess, showError } = useNotification();
+  const { formatMoney } = useCurrency();
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -338,7 +340,7 @@ const AddGuest: React.FC<AddGuestProps> = ({ onBack, onGuestAdded, refreshTrigge
               <option value={0}>Select a room</option>
               {rooms.map(room => (
                 <option key={room.id} value={room.id}>
-                  Room {room.number} - Rs.{room.daily_rate}/day
+                  Room {room.number} - {formatMoney(room.daily_rate)}/day
                 </option>
               ))}
             </select>
@@ -457,7 +459,7 @@ const AddGuest: React.FC<AddGuestProps> = ({ onBack, onGuestAdded, refreshTrigge
             </div>
             {formData.daily_rate > 0 && (
               <div style={{ marginTop: '0.5rem', color: colors.textSecondary }}>
-                Total estimated cost: <strong>Rs.{(stayDays * formData.daily_rate).toLocaleString()}</strong>
+                Total estimated cost: <strong>{formatMoney(stayDays * formData.daily_rate)}</strong>
               </div>
             )}
           </div>

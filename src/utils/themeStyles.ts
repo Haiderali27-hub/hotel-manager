@@ -15,7 +15,7 @@ export interface ThemeStyleProps {
 export const getButtonStyles = ({ colors, theme }: ThemeStyleProps) => ({
   primary: {
     backgroundColor: colors.accent,
-    color: theme === 'dark' ? '#000' : '#FFFFFF',
+    color: theme === 'dark' ? 'black' : 'white',
     border: 'none',
     padding: '0.75rem 1.5rem',
     borderRadius: '6px',
@@ -37,7 +37,7 @@ export const getButtonStyles = ({ colors, theme }: ThemeStyleProps) => ({
   },
   danger: {
     backgroundColor: colors.error,
-    color: '#FFFFFF',
+    color: 'white',
     border: 'none',
     padding: '0.75rem 1.5rem',
     borderRadius: '6px',
@@ -48,7 +48,7 @@ export const getButtonStyles = ({ colors, theme }: ThemeStyleProps) => ({
   },
   success: {
     backgroundColor: colors.success,
-    color: '#FFFFFF',
+    color: 'white',
     border: 'none',
     padding: '0.75rem 1.5rem',
     borderRadius: '6px',

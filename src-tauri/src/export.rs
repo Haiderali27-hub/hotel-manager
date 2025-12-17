@@ -81,12 +81,12 @@ fn export_guests_csv(file: &mut fs::File, filters: &Value) -> Result<(), String>
         .map_err(|e| format!("Failed to write CSV header: {}", e))?;
     
     // Build query with filters
-    let mut query = "SELECT g.id, g.name, g.phone, r.number as room_number, g.check_in, g.check_out, g.daily_rate, 
-                            COALESCE((julianday(COALESCE(g.check_out, date('now'))) - julianday(g.check_in)) * g.daily_rate, 0) + 
-                            COALESCE((SELECT SUM(total_amount) FROM food_orders WHERE guest_id = g.id), 0) as total_bill,
-                            g.status
-                     FROM guests g 
-                     JOIN rooms r ON g.room_id = r.id 
+        let mut query = "SELECT g.id, g.name, g.phone, r.number as room_number, g.check_in, g.check_out, g.daily_rate, 
+                    COALESCE((julianday(COALESCE(g.check_out, date('now'))) - julianday(g.check_in)) * g.daily_rate, 0) + 
+                    COALESCE((SELECT SUM(total_amount) FROM sales WHERE guest_id = g.id), 0) as total_bill,
+                    g.status
+                FROM customers g 
+                JOIN resources r ON g.room_id = r.id 
                      WHERE 1=1".to_string();
     
     let mut params: Vec<&dyn rusqlite::ToSql> = vec![];
@@ -160,13 +160,13 @@ fn export_orders_csv(file: &mut fs::File, filters: &Value) -> Result<(), String>
     writeln!(file, "Order ID,Guest Name,Room,Order Date,Total Amount,Payment Status,Items")
         .map_err(|e| format!("Failed to write CSV header: {}", e))?;
     
-    let mut query = "SELECT fo.id, COALESCE(g.name, 'Walk-in'), COALESCE(r.number, 'N/A'), fo.created_at, fo.total_amount, 
-                            CASE WHEN fo.paid = 1 THEN 'Paid' ELSE 'Unpaid' END as payment_status,
-                            GROUP_CONCAT(oi.item_name || ' x' || oi.quantity, ', ') as items
-                     FROM food_orders fo
-                     LEFT JOIN guests g ON fo.guest_id = g.id
-                     LEFT JOIN rooms r ON g.room_id = r.id
-                     LEFT JOIN order_items oi ON fo.id = oi.order_id
+        let mut query = "SELECT fo.id, COALESCE(g.name, 'Walk-in'), COALESCE(r.number, 'N/A'), fo.created_at, fo.total_amount, 
+                    CASE WHEN fo.paid = 1 THEN 'Paid' ELSE 'Unpaid' END as payment_status,
+                    GROUP_CONCAT(oi.item_name || ' x' || oi.quantity, ', ') as items
+                FROM sales fo
+                LEFT JOIN customers g ON fo.guest_id = g.id
+                LEFT JOIN resources r ON g.room_id = r.id
+                LEFT JOIN sale_items oi ON fo.id = oi.order_id
                      WHERE 1=1".to_string();
     
     let mut params: Vec<&dyn rusqlite::ToSql> = vec![];
@@ -301,8 +301,8 @@ fn export_rooms_csv(file: &mut fs::File, _filters: &Value) -> Result<(), String>
     let query = "SELECT r.number, r.daily_rate, 
                         CASE WHEN r.is_occupied = 1 THEN 'Occupied' ELSE 'Available' END as status,
                         COALESCE(g.name, '') as guest_name
-                 FROM rooms r
-                 LEFT JOIN guests g ON r.guest_id = g.id AND g.status = 'active'
+                 FROM resources r
+                 LEFT JOIN customers g ON r.guest_id = g.id AND g.status = 'active'
                  ORDER BY r.number";
     
     let mut stmt = conn.prepare(query).map_err(|e| format!("Failed to prepare query: {}", e))?;
@@ -352,7 +352,7 @@ pub fn create_database_backup() -> Result<String, String> {
     fs::create_dir_all(&app_data_dir).map_err(|e| format!("Failed to create backups directory: {}", e))?;
     
     let timestamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
-    let backup_filename = format!("hotel_backup_{}.db", timestamp);
+    let backup_filename = format!("business_backup_{}.db", timestamp);
     let backup_path = app_data_dir.join(&backup_filename);
     
     fs::copy(&db_path, &backup_path).map_err(|e| format!("Failed to create backup: {}", e))?;

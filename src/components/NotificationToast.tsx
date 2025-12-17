@@ -25,13 +25,13 @@ const NotificationToast: React.FC = () => {
   const getBorderColorForType = (type: Notification['type']) => {
     switch (type) {
       case 'success':
-        return '#059669'; // green-600
+        return colors.success;
       case 'error':
-        return '#dc2626'; // red-600
+        return colors.error;
       case 'warning':
-        return '#d97706'; // amber-600
+        return colors.warning;
       case 'info':
-        return '#2563eb'; // blue-600
+        return colors.accent;
       default:
         return colors.primary;
     }
@@ -60,7 +60,7 @@ const NotificationToast: React.FC = () => {
             border: `2px solid ${getBorderColorForType(notification.type)}`,
             borderRadius: '8px',
             padding: '16px',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+            boxShadow: `0 4px 12px ${colors.shadow}`,
             display: 'flex',
             alignItems: 'flex-start',
             gap: '12px',

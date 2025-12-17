@@ -23,7 +23,8 @@ use simple_commands::{
     add_expense, get_expenses, get_expenses_by_date_range, update_expense, delete_expense,
     toggle_food_order_payment, delete_food_order, get_order_details,
     set_tax_rate, get_tax_rate, set_tax_enabled, get_tax_enabled,
-    set_currency_code, get_currency_code, set_locale, get_locale
+    set_currency_code, get_currency_code, set_locale, get_locale,
+    set_business_name, get_business_name
 };
 use database_reset::{reset_database, get_database_path, get_database_stats};
 use export::{export_history_csv, export_history_csv_with_dialog, create_database_backup};
@@ -119,6 +120,8 @@ pub fn run() {
             get_currency_code,
             set_locale,
             get_locale,
+            set_business_name,
+            get_business_name,
             // Backup & Reset
             backup_database,
             export_json_backup,

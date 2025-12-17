@@ -1,68 +1,67 @@
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-}
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
+  /* Business Manager palette (user-provided) */
+  --bm-accent: #dd9f52;
+  --bm-accent-soft: #dcc894;
+  --bm-primary: #2b576d;
+  --bm-primary-alt: #2c586e;
+  --bm-muted: #8da1af;
+  --bm-light: #bed0db;
+  --bm-focus-ring: rgba(221, 159, 82, 0.22);
+  --bm-primary-shadow: rgba(43, 87, 109, 0.28);
+
+  /* Translucent helpers */
+  --bm-primary-20: rgba(43, 87, 109, 0.12);
+  --bm-accent-20: rgba(221, 159, 82, 0.12);
+  --bm-accent-soft-20: rgba(220, 200, 148, 0.18);
+  --bm-muted-20: rgba(141, 161, 175, 0.12);
+
+  /* App-level semantic tokens (neutrals allowed for readability) */
+  --app-bg: var(--bm-light);
+  --app-surface: white;
+  --app-text: var(--bm-primary);
+  --app-text-muted: var(--bm-muted);
+  --app-border: rgba(43, 87, 109, 0.18);
+  --app-shadow: rgba(43, 87, 109, 0.18);
+
+  --app-success: var(--bm-primary);
+  --app-success-bg: var(--bm-primary-20);
+  --app-error: var(--bm-accent);
+  --app-error-bg: var(--bm-accent-20);
+  --app-warning: var(--bm-accent-soft);
+  --app-warning-bg: var(--bm-accent-soft-20);
+  --app-info: var(--bm-muted);
+  --app-info-bg: var(--bm-muted-20);
+  --app-overlay: rgba(43, 87, 109, 0.55);
 }
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
   min-height: 100vh;
+  background: var(--app-bg);
+  color: var(--app-text);
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+a {
+  color: var(--bm-accent);
+  text-decoration: inherit;
 }
 
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
+a:hover {
+  color: var(--bm-primary-alt);
 }
-button:hover {
-  border-color: #646cff;
-}
+
 button:focus,
 button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
+  outline: 3px solid var(--bm-focus-ring);
+  outline-offset: 2px;
 }

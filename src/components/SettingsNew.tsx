@@ -272,7 +272,7 @@ const Settings: React.FC = () => {
                   </option>
                 ))}
               </select>
-              <p style={{ marginTop: '6px', color: '#6c757d' }}>
+              <p style={{ marginTop: '6px', color: 'var(--app-text-muted)' }}>
                 Preview: {formatMoney(1234.56)}
               </p>
             </div>
@@ -293,7 +293,7 @@ const Settings: React.FC = () => {
                 }}
                 placeholder="en-US"
               />
-              <p style={{ marginTop: '6px', color: '#6c757d' }}>
+              <p style={{ marginTop: '6px', color: 'var(--app-text-muted)' }}>
                 Tip: use values like <strong>en-US</strong>, <strong>en-GB</strong>, <strong>fr-FR</strong>, <strong>ar-SA</strong>.
               </p>
             </div>

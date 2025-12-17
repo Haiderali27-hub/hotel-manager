@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import React, { useEffect, useState } from 'react';
+import { useTheme } from '../context/ThemeContext';
 
 // Types - you can import these from your api/client.ts
 interface Room {
@@ -18,6 +19,7 @@ interface DashboardStats {
 }
 
 const ExampleUsage: React.FC = () => {
+  const { colors } = useTheme();
   const [rooms, setRooms] = useState<Room[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -88,11 +90,11 @@ const ExampleUsage: React.FC = () => {
   if (error) return <div>Error: {error}</div>;
 
   return (
-    <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
+    <div style={{ padding: '20px', backgroundColor: colors.primary, color: colors.text, minHeight: '100vh' }}>
       <h1>Hotel Management System - Demo</h1>
       
       {/* Dashboard Stats */}
-      <div style={{ marginBottom: '20px', padding: '15px', border: '1px solid #ccc', borderRadius: '5px' }}>
+      <div style={{ marginBottom: '20px', padding: '15px', border: `1px solid ${colors.border}`, borderRadius: '5px', backgroundColor: colors.surface }}>
         <h2>Dashboard Statistics</h2>
         {stats && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
@@ -107,7 +109,7 @@ const ExampleUsage: React.FC = () => {
       </div>
 
       {/* Rooms */}
-      <div style={{ marginBottom: '20px', padding: '15px', border: '1px solid #ccc', borderRadius: '5px' }}>
+      <div style={{ marginBottom: '20px', padding: '15px', border: `1px solid ${colors.border}`, borderRadius: '5px', backgroundColor: colors.surface }}>
         <h2>Rooms</h2>
         <button onClick={addRoom} style={{ marginBottom: '10px', padding: '5px 10px' }}>
           Add Room
@@ -116,9 +118,9 @@ const ExampleUsage: React.FC = () => {
           {rooms.map(room => (
             <div key={room.id} style={{ 
               padding: '10px', 
-              border: '1px solid #ddd', 
+              border: `1px solid ${colors.border}`, 
               borderRadius: '3px',
-              backgroundColor: room.is_active ? '#f0f8ff' : '#ffe4e1'
+              backgroundColor: room.is_active ? colors.successBg : colors.errorBg
             }}>
               <strong>Room {room.number}</strong>
               <br />
@@ -129,7 +131,7 @@ const ExampleUsage: React.FC = () => {
       </div>
 
       {/* Quick Actions */}
-      <div style={{ padding: '15px', border: '1px solid #ccc', borderRadius: '5px' }}>
+      <div style={{ padding: '15px', border: `1px solid ${colors.border}`, borderRadius: '5px', backgroundColor: colors.surface }}>
         <h2>Quick Actions</h2>
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
           <button onClick={addGuest} style={{ padding: '8px 15px' }}>
@@ -148,7 +150,7 @@ const ExampleUsage: React.FC = () => {
       </div>
 
       {/* Instructions */}
-      <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#f9f9f9', borderRadius: '5px' }}>
+      <div style={{ marginTop: '20px', padding: '15px', backgroundColor: colors.surface, borderRadius: '5px', border: `1px solid ${colors.border}` }}>
         <h3>For Frontend Developer:</h3>
         <p>This component demonstrates how to:</p>
         <ul>

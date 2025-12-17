@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 // ===== CORE MODELS =====
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Room {
+pub struct Resource {
     pub id: i64,
     pub number: String,
     pub room_type: String,
@@ -15,8 +15,11 @@ pub struct Room {
     pub guest_name: Option<String>,
 }
 
+// Backwards-compatible alias (commands/TS types can be migrated gradually)
+pub type Room = Resource;
+
 #[derive(Debug, Serialize, Deserialize)]
-pub struct NewGuest {
+pub struct NewCustomer {
     pub name: String,
     pub phone: Option<String>,
     pub room_id: Option<i64>,  // Changed to Option to support walk-in customers
@@ -25,8 +28,10 @@ pub struct NewGuest {
     pub daily_rate: f64,
 }
 
+pub type NewGuest = NewCustomer;
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Guest {
+pub struct Customer {
     pub id: i64,
     pub name: String,
     pub phone: Option<String>,
@@ -39,8 +44,10 @@ pub struct Guest {
     pub updated_at: String,
 }
 
+pub type Guest = Customer;
+
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ActiveGuestRow {
+pub struct ActiveCustomerRow {
     pub guest_id: i64,
     pub name: String,
     pub room_number: Option<String>,  // Changed to Option for walk-in customers
@@ -49,6 +56,8 @@ pub struct ActiveGuestRow {
     pub daily_rate: f64,
     pub is_walkin: bool,  // New field to identify walk-in customers
 }
+
+pub type ActiveGuestRow = ActiveCustomerRow;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MenuItem {
@@ -181,6 +190,9 @@ pub struct FoodOrderSummary {
     pub guest_name: Option<String>,
 }
 
+// De-hotelified naming (kept as aliases to avoid a large breaking change today)
+pub type SaleSummary = FoodOrderSummary;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FoodOrderInfo {
     pub id: i64,
@@ -192,6 +204,8 @@ pub struct FoodOrderInfo {
     pub paid_at: Option<String>,
     pub total_amount: f64,
 }
+
+pub type SaleRecord = FoodOrderInfo;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OrderItemDetail {
@@ -208,6 +222,8 @@ pub struct FoodOrderDetails {
     pub order: FoodOrderInfo,
     pub items: Vec<OrderItemDetail>,
 }
+
+pub type SaleDetails = FoodOrderDetails;
 
 // ===== EXPENSE MODELS =====
 

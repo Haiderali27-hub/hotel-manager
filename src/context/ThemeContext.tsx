@@ -46,70 +46,70 @@ interface ThemeContextType {
 
 const lightTheme: ThemeColors = {
   // Background colors
-  primary: '#FFFFFF',
-  secondary: '#F8F9FA',
-  surface: '#FFFFFF',
-  card: '#FFFFFF',
+  primary: 'var(--app-bg)',
+  secondary: 'var(--app-surface)',
+  surface: 'var(--app-surface)',
+  card: 'var(--app-surface)',
   
   // Text colors
-  text: '#1F2937',
-  textSecondary: '#4B5563',
-  textMuted: '#6B7280',
+  text: 'var(--app-text)',
+  textSecondary: 'var(--app-text)',
+  textMuted: 'var(--app-text-muted)',
   
   // Border colors
-  border: '#E5E7EB',
-  borderLight: '#F3F4F6',
+  border: 'var(--app-border)',
+  borderLight: 'var(--app-border)',
   
   // Interactive colors
-  accent: '#F59E0B',
-  accentHover: '#D97706',
-  success: '#10B981',
-  error: '#EF4444',
-  warning: '#F59E0B',
+  accent: 'var(--bm-accent)',
+  accentHover: 'var(--bm-accent-soft)',
+  success: 'var(--bm-primary)',
+  error: 'var(--bm-accent)',
+  warning: 'var(--bm-accent-soft)',
   
   // Status colors
-  successBg: '#ECFDF5',
-  errorBg: '#FEE2E2',
-  warningBg: '#FEF3C7',
-  infoBg: '#EFF6FF',
+  successBg: 'rgba(43, 87, 109, 0.12)',
+  errorBg: 'rgba(221, 159, 82, 0.12)',
+  warningBg: 'rgba(220, 200, 148, 0.18)',
+  infoBg: 'rgba(141, 161, 175, 0.18)',
   
   // Special colors
-  shadow: 'rgba(0, 0, 0, 0.1)',
-  overlay: 'rgba(0, 0, 0, 0.5)'
+  shadow: 'var(--bm-primary-shadow)',
+  overlay: 'rgba(43, 87, 109, 0.55)'
 };
 
 const darkTheme: ThemeColors = {
   // Background colors
-  primary: '#1E1E2E',
-  secondary: '#2D2D44',
-  surface: '#3D3D5C',
-  card: '#2D2D44',
+  primary: 'var(--bm-primary)',
+  secondary: 'var(--bm-primary-alt)',
+  surface: 'rgba(255, 255, 255, 0.06)',
+  card: 'rgba(255, 255, 255, 0.08)',
   
   // Text colors
-  text: '#FFFFFF',
-  textSecondary: '#D1D5DB',
-  textMuted: '#9CA3AF',
+  text: 'white',
+  textSecondary: 'rgba(255, 255, 255, 0.9)',
+  textMuted: 'rgba(255, 255, 255, 0.7)',
   
   // Border colors
-  border: '#3D3D5C',
-  borderLight: '#4B5563',
+  border: 'rgba(255, 255, 255, 0.14)',
+  borderLight: 'rgba(255, 255, 255, 0.10)',
   
   // Interactive colors
-  accent: '#F59E0B',
-  accentHover: '#D97706',
-  success: '#22C55E',
-  error: '#EF4444',
-  warning: '#F59E0B',
+  accent: 'var(--bm-accent)',
+  accentHover: 'var(--bm-accent-soft)',
+  success: 'var(--bm-accent-soft)',
+  error: 'var(--bm-accent)',
+  warning: 'var(--bm-accent-soft)',
   
   // Status colors
-  successBg: '#064E3B',
-  errorBg: '#7F1D1D',
-  warningBg: '#78350F',
-  infoBg: '#1E3A8A',
+  successBg: 'rgba(220, 200, 148, 0.14)',
+  errorBg: 'rgba(221, 159, 82, 0.16)',
+  warningBg: 'rgba(220, 200, 148, 0.14)',
+  infoBg: 'rgba(141, 161, 175, 0.16)',
   
   // Special colors
-  shadow: 'rgba(0, 0, 0, 0.3)',
-  overlay: 'rgba(0, 0, 0, 0.7)'
+  shadow: 'rgba(0, 0, 0, 0.35)',
+  overlay: 'rgba(0, 0, 0, 0.65)'
 };
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -165,25 +165,13 @@ export const useTheme = (): ThemeContextType => {
 };
 
 // Utility function to get theme-aware gradient colors
-export const getGradientColors = (theme: ThemeType) => {
+export const getGradientColors = (_theme: ThemeType) => {
   return {
-    primary: theme === 'light' 
-      ? 'linear-gradient(135deg, #3B82F6, #1D4ED8)'
-      : 'linear-gradient(135deg, #60A5FA, #3B82F6)',
-    success: theme === 'light'
-      ? 'linear-gradient(135deg, #22C55E, #16A34A)'
-      : 'linear-gradient(135deg, #34D399, #22C55E)',
-    error: theme === 'light'
-      ? 'linear-gradient(135deg, #EF4444, #DC2626)'
-      : 'linear-gradient(135deg, #F87171, #EF4444)',
-    warning: theme === 'light'
-      ? 'linear-gradient(135deg, #F59E0B, #D97706)'
-      : 'linear-gradient(135deg, #FBBF24, #F59E0B)',
-    accent: theme === 'light'
-      ? 'linear-gradient(135deg, #8B5CF6, #7C3AED)'
-      : 'linear-gradient(135deg, #A78BFA, #8B5CF6)',
-    info: theme === 'light'
-      ? 'linear-gradient(135deg, #10B981, #059669)'
-      : 'linear-gradient(135deg, #34D399, #10B981)'
+    primary: 'linear-gradient(135deg, var(--bm-primary), var(--bm-muted))',
+    success: 'linear-gradient(135deg, var(--bm-primary), var(--bm-primary-alt))',
+    error: 'linear-gradient(135deg, var(--bm-accent), var(--bm-accent-soft))',
+    warning: 'linear-gradient(135deg, var(--bm-accent), var(--bm-accent-soft))',
+    accent: 'linear-gradient(135deg, var(--bm-accent), var(--bm-accent-soft))',
+    info: 'linear-gradient(135deg, var(--bm-muted), var(--bm-light))'
   };
 };

@@ -5,6 +5,7 @@ import Dashboard from './components/Dashboard';
 import NotificationToast from './components/NotificationToast';
 import OfflineLoginPage from './components/OfflineLoginPage';
 import { CurrencyProvider } from './context/CurrencyContext';
+import { LabelProvider } from './context/LabelContext';
 import { NotificationProvider } from './context/NotificationContext';
 import { AuthProvider, useAuth } from './context/SimpleAuthContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -23,11 +24,11 @@ const AppContent: React.FC = () => {
         alignItems: 'center',
         height: '100vh',
         flexDirection: 'column',
-        backgroundColor: '#f0f0f0'
+        backgroundColor: 'var(--app-bg)'
       }}>
         <div style={{
-          border: '4px solid #f3f3f3',
-          borderTop: '4px solid #3498db',
+          border: '4px solid var(--app-border)',
+          borderTop: '4px solid var(--bm-accent)',
           borderRadius: '50%',
           width: '50px',
           height: '50px',
@@ -60,9 +61,11 @@ function App() {
     <ThemeProvider>
       <NotificationProvider>
         <CurrencyProvider>
-          <AuthProvider>
-            <AppContent />
-          </AuthProvider>
+          <LabelProvider>
+            <AuthProvider>
+              <AppContent />
+            </AuthProvider>
+          </LabelProvider>
         </CurrencyProvider>
       </NotificationProvider>
     </ThemeProvider>

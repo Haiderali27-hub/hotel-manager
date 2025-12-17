@@ -141,14 +141,17 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
     let currency_code = get_setting_or(&conn, "currency_code", "USD")?
         .trim()
         .to_uppercase();
+
+    let business_name = get_setting_or(&conn, "business_name", "Business Manager")?;
+    let business_address = get_setting_or(&conn, "business_address", "")?;
     
     // Get order details with optional guest information
     let mut stmt = conn.prepare(
         "SELECT fo.id, fo.created_at, fo.total_amount, fo.paid, fo.customer_type, fo.customer_name,
                 g.name as guest_name, r.number as room_number
-         FROM food_orders fo
-         LEFT JOIN guests g ON fo.guest_id = g.id
-         LEFT JOIN rooms r ON g.room_id = r.id
+            FROM sales fo
+            LEFT JOIN customers g ON fo.guest_id = g.id
+            LEFT JOIN resources r ON g.room_id = r.id
          WHERE fo.id = ?"
     ).map_err(|e| format!("Failed to prepare order query: {}", e))?;
     
@@ -160,7 +163,7 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
             row.get::<_, i64>(3)?,                          // paid (INTEGER, not bool)
             row.get::<_, String>(4)?,                       // customer_type
             row.get::<_, Option<String>>(5)?,               // customer_name
-            row.get::<_, Option<String>>(6)?,               // guest_name (from guests table)
+            row.get::<_, Option<String>>(6)?,               // customer_name (from customers table)
             row.get::<_, Option<String>>(7)?,               // room_number
         ))
     }).map_err(|e| format!("Order not found: {}", e))?;
@@ -182,7 +185,7 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
     // Get order items
     let mut stmt = conn.prepare(
         "SELECT item_name, quantity, unit_price, line_total
-         FROM order_items 
+            FROM sale_items 
          WHERE order_id = ?
          ORDER BY item_name"
     ).map_err(|e| format!("Failed to prepare items query: {}", e))?;
@@ -342,13 +345,9 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
 </head>
 <body>
     <div class="header">
-        <img src="data:image/png;base64,{}" alt="Hotel Logo" class="logo">
-        <h1 class="hotel-name">Yasin Heaven Star Hotel</h1>
-        <p class="hotel-subtitle">
-            Main Yasin Ghizer Gilgit Baltistan, Pakistan<br>
-            Phone: +92 355 4650686<br>
-            Email: yasinheavenstarhotel@gmail.com
-        </p>
+        <img src="data:image/jpeg;base64,{}" alt="Logo" class="logo">
+        <h1 class="hotel-name">{}</h1>
+        <p class="hotel-subtitle">{}</p>
         <h2 class="receipt-title">Food Order Receipt</h2>
     </div>
 
@@ -404,6 +403,8 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
         order_id,
         payment_color,
         logo_base64,
+    html_escape(&business_name),
+    html_escape(&business_address),
         order_id,
         formatted_date,
         html_escape(&customer_display),
@@ -418,7 +419,7 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
     if html.len() > 500 {
         println!("🔍 HTML PREVIEW (first 500 chars): {}", &html[..500]);
     }
-    if html.contains("data:image/png;base64,") {
+    if html.contains("data:image/jpeg;base64,") {
         println!("✅ Logo image tag found in HTML!");
     } else {
         println!("❌ Logo image tag NOT found in HTML!");
@@ -446,6 +447,9 @@ pub fn build_final_invoice_html_with_discount(
     let currency_code = get_setting_or(&conn, "currency_code", "USD")?
         .trim()
         .to_uppercase();
+
+    let business_name = get_setting_or(&conn, "business_name", "Business Manager")?;
+    let business_address = get_setting_or(&conn, "business_address", "")?;
     
     // Get logo as base64
     let logo_base64 = get_logo_base64();
@@ -460,8 +464,8 @@ pub fn build_final_invoice_html_with_discount(
     let mut stmt = conn.prepare(
         "SELECT g.id, g.name, g.phone, g.check_in, g.check_out, g.daily_rate, g.status,
                 r.number as room_number
-         FROM guests g
-         JOIN rooms r ON g.room_id = r.id
+            FROM customers g
+            JOIN resources r ON g.room_id = r.id
          WHERE g.id = ?"
     ).map_err(|e| format!("Failed to prepare guest query: {}", e))?;
     
@@ -494,12 +498,12 @@ pub fn build_final_invoice_html_with_discount(
     // Get all food orders for this guest (both paid and unpaid)
     let mut order_stmt = conn.prepare(
         "SELECT fo.id, fo.total_amount, fo.paid
-         FROM food_orders fo
+            FROM sales fo
          WHERE fo.guest_id = ?
          ORDER BY fo.created_at"
     ).map_err(|e| format!("Failed to prepare food orders query: {}", e))?;
     
-    let food_orders = order_stmt.query_map([guest_id], |row| {
+    let sales = order_stmt.query_map([guest_id], |row| {
         Ok((
             row.get::<_, i64>(0)?,   // order_id
             row.get::<_, f64>(1)?,   // total_amount
@@ -509,12 +513,12 @@ pub fn build_final_invoice_html_with_discount(
     
     // For each order, get the items
     let mut food_table_rows = String::new();
-    for order_result in food_orders {
+    for order_result in sales {
         let (order_id, _amount, paid) = order_result.map_err(|e| format!("Failed to read order: {}", e))?;
         
         let mut item_stmt = conn.prepare(
             "SELECT oi.quantity, oi.item_name, oi.unit_price
-             FROM order_items oi
+               FROM sale_items oi
              WHERE oi.order_id = ?"
         ).map_err(|e| format!("Failed to prepare order items query: {}", e))?;
         
@@ -839,12 +843,10 @@ pub fn build_final_invoice_html_with_discount(
     <div class="invoice">
         <div class="header">
             <div class="logo-container" style="text-align: center; margin-bottom: 20px; padding: 10px;">
-                <img src="data:image/jpeg;base64,{}" alt="Hotel Logo" style="width: auto; height: 60px; max-width: 120px; object-fit: contain; display: block; margin: 0 auto; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                <img src="data:image/jpeg;base64,{}" alt="Logo" style="width: auto; height: 60px; max-width: 120px; object-fit: contain; display: block; margin: 0 auto; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
             </div>
-            <div class="hotel-name">Yasin Heaven Star Hotel</div>
-            <div class="hotel-address">Main Yasin Ghizer Gilgit Baltistan, Pakistan</div>
-            <div class="hotel-address">Phone: +92 355 4650686</div>
-            <div class="hotel-address">Email: yasinheavenstarhotel@gmail.com</div>
+            <div class="hotel-name">{}</div>
+            <div class="hotel-address">{}</div>
             <div class="receipt-title">Final Invoice</div>
         </div>
         
@@ -938,6 +940,8 @@ pub fn build_final_invoice_html_with_discount(
 </body>
 </html>"#,
         logo_base64,                  // Logo image data
+    html_escape(&business_name),  // Business name
+    html_escape(&business_address), // Business address
         html_escape(&name),           // Customer name
         formatted_date,               // Current date
         html_escape(&room_number),    // Room number

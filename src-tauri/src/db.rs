@@ -91,9 +91,22 @@ fn create_initial_schema(conn: &Connection) -> SqliteResult<()> {
         [],
     )?;
 
-    // Rooms table with created_at/updated_at
+    // App settings (currency/locale/business profile)
     conn.execute(
-        "CREATE TABLE IF NOT EXISTS rooms (
+        "CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TEXT NOT NULL DEFAULT ''
+        )",
+        [],
+    )?;
+
+    // If this database is from an older version, rename legacy tables BEFORE we create new ones.
+    ensure_business_table_renames(conn)?;
+
+    // Resources table (renamed from rooms)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS resources (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             number TEXT UNIQUE NOT NULL,
             room_type TEXT NOT NULL DEFAULT 'Single Room',
@@ -101,27 +114,29 @@ fn create_initial_schema(conn: &Connection) -> SqliteResult<()> {
             is_occupied INTEGER NOT NULL DEFAULT 0,
             guest_id INTEGER,
             is_active INTEGER NOT NULL DEFAULT 1,
+            resource_type TEXT NOT NULL DEFAULT 'ROOM',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (guest_id) REFERENCES guests(id)
+            FOREIGN KEY (guest_id) REFERENCES customers(id)
         )",
         [],
     )?;
     
-    // Guests table with proper foreign key and timestamps
+    // Customers table (renamed from guests)
     conn.execute(
-        "CREATE TABLE IF NOT EXISTS guests (
+        "CREATE TABLE IF NOT EXISTS customers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             phone TEXT,
-            room_id INTEGER NOT NULL,
+            room_id INTEGER,
             check_in TEXT NOT NULL,
             check_out TEXT,
             daily_rate REAL NOT NULL,
             status TEXT NOT NULL DEFAULT 'active',
+            loyalty_points INTEGER NOT NULL DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE RESTRICT
+            FOREIGN KEY (room_id) REFERENCES resources(id) ON DELETE RESTRICT
         )",
         [],
     )?;
@@ -139,9 +154,9 @@ fn create_initial_schema(conn: &Connection) -> SqliteResult<()> {
         [],
     )?;
     
-    // Food orders table with proper foreign key and timestamps
+    // Sales table (renamed from food_orders)
     conn.execute(
-        "CREATE TABLE IF NOT EXISTS food_orders (
+        "CREATE TABLE IF NOT EXISTS sales (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             guest_id INTEGER,
             customer_type TEXT NOT NULL,
@@ -150,14 +165,14 @@ fn create_initial_schema(conn: &Connection) -> SqliteResult<()> {
             paid INTEGER NOT NULL DEFAULT 0,
             paid_at DATETIME,
             total_amount REAL NOT NULL,
-            FOREIGN KEY (guest_id) REFERENCES guests(id) ON DELETE SET NULL
+            FOREIGN KEY (guest_id) REFERENCES customers(id) ON DELETE SET NULL
         )",
         [],
     )?;
     
-    // Order items table with proper foreign keys
+    // Sale items table (renamed from order_items)
     conn.execute(
-        "CREATE TABLE IF NOT EXISTS order_items (
+        "CREATE TABLE IF NOT EXISTS sale_items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             order_id INTEGER NOT NULL,
             menu_item_id INTEGER,
@@ -165,7 +180,7 @@ fn create_initial_schema(conn: &Connection) -> SqliteResult<()> {
             unit_price REAL NOT NULL,
             quantity INTEGER NOT NULL,
             line_total REAL NOT NULL,
-            FOREIGN KEY (order_id) REFERENCES food_orders(id) ON DELETE CASCADE,
+            FOREIGN KEY (order_id) REFERENCES sales(id) ON DELETE CASCADE,
             FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE SET NULL
         )",
         [],
@@ -213,25 +228,25 @@ fn create_initial_schema(conn: &Connection) -> SqliteResult<()> {
 }
 
 fn create_update_triggers(conn: &Connection) -> SqliteResult<()> {
-    // Trigger for rooms table
-    // NOTE: Rooms table doesn't have updated_at column, so no trigger needed
+    // Trigger for resources table
+    // NOTE: Resources table doesn't have updated_at column, so no trigger needed
     // conn.execute(
     //     "CREATE TRIGGER IF NOT EXISTS trigger_rooms_updated_at 
-    //      AFTER UPDATE ON rooms
+    //      AFTER UPDATE ON resources
     //      FOR EACH ROW 
     //      BEGIN
-    //         UPDATE rooms SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+    //         UPDATE resources SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
     //      END",
     //     [],
     // )?;
     
-    // Trigger for guests table
+    // Trigger for customers table
     conn.execute(
-        "CREATE TRIGGER IF NOT EXISTS trigger_guests_updated_at 
-         AFTER UPDATE ON guests
+        "CREATE TRIGGER IF NOT EXISTS trigger_customers_updated_at 
+         AFTER UPDATE ON customers
          FOR EACH ROW 
          BEGIN
-            UPDATE guests SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+            UPDATE customers SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
          END",
         [],
     )?;
@@ -274,28 +289,28 @@ fn create_update_triggers(conn: &Connection) -> SqliteResult<()> {
 
 fn create_indexes(conn: &Connection) -> SqliteResult<()> {
     // Primary operational indexes
-    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_guests_status ON guests(status)", []);
-    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_guests_room_id ON guests(room_id)", []);
-    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_food_orders_guest_id ON food_orders(guest_id)", []);
-    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id)", []);
-    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_order_items_menu_item_id ON order_items(menu_item_id)", []);
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_customers_status ON customers(status)", []);
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_customers_room_id ON customers(room_id)", []);
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_sales_guest_id ON sales(guest_id)", []);
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_sale_items_order_id ON sale_items(order_id)", []);
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_sale_items_menu_item_id ON sale_items(menu_item_id)", []);
     
     // Timestamp indexes for analytics and filtering (safe with error handling)
-    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_food_orders_created_at ON food_orders(created_at)", []);
-    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_food_orders_paid_at ON food_orders(paid_at)", []);
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_sales_created_at ON sales(created_at)", []);
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_sales_paid_at ON sales(paid_at)", []);
     let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date)", []);
     let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_expenses_created_at ON expenses(created_at)", []);
-    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_guests_created_at ON guests(created_at)", []);
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_customers_created_at ON customers(created_at)", []);
     
     // Payment status index for financial reports
-    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_food_orders_paid ON food_orders(paid)", []);
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_sales_paid ON sales(paid)", []);
     
     println!("Database indexes created successfully");
     Ok(())
 }
 
 fn seed_initial_data(_conn: &Connection) -> SqliteResult<()> {
-    // No default rooms - users can add their own rooms
+    // No default resources - users can add their own resources
     
     // No default menu items - users can add their own menu items
     
@@ -330,7 +345,7 @@ pub fn is_room_available(room_id: i64) -> SqliteResult<bool> {
     let conn = get_db_connection()?;
     
     let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM guests WHERE room_id = ?1 AND status = 'active'",
+        "SELECT COUNT(*) FROM customers WHERE room_id = ?1 AND status = 'active'",
         [room_id],
         |row| row.get(0)
     )?;
@@ -339,27 +354,36 @@ pub fn is_room_available(room_id: i64) -> SqliteResult<bool> {
 }
 
 fn migrate_database(conn: &Connection) -> SqliteResult<()> {
+    // 2025-12: Rename core tables to generic business names (one-time migration)
+    ensure_business_table_renames(conn)?;
+
     // Add room_type column if it doesn't exist
     let _ = conn.execute(
-        "ALTER TABLE rooms ADD COLUMN room_type TEXT NOT NULL DEFAULT 'Single Room'",
+        "ALTER TABLE resources ADD COLUMN room_type TEXT NOT NULL DEFAULT 'Single Room'",
         [],
     );
     
     // Add daily_rate column if it doesn't exist
     let _ = conn.execute(
-        "ALTER TABLE rooms ADD COLUMN daily_rate REAL NOT NULL DEFAULT 100.0",
+        "ALTER TABLE resources ADD COLUMN daily_rate REAL NOT NULL DEFAULT 100.0",
         [],
     );
     
     // Add is_occupied column if it doesn't exist
     let _ = conn.execute(
-        "ALTER TABLE rooms ADD COLUMN is_occupied INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE resources ADD COLUMN is_occupied INTEGER NOT NULL DEFAULT 0",
         [],
     );
     
     // Add guest_id column if it doesn't exist
     let _ = conn.execute(
-        "ALTER TABLE rooms ADD COLUMN guest_id INTEGER",
+        "ALTER TABLE resources ADD COLUMN guest_id INTEGER",
+        [],
+    );
+
+    // Add resource_type column if it doesn't exist
+    let _ = conn.execute(
+        "ALTER TABLE resources ADD COLUMN resource_type TEXT NOT NULL DEFAULT 'ROOM'",
         [],
     );
     
@@ -377,44 +401,44 @@ fn migrate_database(conn: &Connection) -> SqliteResult<()> {
 
     // ===== NEW MIGRATIONS FOR SCHEMA CONSISTENCY =====
     
-    // Fix food_orders table schema inconsistencies
+    // Fix sales table schema inconsistencies
     // Add created_at column if it doesn't exist (in case we have order_date instead)
     let _ = conn.execute(
-        "ALTER TABLE food_orders ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
+        "ALTER TABLE sales ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
         [],
     );
     
     // Add paid column if it doesn't exist (in case we have is_paid instead) 
     let _ = conn.execute(
-        "ALTER TABLE food_orders ADD COLUMN paid INTEGER DEFAULT 0",
+        "ALTER TABLE sales ADD COLUMN paid INTEGER DEFAULT 0",
         [],
     );
     
     // Add customer_type and customer_name if they don't exist
     let _ = conn.execute(
-        "ALTER TABLE food_orders ADD COLUMN customer_type TEXT DEFAULT 'GUEST'",
+        "ALTER TABLE sales ADD COLUMN customer_type TEXT DEFAULT 'GUEST'",
         [],
     );
     
     let _ = conn.execute(
-        "ALTER TABLE food_orders ADD COLUMN customer_name TEXT",
+        "ALTER TABLE sales ADD COLUMN customer_name TEXT",
         [],
     );
 
     // Update the paid column to match is_paid if both exist
     let _ = conn.execute(
-        "UPDATE food_orders SET paid = is_paid WHERE is_paid IS NOT NULL AND paid IS NULL",
+        "UPDATE sales SET paid = is_paid WHERE is_paid IS NOT NULL AND paid IS NULL",
         [],
     );
 
     // Update created_at from order_date if both exist  
     let _ = conn.execute(
-        "UPDATE food_orders SET created_at = order_date WHERE order_date IS NOT NULL AND created_at IS NULL",
+        "UPDATE sales SET created_at = order_date WHERE order_date IS NOT NULL AND created_at IS NULL",
         [],
     );
 
-    // Handle order items table naming inconsistency
-    // Check if food_order_items exists and order_items doesn't, then rename it
+    // Handle sale items table naming inconsistency
+    // Check if food_order_items exists and sale_items doesn't, then rename it
     let table_exists: bool = conn
         .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='food_order_items'")
         .and_then(|mut stmt| {
@@ -423,43 +447,49 @@ fn migrate_database(conn: &Connection) -> SqliteResult<()> {
         })
         .unwrap_or(false);
     
-    let order_items_exists: bool = conn
-        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='order_items'")
+    let sale_items_exists: bool = conn
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='sale_items'")
         .and_then(|mut stmt| {
             stmt.query_row([], |_| Ok(true))
                 .or_else(|_| Ok(false))
         })
         .unwrap_or(false);
 
-    if table_exists && !order_items_exists {
-        // Rename food_order_items to order_items
-        let _ = conn.execute("ALTER TABLE food_order_items RENAME TO order_items", []);
-        println!("Renamed food_order_items table to order_items");
+    if table_exists && !sale_items_exists {
+        // Rename food_order_items to sale_items
+        let _ = conn.execute("ALTER TABLE food_order_items RENAME TO sale_items", []);
+        println!("Renamed food_order_items table to sale_items");
     }
 
-    // Add item_name column to order_items if it doesn't exist
+    // Add item_name column to sale_items if it doesn't exist
     let _ = conn.execute(
-        "ALTER TABLE order_items ADD COLUMN item_name TEXT DEFAULT ''",
+        "ALTER TABLE sale_items ADD COLUMN item_name TEXT DEFAULT ''",
         [],
     );
 
     // Update item_name from menu_items if it's empty
     let _ = conn.execute(
-        "UPDATE order_items SET item_name = (
-            SELECT name FROM menu_items WHERE menu_items.id = order_items.menu_item_id
+        "UPDATE sale_items SET item_name = (
+            SELECT name FROM menu_items WHERE menu_items.id = sale_items.menu_item_id
         ) WHERE item_name = '' OR item_name IS NULL",
         [],
     );
 
-    // Add status column to guests if it doesn't exist
+    // Add status column to customers if it doesn't exist
     let _ = conn.execute(
-        "ALTER TABLE guests ADD COLUMN status TEXT DEFAULT 'active'",
+        "ALTER TABLE customers ADD COLUMN status TEXT DEFAULT 'active'",
+        [],
+    );
+
+    // Add loyalty_points column to customers if it doesn't exist
+    let _ = conn.execute(
+        "ALTER TABLE customers ADD COLUMN loyalty_points INTEGER NOT NULL DEFAULT 0",
         [],
     );
 
     // Update status from is_active if both exist
     let _ = conn.execute(
-        "UPDATE guests SET status = CASE WHEN is_active = 1 THEN 'active' ELSE 'inactive' END 
+        "UPDATE customers SET status = CASE WHEN is_active = 1 THEN 'active' ELSE 'inactive' END 
          WHERE is_active IS NOT NULL AND (status IS NULL OR status = '')",
         [],
     );
@@ -515,12 +545,12 @@ fn ensure_audit_log_schema(conn: &Connection) -> SqliteResult<()> {
 fn verify_and_fix_schema(conn: &Connection) -> SqliteResult<()> {
     println!("Verifying database schema consistency...");
     
-    // Check if food_orders has the correct columns
+    // Check if sales has the correct columns
     let mut has_created_at = false;
     let mut has_paid = false;
     let mut has_customer_type = false;
     
-    let mut stmt = conn.prepare("PRAGMA table_info(food_orders)")?;
+    let mut stmt = conn.prepare("PRAGMA table_info(sales)")?;
     let rows = stmt.query_map([], |row| {
         Ok(row.get::<_, String>(1)?) // column name
     })?;
@@ -534,24 +564,24 @@ fn verify_and_fix_schema(conn: &Connection) -> SqliteResult<()> {
         }
     }
     
-    println!("Food orders schema check: created_at={}, paid={}, customer_type={}", 
+    println!("Sales schema check: created_at={}, paid={}, customer_type={}", 
              has_created_at, has_paid, has_customer_type);
     
-    // Check if order_items table exists
-    let order_items_exists = conn
-        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='order_items'")
+    // Check if sale_items table exists
+    let sale_items_exists = conn
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='sale_items'")
         .and_then(|mut stmt| {
             stmt.query_row([], |_| Ok(true))
                 .or_else(|_| Ok(false))
         })
         .unwrap_or(false);
     
-    println!("Order items table exists: {}", order_items_exists);
+    println!("Sale items table exists: {}", sale_items_exists);
     
-    // Check if order_items has item_name column
+    // Check if sale_items has item_name column
     let mut has_item_name = false;
-    if order_items_exists {
-        let mut stmt = conn.prepare("PRAGMA table_info(order_items)")?;
+    if sale_items_exists {
+        let mut stmt = conn.prepare("PRAGMA table_info(sale_items)")?;
         let rows = stmt.query_map([], |row| {
             Ok(row.get::<_, String>(1)?) // column name
         })?;
@@ -564,11 +594,82 @@ fn verify_and_fix_schema(conn: &Connection) -> SqliteResult<()> {
         }
     }
     
-    println!("Order items has item_name: {}", has_item_name);
+    println!("Sale items has item_name: {}", has_item_name);
     
     // Run migrations to fix any issues
     migrate_database(conn)?;
     
     println!("Schema verification and fixes completed");
+    Ok(())
+}
+
+fn ensure_business_table_renames(conn: &Connection) -> SqliteResult<()> {
+    // Rooms -> resources
+    let rooms_exists: bool = conn
+        .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='rooms'")
+        .and_then(|mut stmt| stmt.query_row([], |_| Ok(true)).or_else(|_| Ok(false)))
+        .unwrap_or(false);
+
+    let resources_exists: bool = conn
+        .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='resources'")
+        .and_then(|mut stmt| stmt.query_row([], |_| Ok(true)).or_else(|_| Ok(false)))
+        .unwrap_or(false);
+
+    if rooms_exists && !resources_exists {
+        let _ = conn.execute("ALTER TABLE rooms RENAME TO resources", []);
+    }
+
+    // Guests -> customers
+    let guests_exists: bool = conn
+        .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='guests'")
+        .and_then(|mut stmt| stmt.query_row([], |_| Ok(true)).or_else(|_| Ok(false)))
+        .unwrap_or(false);
+
+    let customers_exists: bool = conn
+        .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='customers'")
+        .and_then(|mut stmt| stmt.query_row([], |_| Ok(true)).or_else(|_| Ok(false)))
+        .unwrap_or(false);
+
+    if guests_exists && !customers_exists {
+        let _ = conn.execute("ALTER TABLE guests RENAME TO customers", []);
+    }
+
+    // food_orders -> sales
+    let food_orders_exists: bool = conn
+        .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='food_orders'")
+        .and_then(|mut stmt| stmt.query_row([], |_| Ok(true)).or_else(|_| Ok(false)))
+        .unwrap_or(false);
+
+    let sales_exists: bool = conn
+        .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='sales'")
+        .and_then(|mut stmt| stmt.query_row([], |_| Ok(true)).or_else(|_| Ok(false)))
+        .unwrap_or(false);
+
+    if food_orders_exists && !sales_exists {
+        let _ = conn.execute("ALTER TABLE food_orders RENAME TO sales", []);
+    }
+
+    // order_items -> sale_items
+    let order_items_exists: bool = conn
+        .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='order_items'")
+        .and_then(|mut stmt| stmt.query_row([], |_| Ok(true)).or_else(|_| Ok(false)))
+        .unwrap_or(false);
+
+    let sale_items_exists: bool = conn
+        .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='sale_items'")
+        .and_then(|mut stmt| stmt.query_row([], |_| Ok(true)).or_else(|_| Ok(false)))
+        .unwrap_or(false);
+
+    if order_items_exists && !sale_items_exists {
+        let _ = conn.execute("ALTER TABLE order_items RENAME TO sale_items", []);
+    }
+
+    // Ensure resource_type is set for existing resources
+    // (Safe even if the column doesn't exist yet; ignored.)
+    let _ = conn.execute(
+        "UPDATE resources SET resource_type = 'ROOM' WHERE resource_type IS NULL OR resource_type = ''",
+        [],
+    );
+
     Ok(())
 }

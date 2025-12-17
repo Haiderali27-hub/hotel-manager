@@ -1,16 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import {
-    exportHistoryCsvWithDialog,
-    getAllGuests,
-    getExpenses,
-    getExpensesByDateRange,
-    getFoodOrders,
-    getRooms,
-    type ExpenseRecord,
-    type ExportFilters,
-    type FoodOrderSummary,
-    type Guest,
-    type Room
+  exportHistoryCsvWithDialog,
+  getAllGuests,
+  getExpenses,
+  getExpensesByDateRange,
+  getFoodOrders,
+  getRooms,
+  type ExpenseRecord,
+  type ExportFilters,
+  type FoodOrderSummary,
+  type Guest,
+  type Room
 } from '../api/client';
 import { useCurrency } from '../context/CurrencyContext';
 import { useNotification } from '../context/NotificationContext';
@@ -348,7 +348,7 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
             <td style={tdStyle}>{guest.check_out ? formatDate(guest.check_out) : 'Active'}</td>
             <td style={tdStyle}>
               <span style={{
-                backgroundColor: guest.status === 'active' ? '#28a745' : '#6c757d',
+                backgroundColor: guest.status === 'active' ? colors.success : colors.textMuted,
                 color: 'white',
                 padding: '0.25rem 0.5rem',
                 borderRadius: '4px',
@@ -385,7 +385,7 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
             <td style={tdStyle}>{formatMoney(order.total_amount)}</td>
             <td style={tdStyle}>
               <span style={{
-                backgroundColor: order.paid ? '#28a745' : '#dc3545',
+                backgroundColor: order.paid ? colors.success : colors.error,
                 color: 'white',
                 padding: '0.25rem 0.5rem',
                 borderRadius: '4px',
@@ -679,7 +679,7 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
             onClick={handleExport}
             disabled={loading}
             style={{
-              backgroundColor: loading ? '#6c757d' : '#28a745',
+              backgroundColor: loading ? colors.textMuted : colors.success,
               color: 'white',
               border: 'none',
               padding: '0.5rem 1rem',

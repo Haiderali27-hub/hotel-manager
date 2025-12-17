@@ -9,6 +9,7 @@ import {
     toggleFoodOrderPayment,
     updateGuest
 } from '../api/client';
+import { useCurrency } from '../context/CurrencyContext';
 import { useTheme } from '../context/ThemeContext';
 import CheckoutScreen from './CheckoutScreen';
 
@@ -28,6 +29,7 @@ interface ActiveGuestWithOrders extends ActiveGuestRow {
 
 const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
   const { colors } = useTheme();
+  const { formatMoney } = useCurrency();
   const [guests, setGuests] = useState<ActiveGuestWithOrders[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -250,9 +252,7 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return `Rs ${amount.toFixed(2)}`;
-  };
+  const formatCurrency = (amount: number) => formatMoney(amount);
 
   const formatDateTime = (dateString: string) => {
     return new Date(dateString).toLocaleString();
@@ -883,7 +883,7 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
                 </option>
                 {availableRooms.map((room) => (
                   <option key={room.id} value={room.id}>
-                    Room {room.number} - {room.room_type} (RS {room.daily_rate}/day)
+                    Room {room.number} - {room.room_type} ({formatMoney(room.daily_rate)}/day)
                     {room.is_occupied && room.guest_id === editingGuest?.guest_id ? ' (Current)' : ''}
                   </option>
                 ))}
@@ -901,7 +901,7 @@ const ActiveGuests: React.FC<ActiveGuestsProps> = ({ onBack, onAddOrder }) => {
 
             <div style={{ marginBottom: '1.5rem' }}>
               <label style={{ display: 'block', marginBottom: '0.5rem', color: colors.text }}>
-                Daily Rate (RS)
+                Daily Rate
               </label>
               <input
                 type="number"

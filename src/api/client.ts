@@ -770,7 +770,7 @@ export const buildFinalInvoiceHtmlWithDiscount = (
  * @example
  * ```typescript
  * const finalBill = await checkoutGuestWithDiscount(123, "2025-08-20", "percentage", 10, "Senior citizen discount");
- * console.log(`Final bill: Rs ${finalBill.toFixed(2)}`);
+ * console.log(`Final bill: ${finalBill.toFixed(2)}`);
  * ```
  */
 export const checkoutGuestWithDiscount = (

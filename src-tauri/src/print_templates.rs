@@ -1,4 +1,5 @@
 use base64::{Engine, prelude::BASE64_STANDARD};
+use rusqlite::OptionalExtension;
 
 // Include the JPG logo as a compile-time embedded resource for final invoices
 const LOGO_DATA: &[u8] = include_bytes!("../logoforcheckout.jpg");
@@ -22,6 +23,59 @@ fn get_logo_base64() -> String {
     
     println!("⚠️  Warning: Embedded logo data is empty");
     return "".to_string();
+}
+
+fn ensure_settings_table(conn: &rusqlite::Connection) -> Result<(), String> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS settings (\
+            key TEXT PRIMARY KEY,\
+            value TEXT NOT NULL,\
+            updated_at TEXT NOT NULL\
+        )",
+        [],
+    )
+    .map_err(|e| format!("Failed to ensure settings table: {}", e))?;
+
+    // If the table exists from an older version without `updated_at`, migrate it.
+    let has_updated_at: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('settings') WHERE name = 'updated_at'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| format!("Failed to inspect settings table: {}", e))?;
+
+    if has_updated_at == 0 {
+        conn.execute(
+            "ALTER TABLE settings ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''",
+            [],
+        )
+        .map_err(|e| format!("Failed to migrate settings table: {}", e))?;
+    }
+    Ok(())
+}
+
+fn get_setting_or(conn: &rusqlite::Connection, key: &str, default_value: &str) -> Result<String, String> {
+    ensure_settings_table(conn)?;
+    let mut stmt = conn
+        .prepare("SELECT value FROM settings WHERE key = ?1")
+        .map_err(|e| format!("Failed to prepare setting query: {}", e))?;
+
+    let value: Option<String> = stmt
+        .query_row([key], |row| row.get(0))
+        .optional()
+        .map_err(|e| format!("Failed to read setting {}: {}", key, e))?;
+
+    Ok(value.unwrap_or_else(|| default_value.to_string()))
+}
+
+fn format_money(amount: f64, currency_code: &str, decimals: usize) -> String {
+    let safe_amount = if amount.is_finite() { amount } else { 0.0 };
+    match decimals {
+        0 => format!("{} {:.0}", currency_code, safe_amount),
+        2 => format!("{} {:.2}", currency_code, safe_amount),
+        _ => format!("{} {}", currency_code, safe_amount),
+    }
 }
 
 /// Print a food order receipt
@@ -83,6 +137,10 @@ pub fn print_order_receipt(order_id: i64) -> Result<String, String> {
 #[tauri::command]
 pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
     let conn = crate::db::get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+
+    let currency_code = get_setting_or(&conn, "currency_code", "USD")?
+        .trim()
+        .to_uppercase();
     
     // Get order details with optional guest information
     let mut stmt = conn.prepare(
@@ -141,9 +199,11 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
     let mut items_html = String::new();
     for item in item_rows {
         let (item_name, quantity, unit_price, line_total) = item.map_err(|e| format!("Failed to read item: {}", e))?;
+        let unit_price_fmt = format_money(unit_price, &currency_code, 2);
+        let line_total_fmt = format_money(line_total, &currency_code, 2);
         items_html.push_str(&format!(
-            "<tr><td>{}</td><td>{}</td><td>Rs {:.2}</td><td>Rs {:.2}</td></tr>",
-            html_escape(&item_name), quantity, unit_price, line_total
+            "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+            html_escape(&item_name), quantity, unit_price_fmt, line_total_fmt
         ));
     }
     
@@ -165,6 +225,8 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
     } else {
         room_number.unwrap_or_else(|| "N/A".to_string())
     };
+
+    let total_amount_fmt = format_money(total_amount, &currency_code, 2);
 
     let html = format!(r#"<!DOCTYPE html>
 <html lang="en">
@@ -328,7 +390,7 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
         <tfoot>
             <tr class="total-row">
                 <td colspan="3"><strong>Grand Total</strong></td>
-                <td class="text-right"><strong>Rs {:.2}</strong></td>
+                <td class="text-right"><strong>{}</strong></td>
             </tr>
         </tfoot>
     </table>
@@ -348,7 +410,7 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
         html_escape(&room_display),
         payment_status,
         items_html,
-        total_amount,
+        total_amount_fmt,
         chrono::Local::now().format("%B %d, %Y at %I:%M %p")
     );
     
@@ -380,6 +442,10 @@ pub fn build_final_invoice_html_with_discount(
     _discount_description: String
 ) -> Result<String, String> {
     let conn = crate::db::get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+
+    let currency_code = get_setting_or(&conn, "currency_code", "USD")?
+        .trim()
+        .to_uppercase();
     
     // Get logo as base64
     let logo_base64 = get_logo_base64();
@@ -472,26 +538,34 @@ pub fn build_final_invoice_html_with_discount(
             // Add table row for this item with clear paid/unpaid indication
             let status_indicator = if paid { " [PAID]" } else { " [UNPAID]" };
             let strike_through = if paid { "text-decoration: line-through; opacity: 0.6;" } else { "" };
+            let unit_price_fmt = format_money(unit_price, &currency_code, 0);
+            let line_total_fmt = format_money(line_total, &currency_code, 0);
             food_table_rows.push_str(&format!(
                 r#"<div class="table-row" style="{}">
                     <div class="table-cell"><strong>{}{}</strong></div>
                     <div class="table-cell center">{}</div>
-                    <div class="table-cell center">Rs {:.0}</div>
-                    <div class="table-cell right">Rs {:.0}</div>
+                    <div class="table-cell center">{}</div>
+                    <div class="table-cell right">{}</div>
                 </div>"#,
-                strike_through, html_escape(&name), status_indicator, quantity, unit_price, line_total
+                strike_through,
+                html_escape(&name),
+                status_indicator,
+                quantity,
+                unit_price_fmt,
+                line_total_fmt
             ));
         }
     }
     
     // If no food items, show a simple message
     if food_table_rows.is_empty() {
+        let zero_fmt = format_money(0.0, &currency_code, 0);
         food_table_rows = r#"<div class="table-row">
             <div class="table-cell">No food orders</div>
             <div class="table-cell center">-</div>
             <div class="table-cell center">-</div>
-            <div class="table-cell right">Rs 0</div>
-        </div>"#.to_string();
+            <div class="table-cell right">__ZERO__</div>
+        </div>"#.to_string().replace("__ZERO__", &zero_fmt);
     }
     
     // Calculate totals (only unpaid food items are included in final total)
@@ -530,6 +604,12 @@ pub fn build_final_invoice_html_with_discount(
     let current_date = chrono::Local::now();
     let formatted_date = current_date.format("%d-%m-%Y");
     let formatted_time = current_date.format("%I:%M %p");
+
+    let daily_rate_fmt = format_money(daily_rate, &currency_code, 0);
+    let room_total_fmt = format_money(room_total, &currency_code, 0);
+    let total_food_cost_fmt = format_money(total_food_cost, &currency_code, 0);
+    let subtotal_before_discount_fmt = format_money(subtotal_before_discount, &currency_code, 0);
+    let final_total_fmt = format_money(final_total, &currency_code, 0);
     
     let html = format!(r#"<!DOCTYPE html>
 <html>
@@ -803,8 +883,8 @@ pub fn build_final_invoice_html_with_discount(
         <div class="table-row">
             <div class="table-cell">Room {} - Accommodation</div>
             <div class="table-cell center">{}</div>
-            <div class="table-cell center">Rs {:.0}</div>
-            <div class="table-cell right">Rs {:.0}</div>
+            <div class="table-cell center">{}</div>
+            <div class="table-cell right">{}</div>
         </div>
         
         <div class="section-header">FOOD ORDERS</div>
@@ -819,21 +899,21 @@ pub fn build_final_invoice_html_with_discount(
         <div class="total-section">
             <div class="total-row">
                 <span>Room Charges:</span>
-                <span>Rs {:.0}</span>
+                <span>{}</span>
             </div>
             <div class="total-row">
                 <span>Food Orders:</span>
-                <span>Rs {:.0}</span>
+                <span>{}</span>
             </div>
             <div class="total-row">
                 <span>Subtotal:</span>
-                <span>Rs {:.0}</span>
+                <span>{}</span>
             </div>
             {}
             {}
             <div class="total-row grand-total">
                 <span>Grand Total:</span>
-                <span>Rs {:.0}</span>
+                <span>{}</span>
             </div>
         </div>
         
@@ -865,12 +945,12 @@ pub fn build_final_invoice_html_with_discount(
         html_escape(&checkout_date),  // Check-out date
         html_escape(&room_number),    // Room number for charges table
         days,                         // Number of days
-        daily_rate as i32,           // Daily rate
-        room_total as i32,           // Total room charges
+        daily_rate_fmt,              // Daily rate
+        room_total_fmt,              // Total room charges
         food_table_rows,             // Food items table rows
-        room_total as i32,           // Room charges in totals
-        total_food_cost as i32,      // Food cost
-        subtotal_before_discount as i32, // Subtotal before discount
+        room_total_fmt,              // Room charges in totals
+        total_food_cost_fmt,         // Food cost
+        subtotal_before_discount_fmt, // Subtotal before discount
         // Discount row - conditionally included
         if discount_value > 0.0 {
             let discount_label = if discount_type == "percentage" {
@@ -878,23 +958,25 @@ pub fn build_final_invoice_html_with_discount(
             } else {
                 "Discount:".to_string()
             };
+            let discount_fmt = format!("-{}", format_money(discount_value, &currency_code, 0));
             format!(r#"<div class="total-row">
                 <span>{}</span>
-                <span>-Rs {:.0}</span>
-            </div>"#, discount_label, discount_value)
+                <span>{}</span>
+            </div>"#, discount_label, discount_fmt)
         } else {
             "".to_string()
         },
         // Tax row - conditionally included
         if tax_enabled {
+            let tax_fmt = format_money(tax_amount, &currency_code, 0);
             format!(r#"<div class="total-row">
                 <span>Tax ({:.1}%):</span>
-                <span>Rs {:.0}</span>
-            </div>"#, tax_rate * 100.0, tax_amount)
+                <span>{}</span>
+            </div>"#, tax_rate * 100.0, tax_fmt)
         } else {
             "".to_string()
         },
-        final_total as i32,          // Final total
+        final_total_fmt,             // Final total
         formatted_date,              // Date for footer
         formatted_time,              // Time for footer
         formatted_date,              // Date for contact info
@@ -907,11 +989,11 @@ pub fn build_final_invoice_html_with_discount(
     }
     
     // Debug: Write the complete HTML to a file for inspection
-    let debug_path = "C:/Users/DELL/Desktop/hotel-app/debug_invoice.html";
-    if let Ok(mut file) = std::fs::File::create(debug_path) {
+    let debug_path = std::env::temp_dir().join("debug_invoice.html");
+    if let Ok(mut file) = std::fs::File::create(&debug_path) {
         use std::io::Write;
         let _ = file.write_all(html.as_bytes());
-        println!("📄 Complete HTML written to {} for inspection", debug_path);
+        println!("📄 Complete HTML written to {:?} for inspection", debug_path);
     }
     
     if html.contains("data:image/jpeg;base64,") {

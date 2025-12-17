@@ -12,7 +12,8 @@ use tauri::Manager;
 use db::initialize_database;
 use offline_auth::{
     login_admin, get_security_question, reset_admin_password,
-    validate_admin_session, logout_admin, cleanup_sessions, logout_all_sessions
+    validate_admin_session, logout_admin, cleanup_sessions, logout_all_sessions,
+    check_is_setup, register_initial_admin
 };
 use simple_commands::{
     add_room, get_rooms, get_available_rooms_for_guest, update_room, delete_room, cleanup_soft_deleted_rooms,
@@ -21,7 +22,8 @@ use simple_commands::{
         dashboard_stats, add_food_order, get_food_orders, get_food_orders_by_guest, mark_order_paid,
     add_expense, get_expenses, get_expenses_by_date_range, update_expense, delete_expense,
     toggle_food_order_payment, delete_food_order, get_order_details,
-    set_tax_rate, get_tax_rate, set_tax_enabled, get_tax_enabled
+    set_tax_rate, get_tax_rate, set_tax_enabled, get_tax_enabled,
+    set_currency_code, get_currency_code, set_locale, get_locale
 };
 use database_reset::{reset_database, get_database_path, get_database_stats};
 use export::{export_history_csv, export_history_csv_with_dialog, create_database_backup};
@@ -58,6 +60,8 @@ pub fn run() {
             logout_admin,
             cleanup_sessions,
             logout_all_sessions,
+            check_is_setup,
+            register_initial_admin,
             // Room management
             add_room,
             get_rooms,
@@ -111,6 +115,10 @@ pub fn run() {
             get_tax_rate,
             set_tax_enabled,
             get_tax_enabled,
+            set_currency_code,
+            get_currency_code,
+            set_locale,
+            get_locale,
             // Backup & Reset
             backup_database,
             export_json_backup,

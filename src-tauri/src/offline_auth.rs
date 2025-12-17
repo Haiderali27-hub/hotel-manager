@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 use chrono::{Utc, Duration};
-use std::path::PathBuf;
+use crate::db::get_db_path;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LoginRequest {
@@ -42,43 +42,14 @@ pub struct AuthManager {
     db_path: String,
 }
 
-// Helper function to get the correct database path for both dev and production
-fn get_database_path() -> String {
-    // Check if we're in development (db folder exists in current directory)
-    if let Ok(current_dir) = std::env::current_dir() {
-        let dev_db_path = current_dir.join("db").join("hotel.db");
-        if dev_db_path.exists() {
-            return dev_db_path.to_string_lossy().to_string();
-        }
-        
-        // If not in development, look for database in the executable directory
-        if let Ok(exe_path) = std::env::current_exe() {
-            if let Some(exe_dir) = exe_path.parent() {
-                let prod_db_path = exe_dir.join("hotel.db");
-                
-                // Create database file if it doesn't exist by copying from dev location
-                if !prod_db_path.exists() {
-                    if dev_db_path.exists() {
-                        std::fs::copy(&dev_db_path, &prod_db_path).ok();
-                    }
-                }
-                
-                return prod_db_path.to_string_lossy().to_string();
-            }
-        }
-    }
-    
-    // Final fallback
-    "db/hotel.db".to_string()
-}
-
 impl AuthManager {
     pub fn new() -> Self {
         Self {
-            db_path: get_database_path(),
+            db_path: get_db_path().to_string_lossy().to_string(),
         }
     }
 
+    #[allow(dead_code)]
     pub fn new_with_path(db_path: &str) -> Self {
         Self {
             db_path: db_path.to_string(),
@@ -348,6 +319,51 @@ impl AuthManager {
         
         Ok(())
     }
+
+    pub fn is_setup_complete(&self) -> SqliteResult<bool> {
+        let conn = self.get_connection()?;
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM admin_auth",
+            [],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
+    pub fn register_initial_admin(
+        &self,
+        username: &str,
+        password: &str,
+        security_question: &str,
+        security_answer: &str,
+    ) -> SqliteResult<()> {
+        let conn = self.get_connection()?;
+
+        let username = username.trim();
+
+        let password_salt = Uuid::new_v4().to_string();
+        let password_hash = self.hash_password_pbkdf2(password, &password_salt);
+
+        let answer_salt = Uuid::new_v4().to_string();
+        let answer_hash = self.hash_password_pbkdf2(security_answer, &answer_salt);
+        let security_answer_hash = format!("{}:{}", answer_hash, answer_salt);
+
+        conn.execute(
+            "INSERT INTO admin_auth (username, password_hash, salt, security_question, security_answer_hash, failed_attempts, locked_until)
+             VALUES (?1, ?2, ?3, ?4, ?5, 0, NULL)",
+            [
+                username,
+                &password_hash,
+                &password_salt,
+                security_question,
+                &security_answer_hash,
+            ],
+        )?;
+
+        // Best-effort audit log
+        let _ = self.log_security_event(&conn, username, "initial_admin_registered");
+        Ok(())
+    }
 }
 
 // Tauri commands for the frontend
@@ -433,4 +449,54 @@ pub async fn logout_all_sessions() -> Result<(), String> {
         },
         Err(e) => Err(format!("Database connection error: {}", e)),
     }
+}
+
+#[tauri::command]
+pub async fn check_is_setup() -> Result<bool, String> {
+    let auth_manager = AuthManager::new();
+    auth_manager
+        .is_setup_complete()
+        .map_err(|e| format!("Database error: {}", e))
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RegisterInitialAdminRequest {
+    pub username: String,
+    pub password: String,
+    pub security_question: String,
+    pub security_answer: String,
+}
+
+#[tauri::command]
+pub async fn register_initial_admin(request: RegisterInitialAdminRequest) -> Result<(), String> {
+    let auth_manager = AuthManager::new();
+
+    // Check if already setup
+    match auth_manager.is_setup_complete() {
+        Ok(true) => return Err("Setup already completed".to_string()),
+        Ok(false) => {}
+        Err(e) => return Err(format!("Database error: {}", e)),
+    }
+
+    if request.username.trim().is_empty() {
+        return Err("Username is required".to_string());
+    }
+    if request.password.len() < 8 {
+        return Err("Password must be at least 8 characters".to_string());
+    }
+    if request.security_question.trim().is_empty() {
+        return Err("Security question is required".to_string());
+    }
+    if request.security_answer.trim().is_empty() {
+        return Err("Security answer is required".to_string());
+    }
+
+    auth_manager
+        .register_initial_admin(
+            &request.username,
+            &request.password,
+            &request.security_question,
+            &request.security_answer,
+        )
+        .map_err(|_| "Failed to create admin account".to_string())
 }

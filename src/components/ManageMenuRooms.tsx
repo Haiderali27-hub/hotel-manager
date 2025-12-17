@@ -14,6 +14,7 @@ import {
     setTaxRate as saveTaxRate,
     updateMenuItem
 } from '../api/client';
+import { useCurrency } from '../context/CurrencyContext';
 import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
 
@@ -24,6 +25,7 @@ interface ManageMenuRoomsProps {
 const ManageMenuRooms: React.FC<ManageMenuRoomsProps> = ({ onBack }) => {
     const { colors } = useTheme();
     const { showSuccess, showError } = useNotification();
+    const { formatMoney } = useCurrency();
     const [activeTab, setActiveTab] = useState<'menu' | 'rooms' | 'settings'>('menu');
     const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
     const [rooms, setRooms] = useState<Room[]>([]);
@@ -501,7 +503,7 @@ const ManageMenuRooms: React.FC<ManageMenuRoomsProps> = ({ onBack }) => {
                                 >
                                     <div>{index + 1}</div>
                                     <div>{item.name}</div>
-                                    <div>RS {item.price}</div>
+                                    <div>{formatMoney(item.price)}</div>
                                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                                         <button
                                             onClick={() => handleEditMenuItem(item)}
@@ -624,7 +626,7 @@ const ManageMenuRooms: React.FC<ManageMenuRoomsProps> = ({ onBack }) => {
                                     <div>{index + 1}</div>
                                     <div>Room {room.number}</div>
                                     <div>{room.room_type}</div>
-                                    <div>Rs {room.daily_rate}/night</div>
+                                    <div>{formatMoney(room.daily_rate)}/night</div>
                                     <div>
                                         {room.is_occupied ? (
                                             <span style={{
@@ -730,7 +732,7 @@ const ManageMenuRooms: React.FC<ManageMenuRoomsProps> = ({ onBack }) => {
 
                         <div style={{ marginBottom: '1.5rem' }}>
                             <label style={{ display: 'block', marginBottom: '0.5rem', color: colors.text }}>
-                                Price (RS)
+                                Price
                             </label>
                             <input
                                 type="number"
@@ -880,7 +882,7 @@ const ManageMenuRooms: React.FC<ManageMenuRoomsProps> = ({ onBack }) => {
 
                         <div style={{ marginBottom: '1.5rem' }}>
                             <label style={{ display: 'block', marginBottom: '0.5rem', color: colors.text }}>
-                                Daily Rate (Rs)
+                                Daily Rate
                             </label>
                             <input
                                 type="number"
@@ -1028,12 +1030,12 @@ const ManageMenuRooms: React.FC<ManageMenuRoomsProps> = ({ onBack }) => {
                                 {taxEnabled ? (
                                     <>
                                         Tax enabled: <strong>{taxRate}%</strong><br/>
-                                        Example: Rs. 1000 subtotal → Rs. {(1000 * (1 + parseFloat(taxRate || '0') / 100)).toFixed(0)} total
+                                        Example: {formatMoney(1000, { maximumFractionDigits: 0 })} subtotal → {formatMoney((1000 * (1 + parseFloat(taxRate || '0') / 100)), { maximumFractionDigits: 0 })} total
                                     </>
                                 ) : (
                                     <>
                                         Tax disabled<br/>
-                                        Example: Rs. 1000 subtotal → Rs. 1000 total (no tax applied)
+                                        Example: {formatMoney(1000, { maximumFractionDigits: 0 })} subtotal → {formatMoney(1000, { maximumFractionDigits: 0 })} total (no tax applied)
                                     </>
                                 )}
                             </div>

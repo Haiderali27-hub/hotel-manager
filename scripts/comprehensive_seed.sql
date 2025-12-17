@@ -233,10 +233,20 @@ INSERT INTO admin_settings (key, value) VALUES
   ('hotel_name', 'Grand Vista Hotel'),
   ('hotel_address', '123 Main Street, Downtown'),
   ('hotel_phone', '+1-555-HOTEL-1'),
-  ('currency_symbol', 'Rs'),
   ('timezone', 'America/New_York'),
   ('check_in_time', '15:00'),
   ('check_out_time', '11:00');
+
+-- ===== APP SETTINGS (currency/locale) =====
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES
+  ('currency_code', 'USD', datetime('now')),
+  ('locale', 'en-US', datetime('now'));
 
 -- Update room occupancy based on active guests
 UPDATE rooms SET is_occupied = 1 WHERE id IN (

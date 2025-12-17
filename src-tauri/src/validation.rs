@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use chrono::NaiveDate;
 
 /// Standard error codes for consistent frontend handling

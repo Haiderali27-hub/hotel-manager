@@ -4,6 +4,7 @@ import './App.css';
 import Dashboard from './components/Dashboard';
 import NotificationToast from './components/NotificationToast';
 import OfflineLoginPage from './components/OfflineLoginPage';
+import { CurrencyProvider } from './context/CurrencyContext';
 import { NotificationProvider } from './context/NotificationContext';
 import { AuthProvider, useAuth } from './context/SimpleAuthContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -32,7 +33,7 @@ const AppContent: React.FC = () => {
           height: '50px',
           animation: 'spin 1s linear infinite'
         }}></div>
-        <p style={{marginTop: '20px', fontSize: '18px'}}>Loading Hotel Manager...</p>
+        <p style={{marginTop: '20px', fontSize: '18px'}}>Loading Business Manager...</p>
       </div>
     );
   }
@@ -58,9 +59,11 @@ function App() {
   return (
     <ThemeProvider>
       <NotificationProvider>
-        <AuthProvider>
-          <AppContent />
-        </AuthProvider>
+        <CurrencyProvider>
+          <AuthProvider>
+            <AppContent />
+          </AuthProvider>
+        </CurrencyProvider>
       </NotificationProvider>
     </ThemeProvider>
   );

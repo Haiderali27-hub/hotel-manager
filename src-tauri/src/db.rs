@@ -1,6 +1,7 @@
 use rusqlite::{Connection, Result as SqliteResult, Transaction};
 use std::path::PathBuf;
 use chrono::Utc;
+use std::collections::HashSet;
 
 pub fn get_db_connection() -> SqliteResult<Connection> {
     let db_path = get_db_path();
@@ -49,6 +50,47 @@ pub fn initialize_database() -> SqliteResult<()> {
 }
 
 fn create_initial_schema(conn: &Connection) -> SqliteResult<()> {
+    // Authentication tables (required by offline_auth.rs)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS admin_auth (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            salt TEXT NOT NULL,
+            security_question TEXT,
+            security_answer_hash TEXT,
+            failed_attempts INTEGER NOT NULL DEFAULT 0,
+            locked_until TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS admin_sessions (
+            session_token TEXT PRIMARY KEY,
+            admin_id INTEGER NOT NULL,
+            expires_at TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (admin_id) REFERENCES admin_auth(id) ON DELETE CASCADE
+        )",
+        [],
+    )?;
+
+    // Minimal audit log (required by offline_auth.rs)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT NOT NULL,
+            username TEXT,
+            event_type TEXT NOT NULL,
+            ip_address TEXT,
+            user_agent TEXT
+        )",
+        [],
+    )?;
+
     // Rooms table with created_at/updated_at
     conn.execute(
         "CREATE TABLE IF NOT EXISTS rooms (
@@ -193,6 +235,17 @@ fn create_update_triggers(conn: &Connection) -> SqliteResult<()> {
          END",
         [],
     )?;
+
+    // Trigger for admin_auth table
+    conn.execute(
+        "CREATE TRIGGER IF NOT EXISTS trigger_admin_auth_updated_at 
+         AFTER UPDATE ON admin_auth
+         FOR EACH ROW 
+         BEGIN
+            UPDATE admin_auth SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+         END",
+        [],
+    )?;
     
     // NOTE: menu_items table doesn't have updated_at column, so no trigger needed
     // conn.execute(
@@ -241,7 +294,7 @@ fn create_indexes(conn: &Connection) -> SqliteResult<()> {
     Ok(())
 }
 
-fn seed_initial_data(conn: &Connection) -> SqliteResult<()> {
+fn seed_initial_data(_conn: &Connection) -> SqliteResult<()> {
     // No default rooms - users can add their own rooms
     
     // No default menu items - users can add their own menu items
@@ -250,6 +303,7 @@ fn seed_initial_data(conn: &Connection) -> SqliteResult<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn start_transaction(conn: &Connection) -> SqliteResult<Transaction<'_>> {
     conn.unchecked_transaction()
 }
@@ -271,6 +325,7 @@ pub fn get_current_timestamp() -> String {
     Utc::now().to_rfc3339()
 }
 
+#[allow(dead_code)]
 pub fn is_room_available(room_id: i64) -> SqliteResult<bool> {
     let conn = get_db_connection()?;
     
@@ -409,7 +464,51 @@ fn migrate_database(conn: &Connection) -> SqliteResult<()> {
         [],
     );
 
+    // Ensure audit_log schema is compatible with offline_auth logging
+    ensure_audit_log_schema(conn)?;
+
     println!("Database migration completed successfully");
+    Ok(())
+}
+
+fn ensure_audit_log_schema(conn: &Connection) -> SqliteResult<()> {
+    let audit_log_exists: bool = conn
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='audit_log'")
+        .and_then(|mut stmt| stmt.query_row([], |_| Ok(true)).or_else(|_| Ok(false)))
+        .unwrap_or(false);
+
+    if !audit_log_exists {
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                username TEXT,
+                event_type TEXT NOT NULL,
+                ip_address TEXT,
+                user_agent TEXT
+            )",
+            [],
+        )?;
+        return Ok(());
+    }
+
+    let mut existing: HashSet<String> = HashSet::new();
+    let mut stmt = conn.prepare("PRAGMA table_info(audit_log)")?;
+    let rows = stmt.query_map([], |row| Ok(row.get::<_, String>(1)?))?;
+    for row in rows {
+        existing.insert(row?);
+    }
+
+    if !existing.contains("username") {
+        let _ = conn.execute("ALTER TABLE audit_log ADD COLUMN username TEXT", []);
+    }
+    if !existing.contains("ip_address") {
+        let _ = conn.execute("ALTER TABLE audit_log ADD COLUMN ip_address TEXT", []);
+    }
+    if !existing.contains("user_agent") {
+        let _ = conn.execute("ALTER TABLE audit_log ADD COLUMN user_agent TEXT", []);
+    }
+
     Ok(())
 }
 

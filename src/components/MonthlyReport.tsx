@@ -9,6 +9,7 @@ import {
     type Guest
 } from '../api/client';
 import logoImage from '../assets/Logo/logo.png';
+import { useCurrency } from '../context/CurrencyContext';
 import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
 
@@ -36,6 +37,7 @@ interface WeeklyData {
 const MonthlyReport: React.FC<MonthlyReportProps> = ({ onBack }) => {
   const { colors } = useTheme();
   const { showError, showSuccess, showWarning } = useNotification();
+  const { formatMoney } = useCurrency();
 
   // State management
   const [selectedMonth, setSelectedMonth] = useState<string>('');
@@ -217,11 +219,11 @@ const MonthlyReport: React.FC<MonthlyReportProps> = ({ onBack }) => {
         ['Generated:', new Date().toLocaleString()],
         [''],
         ['Financial Overview'],
-        ['Total Income:', `RS ${monthlyData.totalIncome.toLocaleString()}`],
-        ['Room Income:', `RS ${monthlyData.roomIncome.toLocaleString()}`],
-        ['Food Income:', `RS ${monthlyData.foodIncome.toLocaleString()}`],
-        ['Total Expenses:', `RS ${monthlyData.totalExpenses.toLocaleString()}`],
-        ['Net Profit/Loss:', `RS ${monthlyData.profitLoss.toLocaleString()}`],
+        ['Total Income:', formatMoney(monthlyData.totalIncome)],
+        ['Room Income:', formatMoney(monthlyData.roomIncome)],
+        ['Food Income:', formatMoney(monthlyData.foodIncome)],
+        ['Total Expenses:', formatMoney(monthlyData.totalExpenses)],
+        ['Net Profit/Loss:', formatMoney(monthlyData.profitLoss)],
         [''],
         ['Statistics'],
         ['Total Guests:', monthlyData.guestCount.toString()],
@@ -233,9 +235,9 @@ const MonthlyReport: React.FC<MonthlyReportProps> = ({ onBack }) => {
       const weeklyHeader = [['Weekly Breakdown'], ['Week', 'Income', 'Expenses', 'Profit/Loss']];
       const weeklyRows = weeklyData.map(week => [
         week.week,
-        `RS ${week.income.toLocaleString()}`,
-        `RS ${week.expenses.toLocaleString()}`,
-        `RS ${week.profit.toLocaleString()}`
+        formatMoney(week.income),
+        formatMoney(week.expenses),
+        formatMoney(week.profit)
       ]);
 
       // Combine all data
@@ -320,15 +322,15 @@ const MonthlyReport: React.FC<MonthlyReportProps> = ({ onBack }) => {
               <h3>Income Summary</h3>
               <div class="summary-item">
                 <span>Room Income:</span>
-                <span class="amount positive">RS ${monthlyData.roomIncome.toLocaleString()}</span>
+                <span class="amount positive">${formatMoney(monthlyData.roomIncome)}</span>
               </div>
               <div class="summary-item">
                 <span>Food Income:</span>
-                <span class="amount positive">RS ${monthlyData.foodIncome.toLocaleString()}</span>
+                <span class="amount positive">${formatMoney(monthlyData.foodIncome)}</span>
               </div>
               <div class="summary-item">
                 <strong>Total Income:</strong>
-                <span class="amount positive">RS ${monthlyData.totalIncome.toLocaleString()}</span>
+                <span class="amount positive">${formatMoney(monthlyData.totalIncome)}</span>
               </div>
             </div>
 
@@ -336,12 +338,12 @@ const MonthlyReport: React.FC<MonthlyReportProps> = ({ onBack }) => {
               <h3>Expense & Profit Summary</h3>
               <div class="summary-item">
                 <span>Total Expenses:</span>
-                <span class="amount negative">RS ${monthlyData.totalExpenses.toLocaleString()}</span>
+                <span class="amount negative">${formatMoney(monthlyData.totalExpenses)}</span>
               </div>
               <div class="summary-item">
                 <strong>Net Profit/Loss:</strong>
                 <span class="amount ${monthlyData.profitLoss >= 0 ? 'positive' : 'negative'}">
-                  RS ${monthlyData.profitLoss.toLocaleString()}
+                  ${formatMoney(monthlyData.profitLoss)}
                 </span>
               </div>
               <div class="summary-item">
@@ -369,16 +371,16 @@ const MonthlyReport: React.FC<MonthlyReportProps> = ({ onBack }) => {
               ${weeklyData.map(week => `
                 <tr>
                   <td>${week.week}</td>
-                  <td class="positive">RS ${week.income.toLocaleString()}</td>
-                  <td class="negative">RS ${week.expenses.toLocaleString()}</td>
-                  <td class="${week.profit >= 0 ? 'positive' : 'negative'}">RS ${week.profit.toLocaleString()}</td>
+                  <td class="positive">${formatMoney(week.income)}</td>
+                  <td class="negative">${formatMoney(week.expenses)}</td>
+                  <td class="${week.profit >= 0 ? 'positive' : 'negative'}">${formatMoney(week.profit)}</td>
                 </tr>
               `).join('')}
               <tr class="total-row">
                 <td><strong>Total</strong></td>
-                <td><strong>RS ${monthlyData.totalIncome.toLocaleString()}</strong></td>
-                <td><strong>RS ${monthlyData.totalExpenses.toLocaleString()}</strong></td>
-                <td><strong>RS ${monthlyData.profitLoss.toLocaleString()}</strong></td>
+                <td><strong>${formatMoney(monthlyData.totalIncome)}</strong></td>
+                <td><strong>${formatMoney(monthlyData.totalExpenses)}</strong></td>
+                <td><strong>${formatMoney(monthlyData.profitLoss)}</strong></td>
               </tr>
             </tbody>
           </table>
@@ -546,24 +548,24 @@ const MonthlyReport: React.FC<MonthlyReportProps> = ({ onBack }) => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
             <div style={statCardStyle('#4A90E2')}>
               <div style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
-                RS {monthlyData.totalIncome.toLocaleString()}
+                {formatMoney(monthlyData.totalIncome)}
               </div>
               <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>Total Income</div>
               <div style={{ fontSize: '0.8rem', marginTop: '0.5rem' }}>
-                Room: RS {monthlyData.roomIncome.toLocaleString()} | Food: RS {monthlyData.foodIncome.toLocaleString()}
+                Room: {formatMoney(monthlyData.roomIncome)} | Food: {formatMoney(monthlyData.foodIncome)}
               </div>
             </div>
 
             <div style={statCardStyle('#E74C3C')}>
               <div style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
-                RS {monthlyData.totalExpenses.toLocaleString()}
+                {formatMoney(monthlyData.totalExpenses)}
               </div>
               <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>Total Expenses</div>
             </div>
 
             <div style={statCardStyle(monthlyData.profitLoss >= 0 ? '#27AE60' : '#E74C3C')}>
               <div style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
-                RS {monthlyData.profitLoss.toLocaleString()}
+                {formatMoney(monthlyData.profitLoss)}
               </div>
               <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>
                 {monthlyData.profitLoss >= 0 ? 'Profit' : 'Loss'}
@@ -597,7 +599,7 @@ const MonthlyReport: React.FC<MonthlyReportProps> = ({ onBack }) => {
                           borderRadius: '4px 4px 0 0',
                           minHeight: '10px'
                         }}
-                        title={`Income: RS ${week.income.toLocaleString()}`}
+                        title={`Income: ${formatMoney(week.income)}`}
                       />
                       <div
                         style={{
@@ -607,13 +609,13 @@ const MonthlyReport: React.FC<MonthlyReportProps> = ({ onBack }) => {
                           borderRadius: '4px 4px 0 0',
                           minHeight: '10px'
                         }}
-                        title={`Expenses: RS ${week.expenses.toLocaleString()}`}
+                        title={`Expenses: ${formatMoney(week.expenses)}`}
                       />
                     </div>
                   </div>
                   <div style={{ fontSize: '0.8rem', fontWeight: '600' }}>{week.week}</div>
                   <div style={{ fontSize: '0.7rem', color: colors.text, opacity: 0.8 }}>
-                    P: RS {week.profit.toLocaleString()}
+                    P: {formatMoney(week.profit)}
                   </div>
                 </div>
               ))}
@@ -648,10 +650,10 @@ const MonthlyReport: React.FC<MonthlyReportProps> = ({ onBack }) => {
                     <tr key={index} style={{ borderBottom: `1px solid ${colors.border}` }}>
                       <td style={{ padding: '1rem', fontWeight: '600' }}>{week.week}</td>
                       <td style={{ padding: '1rem', textAlign: 'right', color: '#4A90E2' }}>
-                        RS {week.income.toLocaleString()}
+                        {formatMoney(week.income)}
                       </td>
                       <td style={{ padding: '1rem', textAlign: 'right', color: '#E74C3C' }}>
-                        RS {week.expenses.toLocaleString()}
+                        {formatMoney(week.expenses)}
                       </td>
                       <td style={{ 
                         padding: '1rem', 
@@ -659,20 +661,20 @@ const MonthlyReport: React.FC<MonthlyReportProps> = ({ onBack }) => {
                         color: week.profit >= 0 ? '#27AE60' : '#E74C3C',
                         fontWeight: '600'
                       }}>
-                        RS {week.profit.toLocaleString()}
+                        {formatMoney(week.profit)}
                       </td>
                     </tr>
                   ))}
                   <tr style={{ backgroundColor: colors.accent, color: colors.primary, fontWeight: 'bold' }}>
                     <td style={{ padding: '1rem' }}>Total</td>
                     <td style={{ padding: '1rem', textAlign: 'right' }}>
-                      RS {monthlyData.totalIncome.toLocaleString()}
+                      {formatMoney(monthlyData.totalIncome)}
                     </td>
                     <td style={{ padding: '1rem', textAlign: 'right' }}>
-                      RS {monthlyData.totalExpenses.toLocaleString()}
+                      {formatMoney(monthlyData.totalExpenses)}
                     </td>
                     <td style={{ padding: '1rem', textAlign: 'right' }}>
-                      RS {monthlyData.profitLoss.toLocaleString()}
+                      {formatMoney(monthlyData.profitLoss)}
                     </td>
                   </tr>
                 </tbody>

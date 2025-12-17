@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useCurrency } from '../context/CurrencyContext';
 import { useNotification } from '../context/NotificationContext';
 import '../styles/SettingsNew.css';
 
@@ -11,7 +12,9 @@ interface SecurityQuestion {
 
 const Settings: React.FC = () => {
   const { showSuccess, showError } = useNotification();
+  const { currencyCode, locale, supportedCurrencies, setCurrencyCode, setLocale, formatMoney } = useCurrency();
   const [isBackingUp, setIsBackingUp] = useState(false);
+  const [pendingLocale, setPendingLocale] = useState(locale);
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [resetStep, setResetStep] = useState(1); // 1: Safety Phrase, 2: Security Question, 3: Final Confirmation
   const [safetyPhrase, setSafetyPhrase] = useState('');
@@ -22,6 +25,10 @@ const Settings: React.FC = () => {
   const [restoreStep, setRestoreStep] = useState(1); // 1: Warning, 2: File Selection, 3: Confirmation
   const [restoreFilePath, setRestoreFilePath] = useState('');
   const [isRestoring, setIsRestoring] = useState(false);
+
+  useEffect(() => {
+    setPendingLocale(locale);
+  }, [locale]);
 
   // Handle restore database with safety steps
   const handleRestoreDatabase = async () => {
@@ -239,6 +246,60 @@ const Settings: React.FC = () => {
       </div>
 
       <div className="settings-content">
+        {/* Localization Section */}
+        <div className="settings-section">
+          <h2>🌍 Localization</h2>
+          <p>Choose your currency and locale (number/date formatting) for this device.</p>
+
+          <div className="backup-info">
+            <div className="info-item">
+              <span className="info-label">Currency</span>
+              <select
+                className="verification-input"
+                value={currencyCode}
+                onChange={async (e) => {
+                  try {
+                    await setCurrencyCode(e.target.value);
+                    showSuccess('Currency Updated', `Currency set to ${e.target.value}`);
+                  } catch (error) {
+                    showError('Currency Update Failed', String(error));
+                  }
+                }}
+              >
+                {supportedCurrencies.map((code) => (
+                  <option key={code} value={code}>
+                    {code}
+                  </option>
+                ))}
+              </select>
+              <p style={{ marginTop: '6px', color: '#6c757d' }}>
+                Preview: {formatMoney(1234.56)}
+              </p>
+            </div>
+
+            <div className="info-item">
+              <span className="info-label">Locale</span>
+              <input
+                className="verification-input"
+                value={pendingLocale}
+                onChange={(e) => setPendingLocale(e.target.value)}
+                onBlur={async () => {
+                  try {
+                    await setLocale(pendingLocale);
+                    showSuccess('Locale Updated', `Locale set to ${pendingLocale}`);
+                  } catch (error) {
+                    showError('Locale Update Failed', String(error));
+                  }
+                }}
+                placeholder="en-US"
+              />
+              <p style={{ marginTop: '6px', color: '#6c757d' }}>
+                Tip: use values like <strong>en-US</strong>, <strong>en-GB</strong>, <strong>fr-FR</strong>, <strong>ar-SA</strong>.
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Backup Section */}
         <div className="settings-section">
           <h2>📁 Data Backup</h2>

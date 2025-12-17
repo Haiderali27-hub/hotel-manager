@@ -1,25 +1,26 @@
 import React, { useEffect, useState } from 'react';
 import {
-    addFoodOrder,
+    addSale,
     buildFinalInvoiceHtmlWithDiscount,
     checkoutGuestWithDiscount,
-    deleteFoodOrder,
-    getFoodOrdersByGuest,
+    deleteSale,
     getMenuItems,
-    getOrderDetails,
+    getSaleDetails,
+    getSalesByCustomer,
     getTaxEnabled,
     getTaxRate,
-    toggleFoodOrderPayment,
-    type ActiveGuestRow,
+    toggleSalePayment,
+    type ActiveCustomerRow,
     type MenuItem,
-    type NewFoodOrder
+    type NewSale
 } from '../api/client';
 import { useCurrency } from '../context/CurrencyContext';
+import { useLabels } from '../context/LabelContext';
 import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
 
 interface CheckoutProps {
-    guest: ActiveGuestRow;
+    guest: ActiveCustomerRow;
     onBack: () => void;
     onClose: () => void;
     onCheckoutComplete: () => void;
@@ -49,6 +50,7 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onClose: _onClose, o
     const { colors } = useTheme();
     const { showSuccess, showError, showWarning } = useNotification();
     const { currencyCode, formatMoney } = useCurrency();
+    const { current: label } = useLabels();
     
     // Main data states
     const [foodOrders, setFoodOrders] = useState<FoodOrderWithDetails[]>([]);
@@ -86,7 +88,7 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onClose: _onClose, o
         setLoading(true);
         try {
             const [orderSummaries, menu] = await Promise.all([
-                getFoodOrdersByGuest(guest.guest_id),
+                getSalesByCustomer(guest.guest_id),
                 getMenuItems()
             ]);
             
@@ -108,7 +110,7 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onClose: _onClose, o
             const detailedOrders: FoodOrderWithDetails[] = [];
             for (const summary of orderSummaries) {
                 try {
-                    const orderDetails = await getOrderDetails(summary.id);
+                    const orderDetails = await getSaleDetails(summary.id);
                     const detailedOrder: FoodOrderWithDetails = {
                         id: summary.id,
                         created_at: summary.created_at,
@@ -193,7 +195,7 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onClose: _onClose, o
 
     const handleTogglePayment = async (orderId: number) => {
         try {
-            const result = await toggleFoodOrderPayment(orderId);
+            const result = await toggleSalePayment(orderId);
             showSuccess('Payment Status Updated', result);
             
             // Update local state
@@ -210,37 +212,37 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onClose: _onClose, o
     };
 
     const handleDeleteOrder = async (orderId: number, orderDescription: string) => {
-        if (!confirm(`Are you sure you want to delete this food order: ${orderDescription}?`)) {
+        if (!confirm(`Are you sure you want to delete this order: ${orderDescription}?`)) {
             return;
         }
         
         try {
-            await deleteFoodOrder(orderId);
-            showSuccess('Order Deleted', `Food order has been removed`);
+            await deleteSale(orderId);
+            showSuccess('Order Deleted', `Order has been removed`);
             
             // Remove from local state
             setFoodOrders(prev => prev.filter(order => order.id !== orderId));
             
         } catch (err) {
-            const errorMessage = 'Failed to delete food order';
+            const errorMessage = 'Failed to delete order';
             showError('Delete Failed', errorMessage);
         }
     };
 
     const handleAddFoodItem = async () => {
         if (selectedMenuItemId === 0 || quantity <= 0) {
-            showWarning('Invalid Selection', 'Please select a menu item and enter valid quantity');
+            showWarning('Invalid Selection', 'Please select an item and enter valid quantity');
             return;
         }
 
         const menuItem = menuItems.find(item => item.id === selectedMenuItemId);
         if (!menuItem) {
-            showError('Item Not Found', 'Selected menu item not found');
+            showError('Item Not Found', 'Selected item not found');
             return;
         }
 
         try {
-            const newOrder: NewFoodOrder = {
+            const newOrder: NewSale = {
                 guest_id: guest.guest_id,
                 items: [{
                     menu_item_id: selectedMenuItemId,
@@ -250,8 +252,8 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onClose: _onClose, o
                 }]
             };
 
-            await addFoodOrder(newOrder);
-            showSuccess('Food Item Added', `${quantity}x ${menuItem.name} added to bill`);
+            await addSale(newOrder);
+            showSuccess('Item Added', `${quantity}x ${menuItem.name} added to bill`);
             
             // Reload food orders
             loadCheckoutData();
@@ -295,7 +297,7 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onClose: _onClose, o
     };
 
     const handleConfirmCheckout = async () => {
-        if (!confirm(`Are you sure you want to checkout ${guest.name}? This action cannot be undone.`)) {
+        if (!confirm(`Are you sure you want to ${label.actionOut.toLowerCase()} ${guest.name}? This action cannot be undone.`)) {
             return;
         }
 
@@ -310,16 +312,13 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onClose: _onClose, o
                 discount.description
             );
             
-            showSuccess(
-                'Checkout Complete', 
-                `${guest.name} has been checked out. Final bill: ${formatMoney(finalBill)}`
-            );
+            showSuccess(`${label.actionOut} Complete`, `${label.actionOut} completed for ${guest.name}. Final bill: ${formatMoney(finalBill)}`);
             
             onCheckoutComplete();
             
         } catch (err) {
-            const errorMessage = `Failed to checkout ${guest.name}`;
-            showError('Checkout Failed', errorMessage);
+            const errorMessage = `Failed to ${label.actionOut.toLowerCase()} ${guest.name}`;
+            showError(`${label.actionOut} Failed`, errorMessage);
         } finally {
             setCheckingOut(false);
         }
@@ -342,7 +341,7 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onClose: _onClose, o
                 justifyContent: 'center',
                 alignItems: 'center'
             }}>
-                <div>Loading checkout information...</div>
+                <div>Loading billing information...</div>
             </div>
         );
     }
@@ -377,7 +376,7 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onClose: _onClose, o
                     >
                         ←
                     </button>
-                    <h1 style={{ margin: 0 }}>Checkout - {guest.name}</h1>
+                    <h1 style={{ margin: 0 }}>{label.actionOut} - {guest.name}</h1>
                 </div>
                 
                 <div style={{ 
@@ -386,7 +385,7 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onClose: _onClose, o
                     borderRadius: '4px',
                     border: `1px solid ${colors.border}`
                 }}>
-                    {guest.room_number ? `Room ${guest.room_number}` : 'Walk-in Customer'}
+                    {guest.room_number ? `${label.unit} ${guest.room_number}` : `Walk-in ${label.client}`}
                 </div>
             </div>
 
@@ -413,15 +412,15 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onClose: _onClose, o
                         border: `1px solid ${colors.border}`,
                         marginBottom: '1.5rem'
                     }}>
-                        <h3 style={{ margin: '0 0 1rem 0', color: colors.text }}>Room Charges</h3>
+                        <h3 style={{ margin: '0 0 1rem 0', color: colors.text }}>{label.unit} Charges</h3>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div>
                                 <div style={{ color: colors.textSecondary }}>
                                     {calculateStayDays()} days × {formatMoney(guest.daily_rate)}/day
                                 </div>
                                 <div style={{ fontSize: '0.9rem', color: colors.textSecondary }}>
-                                    Check-in: {new Date(guest.check_in).toLocaleDateString()}
-                                    {guest.check_out && ` → Check-out: ${new Date(guest.check_out).toLocaleDateString()}`}
+                                    {label.action}: {new Date(guest.check_in).toLocaleDateString()}
+                                    {guest.check_out && ` → ${label.actionOut}: ${new Date(guest.check_out).toLocaleDateString()}`}
                                 </div>
                             </div>
                             <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>
@@ -439,7 +438,7 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onClose: _onClose, o
                         marginBottom: '1.5rem'
                     }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                            <h3 style={{ margin: 0, color: colors.text }}>Food Orders</h3>
+                            <h3 style={{ margin: 0, color: colors.text }}>Sales</h3>
                             <button
                                 onClick={() => setShowAddFood(!showAddFood)}
                                 style={{
@@ -452,7 +451,7 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onClose: _onClose, o
                                     fontSize: '0.9rem'
                                 }}
                             >
-                                + Add Food Item
+                                + Add Item
                             </button>
                         </div>
 
@@ -468,7 +467,7 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onClose: _onClose, o
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '0.5rem', alignItems: 'end' }}>
                                     <div>
                                         <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.9rem' }}>
-                                            Menu Item
+                                            Item
                                         </label>
                                         <select
                                             value={selectedMenuItemId}
@@ -535,7 +534,7 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onClose: _onClose, o
                                 color: colors.textSecondary,
                                 padding: '2rem 0' 
                             }}>
-                                No food orders found
+                                No sales found
                             </div>
                         ) : (
                             <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
@@ -703,7 +702,7 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onClose: _onClose, o
                             paddingBottom: '0.5rem',
                             borderBottom: `1px solid ${colors.border}`
                         }}>
-                            <span>Room Charges:</span>
+                            <span>{label.unit} Charges:</span>
                             <span>{formatMoney(roomCharges)}</span>
                         </div>
                         
@@ -714,7 +713,7 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onClose: _onClose, o
                             paddingBottom: '0.5rem',
                             borderBottom: `1px solid ${colors.border}`
                         }}>
-                            <span>Unpaid Food Orders:</span>
+                            <span>Unpaid Sales:</span>
                             <span>{formatMoney(unpaidFoodTotal)}</span>
                         </div>
                         
@@ -803,7 +802,7 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onClose: _onClose, o
                                 fontWeight: 'bold'
                             }}
                         >
-                            {checkingOut ? '⏳ Processing...' : '✅ Confirm Checkout'}
+                            {checkingOut ? '⏳ Processing...' : `✅ Confirm ${label.actionOut}`}
                         </button>
                     </div>
                     
@@ -816,12 +815,12 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onClose: _onClose, o
                         fontSize: '0.9rem',
                         color: colors.textSecondary 
                     }}>
-                        <strong>Note:</strong> All food orders will appear on the receipt. 
+                        <strong>Note:</strong> All orders will appear on the receipt. 
                         Only unpaid orders are included in the total amount.
                         {taxEnabled && (
                             <><br/><strong>Tax:</strong> {taxRate}% tax is applied to the final total.</>
                         )}
-                        <br/><strong>Tip:</strong> Configure tax settings in Manage Menu & Rooms → Settings tab.
+                        <br/><strong>Tip:</strong> Configure tax settings in Manage Catalog Resources → Settings tab.
                     </div>
                 </div>
             </div>

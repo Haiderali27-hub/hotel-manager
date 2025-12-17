@@ -102,7 +102,8 @@ html, body {
   margin-bottom: 32px;
 }
 
-.hotel-logo {
+.hotel-logo,
+.brand-logo {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -111,7 +112,8 @@ html, body {
   transition: transform 0.2s ease, opacity 0.2s ease;
 }
 
-.hotel-logo:hover {
+.hotel-logo:hover,
+.brand-logo:hover {
   transform: scale(1.05);
   opacity: 0.8;
 }
@@ -131,7 +133,8 @@ html, body {
   background-clip: text;
 }
 
-.hotel-logo h1 {
+.hotel-logo h1,
+.brand-logo h1 {
   margin: 0;
   font-size: 2rem;
   font-weight: 700;
@@ -469,7 +472,8 @@ html, body {
     max-height: 95vh;
   }
   
-  .hotel-logo h1 {
+  .hotel-logo h1,
+  .brand-logo h1 {
     font-size: 1.5rem;
   }
   

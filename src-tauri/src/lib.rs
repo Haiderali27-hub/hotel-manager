@@ -24,7 +24,12 @@ use simple_commands::{
     toggle_food_order_payment, delete_food_order, get_order_details,
     set_tax_rate, get_tax_rate, set_tax_enabled, get_tax_enabled,
     set_currency_code, get_currency_code, set_locale, get_locale,
-    set_business_name, get_business_name
+    set_business_name, get_business_name,
+    // Generic alias commands
+    add_resource, get_resources, get_available_resources_for_customer, update_resource, delete_resource,
+    add_customer, get_active_customers, get_all_customers, get_customer, checkout_customer, checkout_customer_with_discount, update_customer,
+    add_sale, get_sales, get_sales_by_customer, mark_sale_paid, toggle_sale_payment, delete_sale, get_sale_details,
+    set_business_mode, get_business_mode
 };
 use database_reset::{reset_database, get_database_path, get_database_stats};
 use export::{export_history_csv, export_history_csv_with_dialog, create_database_backup};
@@ -70,6 +75,12 @@ pub fn run() {
             update_room,
             delete_room,
             cleanup_soft_deleted_rooms,
+            // Resource management (generic aliases)
+            add_resource,
+            get_resources,
+            get_available_resources_for_customer,
+            update_resource,
+            delete_resource,
             // Guest management
             add_guest,
             get_active_guests,
@@ -78,6 +89,14 @@ pub fn run() {
             checkout_guest,
             checkout_guest_with_discount,
             update_guest,
+            // Customer management (generic aliases)
+            add_customer,
+            get_active_customers,
+            get_all_customers,
+            get_customer,
+            checkout_customer,
+            checkout_customer_with_discount,
+            update_customer,
             // Menu management
             add_menu_item,
             get_menu_items,
@@ -91,6 +110,14 @@ pub fn run() {
             toggle_food_order_payment,
             delete_food_order,
             get_order_details,
+            // Sales (generic aliases)
+            add_sale,
+            get_sales,
+            get_sales_by_customer,
+            mark_sale_paid,
+            toggle_sale_payment,
+            delete_sale,
+            get_sale_details,
             // Expenses
             add_expense,
             get_expenses,
@@ -122,6 +149,8 @@ pub fn run() {
             get_locale,
             set_business_name,
             get_business_name,
+            set_business_mode,
+            get_business_mode,
             // Backup & Reset
             backup_database,
             export_json_backup,

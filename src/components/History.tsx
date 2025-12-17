@@ -1,18 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import {
   exportHistoryCsvWithDialog,
-  getAllGuests,
+  getCustomers,
   getExpenses,
   getExpensesByDateRange,
-  getFoodOrders,
-  getRooms,
+  getSales,
+  getUnits,
+  type Customer,
   type ExpenseRecord,
   type ExportFilters,
-  type FoodOrderSummary,
-  type Guest,
-  type Room
+  type SaleSummary,
+  type Unit
 } from '../api/client';
 import { useCurrency } from '../context/CurrencyContext';
+import { useLabels } from '../context/LabelContext';
 import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
 
@@ -23,8 +24,8 @@ interface HistoryProps {
 interface FilterState {
   startDate: string;
   endDate: string;
-  roomNumber: string;
-  guestName: string;
+  unitNumber: string;
+  customerName: string;
   category: string;
   searchTerm: string;
 }
@@ -49,30 +50,31 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
   const { colors } = useTheme();
   const { showSuccess, showError, showWarning } = useNotification();
   const { formatMoney } = useCurrency();
+  const { current: label } = useLabels();
   
   // Tab management
   const [activeTab, setActiveTab] = useState<'guests' | 'food-orders' | 'expenses'>('guests');
   
   // Data states
-  const [guests, setGuests] = useState<Guest[]>([]);
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [foodOrders, setFoodOrders] = useState<FoodOrderSummary[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [units, setUnits] = useState<Unit[]>([]);
+  const [sales, setSales] = useState<SaleSummary[]>([]);
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [loading, setLoading] = useState(false);
 
   // Helper function to get room number by room ID
-  const getRoomNumber = (roomId: number | null | undefined): string => {
-    if (!roomId) return 'Walk-in';
-    const room = rooms.find(r => r.id === roomId);
-    return room ? room.number : `Room #${roomId}`;
+  const getUnitNumber = (unitId: number | null | undefined): string => {
+    if (!unitId) return 'Walk-in';
+    const unit = units.find(r => r.id === unitId);
+    return unit ? unit.number : `${label.unit} #${unitId}`;
   };
   
   // Filter states
   const [filters, setFilters] = useState<FilterState>({
     startDate: '',
     endDate: '',
-    roomNumber: '',
-    guestName: '',
+    unitNumber: '',
+    customerName: '',
     category: '',
     searchTerm: ''
   });
@@ -93,10 +95,10 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
   }, []);
 
   const loadGuestsIfNeeded = async () => {
-    if (guests.length === 0) {
+    if (customers.length === 0) {
       try {
-        const guestData = await getAllGuests();
-        setGuests(guestData);
+        const customerData = await getCustomers();
+        setCustomers(customerData);
       } catch (error) {
         console.error('Failed to load guests:', error);
       }
@@ -104,10 +106,10 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
   };
 
   const loadRoomsIfNeeded = async () => {
-    if (rooms.length === 0) {
+    if (units.length === 0) {
       try {
-        const roomData = await getRooms();
-        setRooms(roomData);
+        const unitData = await getUnits();
+        setUnits(unitData);
       } catch (error) {
         console.error('Failed to load rooms:', error);
       }
@@ -118,25 +120,25 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
     setLoading(true);
     try {
       // Always load guests for name lookup
-      if (guests.length === 0) {
-        const guestData = await getAllGuests();
-        console.log('Loaded guests:', guestData);
-        setGuests(guestData);
+      if (customers.length === 0) {
+        const customerData = await getCustomers();
+        console.log('Loaded customers:', customerData);
+        setCustomers(customerData);
       }
       
       switch (activeTab) {
         case 'guests':
-          if (guests.length === 0) {
-            const guestData = await getAllGuests();
-            console.log('Loaded guests:', guestData);
-            setGuests(guestData);
+          if (customers.length === 0) {
+            const customerData = await getCustomers();
+            console.log('Loaded customers:', customerData);
+            setCustomers(customerData);
           }
           break;
         case 'food-orders':
-          const foodData = await getFoodOrders();
-          console.log('Loaded food orders:', foodData);
-          console.log('Sample order:', foodData[0]);
-          setFoodOrders(foodData);
+          const saleData = await getSales();
+          console.log('Loaded sales:', saleData);
+          console.log('Sample sale:', saleData[0]);
+          setSales(saleData);
           break;
         case 'expenses':
           const expenseData = await getExpenses();
@@ -181,8 +183,8 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
     setFilters({
       startDate: '',
       endDate: '',
-      roomNumber: '',
-      guestName: '',
+      unitNumber: '',
+      customerName: '',
       category: '',
       searchTerm: ''
     });
@@ -228,17 +230,17 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
     
     switch (activeTab) {
       case 'guests':
-        data = guests.filter(guest => {
-          const matchesRoom = !filters.roomNumber || guest.room_id?.toString().includes(filters.roomNumber);
-          const matchesName = !filters.guestName || guest.name.toLowerCase().includes(filters.guestName.toLowerCase());
+        data = customers.filter(customer => {
+          const matchesRoom = !filters.unitNumber || customer.room_id?.toString().includes(filters.unitNumber);
+          const matchesName = !filters.customerName || customer.name.toLowerCase().includes(filters.customerName.toLowerCase());
           const matchesSearch = !filters.searchTerm || 
-            guest.name.toLowerCase().includes(filters.searchTerm.toLowerCase()) ||
-            (guest.phone && guest.phone.includes(filters.searchTerm));
+            customer.name.toLowerCase().includes(filters.searchTerm.toLowerCase()) ||
+            (customer.phone && customer.phone.includes(filters.searchTerm));
           return matchesRoom && matchesName && matchesSearch;
         });
         break;
       case 'food-orders':
-        data = foodOrders.filter(order => {
+        data = sales.filter(order => {
           const matchesSearch = !filters.searchTerm || 
             order.id.toString().includes(filters.searchTerm) ||
             (order.guest_name && order.guest_name.toLowerCase().includes(filters.searchTerm.toLowerCase())) ||
@@ -331,33 +333,33 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
         <tr>
           <th style={thStyle}>Name</th>
           <th style={thStyle}>Phone</th>
-          <th style={thStyle}>Room</th>
-          <th style={thStyle}>Check-in</th>
-          <th style={thStyle}>Check-out</th>
+          <th style={thStyle}>{label.unit}</th>
+          <th style={thStyle}>{label.action}</th>
+          <th style={thStyle}>{label.actionOut}</th>
           <th style={thStyle}>Status</th>
           <th style={thStyle}>Daily Rate</th>
         </tr>
       </thead>
       <tbody>
-        {paginatedData.map((guest: Guest, index: number) => (
-          <tr key={`guest-${guest.id || index}`}>
-            <td style={tdStyle}>{guest.name}</td>
-            <td style={tdStyle}>{guest.phone || 'N/A'}</td>
-            <td style={tdStyle}>{getRoomNumber(guest.room_id)}</td>
-            <td style={tdStyle}>{formatDate(guest.check_in)}</td>
-            <td style={tdStyle}>{guest.check_out ? formatDate(guest.check_out) : 'Active'}</td>
+        {paginatedData.map((customer: Customer, index: number) => (
+          <tr key={`customer-${customer.id || index}`}>
+            <td style={tdStyle}>{customer.name}</td>
+            <td style={tdStyle}>{customer.phone || 'N/A'}</td>
+            <td style={tdStyle}>{getUnitNumber(customer.room_id)}</td>
+            <td style={tdStyle}>{formatDate(customer.check_in)}</td>
+            <td style={tdStyle}>{customer.check_out ? formatDate(customer.check_out) : 'Active'}</td>
             <td style={tdStyle}>
               <span style={{
-                backgroundColor: guest.status === 'active' ? colors.success : colors.textMuted,
+                backgroundColor: customer.status === 'active' ? colors.success : colors.textMuted,
                 color: 'white',
                 padding: '0.25rem 0.5rem',
                 borderRadius: '4px',
                 fontSize: '0.8rem'
               }}>
-                {guest.status === 'active' ? 'Active' : 'Checked Out'}
+                {customer.status === 'active' ? 'Active' : label.actionOut}
               </span>
             </td>
-            <td style={tdStyle}>{formatMoney(guest.daily_rate)}</td>
+            <td style={tdStyle}>{formatMoney(customer.daily_rate)}</td>
           </tr>
         ))}
       </tbody>
@@ -369,7 +371,7 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
       <thead>
         <tr>
           <th style={thStyle}>Order ID</th>
-          <th style={thStyle}>Guest ID</th>
+          <th style={thStyle}>{label.client}</th>
           <th style={thStyle}>Date</th>
           <th style={thStyle}>Amount</th>
           <th style={thStyle}>Status</th>
@@ -377,24 +379,24 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
         </tr>
       </thead>
       <tbody>
-        {paginatedData.map((order: FoodOrderSummary, index: number) => (
-          <tr key={`food-order-${order.id || index}`}>
-            <td style={tdStyle}>#{order.id}</td>
-            <td style={tdStyle}>{order.guest_name || 'Walk-in'}</td>
-            <td style={tdStyle}>{formatDate(order.created_at)}</td>
-            <td style={tdStyle}>{formatMoney(order.total_amount)}</td>
+        {paginatedData.map((sale: SaleSummary, index: number) => (
+          <tr key={`sale-${sale.id || index}`}>
+            <td style={tdStyle}>#{sale.id}</td>
+            <td style={tdStyle}>{sale.guest_name || `Walk-in ${label.client}`}</td>
+            <td style={tdStyle}>{formatDate(sale.created_at)}</td>
+            <td style={tdStyle}>{formatMoney(sale.total_amount)}</td>
             <td style={tdStyle}>
               <span style={{
-                backgroundColor: order.paid ? colors.success : colors.error,
+                backgroundColor: sale.paid ? colors.success : colors.error,
                 color: 'white',
                 padding: '0.25rem 0.5rem',
                 borderRadius: '4px',
                 fontSize: '0.8rem'
               }}>
-                {order.paid ? 'Paid' : 'Unpaid'}
+                {sale.paid ? 'Paid' : 'Unpaid'}
               </span>
             </td>
-            <td style={tdStyle}>Guest Order</td>
+            <td style={tdStyle}>{sale.guest_name ? `${label.unit} ${label.client}` : `Walk-in ${label.client}`}</td>
           </tr>
         ))}
       </tbody>
@@ -531,13 +533,13 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
           onClick={() => setActiveTab('guests')}
           style={tabStyle(activeTab === 'guests')}
         >
-          👥 Guests History
+          👥 {label.client}s History
         </button>
         <button
           onClick={() => setActiveTab('food-orders')}
           style={tabStyle(activeTab === 'food-orders')}
         >
-          🍽️ Food Orders
+          🍽️ Sales
         </button>
         <button
           onClick={() => setActiveTab('expenses')}
@@ -587,22 +589,22 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
           {activeTab === 'guests' && (
             <>
               <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>Room Number</label>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>{label.unit} Number</label>
                 <input
                   type="text"
-                  value={filters.roomNumber}
-                  onChange={(e) => handleFilterChange('roomNumber', e.target.value)}
-                  placeholder="Enter room number..."
+                  value={filters.unitNumber}
+                  onChange={(e) => handleFilterChange('unitNumber', e.target.value)}
+                  placeholder={`Enter ${label.unit.toLowerCase()} number...`}
                   style={filterStyle}
                 />
               </div>
               <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>Guest Name</label>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>{label.client} Name</label>
                 <input
                   type="text"
-                  value={filters.guestName}
-                  onChange={(e) => handleFilterChange('guestName', e.target.value)}
-                  placeholder="Enter guest name..."
+                  value={filters.customerName}
+                  onChange={(e) => handleFilterChange('customerName', e.target.value)}
+                  placeholder={`Enter ${label.client.toLowerCase()} name...`}
                   style={filterStyle}
                 />
               </div>
@@ -636,7 +638,7 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
               onChange={(e) => handleFilterChange('searchTerm', e.target.value)}
               placeholder={
                 activeTab === 'guests' ? 'Search by name or phone...' :
-                activeTab === 'food-orders' ? 'Search by order ID, guest name, or items...' :
+                activeTab === 'food-orders' ? `Search by order ID, ${label.client.toLowerCase()} name, or items...` :
                 'Search by description or category...'
               }
               style={filterStyle}

@@ -2,6 +2,8 @@ import { invoke } from '@tauri-apps/api/core';
 import React, { useMemo, useState } from 'react';
 import '../styles/LoginPage.css';
 
+type BusinessMode = 'hotel' | 'restaurant' | 'retail';
+
 type Step = 1 | 2 | 3;
 
 interface Props {
@@ -24,6 +26,7 @@ const SetupWizard: React.FC<Props> = ({ onComplete }) => {
   const [securityAnswer, setSecurityAnswer] = useState('');
 
   const [businessName, setBusinessName] = useState('');
+  const [businessMode, setBusinessMode] = useState<BusinessMode>('hotel');
   const [currencyCode, setCurrencyCode] = useState('USD');
   const [taxRate, setTaxRate] = useState('5');
 
@@ -79,6 +82,7 @@ const SetupWizard: React.FC<Props> = ({ onComplete }) => {
       // If any of these fail, we still complete setup (admin already exists) and the user can adjust later.
       try {
         await Promise.all([
+          invoke('set_business_mode', { mode: businessMode }),
           invoke('set_business_name', { name: businessName.trim() }),
           invoke('set_currency_code', { code: currencyCode.trim().toUpperCase() }),
           invoke('set_tax_rate', { rate: Number(taxRate) }),
@@ -118,7 +122,7 @@ const SetupWizard: React.FC<Props> = ({ onComplete }) => {
       <div className="login-background">
         <div className="login-card">
           <div className="login-header">
-            <div className="hotel-logo">
+            <div className="brand-logo">
               <h1>Business Manager Setup</h1>
             </div>
             <p className="login-subtitle">First-time setup (offline)</p>
@@ -256,6 +260,23 @@ const SetupWizard: React.FC<Props> = ({ onComplete }) => {
 
             {step === 3 && (
               <>
+                <div className="form-group">
+                  <label className="form-label">Business Type</label>
+                  <div className="input-wrapper">
+                    <span className="input-icon">🏢</span>
+                    <select
+                      className="form-input"
+                      value={businessMode}
+                      onChange={(e) => setBusinessMode(e.target.value as BusinessMode)}
+                      disabled={isSubmitting}
+                    >
+                      <option value="hotel">Hotel / Lodging</option>
+                      <option value="restaurant">Restaurant</option>
+                      <option value="retail">Retail</option>
+                    </select>
+                  </div>
+                </div>
+
                 <div className="form-group">
                   <label className="form-label">Business Name</label>
                   <div className="input-wrapper">

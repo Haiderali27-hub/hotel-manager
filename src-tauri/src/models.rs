@@ -168,7 +168,7 @@ pub struct HistoryRow {
     pub details: serde_json::Value,
 }
 
-// ===== FOOD ORDER MODELS =====
+// ===== SALES MODELS (De-hotelified) =====
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OrderItemInput {
@@ -179,7 +179,7 @@ pub struct OrderItemInput {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct FoodOrderSummary {
+pub struct SaleSummary {
     pub id: i64,
     pub created_at: String,
     pub paid: bool,
@@ -190,11 +190,11 @@ pub struct FoodOrderSummary {
     pub guest_name: Option<String>,
 }
 
-// De-hotelified naming (kept as aliases to avoid a large breaking change today)
-pub type SaleSummary = FoodOrderSummary;
+// Backwards-compatible alias (older command/TS naming)
+pub type FoodOrderSummary = SaleSummary;
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct FoodOrderInfo {
+pub struct SaleRecord {
     pub id: i64,
     pub guest_id: Option<i64>,
     pub customer_type: String,
@@ -205,7 +205,8 @@ pub struct FoodOrderInfo {
     pub total_amount: f64,
 }
 
-pub type SaleRecord = FoodOrderInfo;
+// Backwards-compatible alias
+pub type FoodOrderInfo = SaleRecord;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OrderItemDetail {
@@ -218,12 +219,13 @@ pub struct OrderItemDetail {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct FoodOrderDetails {
-    pub order: FoodOrderInfo,
+pub struct SaleDetails {
+    pub order: SaleRecord,
     pub items: Vec<OrderItemDetail>,
 }
 
-pub type SaleDetails = FoodOrderDetails;
+// Backwards-compatible alias
+pub type FoodOrderDetails = SaleDetails;
 
 // ===== EXPENSE MODELS =====
 

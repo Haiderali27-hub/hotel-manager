@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import React, { useEffect, useState } from 'react';
 import { useCurrency } from '../context/CurrencyContext';
+import { useLabels } from '../context/LabelContext';
 import { useNotification } from '../context/NotificationContext';
 import '../styles/SettingsNew.css';
 
@@ -13,6 +14,7 @@ interface SecurityQuestion {
 const Settings: React.FC = () => {
   const { showSuccess, showError } = useNotification();
   const { currencyCode, locale, supportedCurrencies, setCurrencyCode, setLocale, formatMoney } = useCurrency();
+  const { current: label } = useLabels();
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [pendingLocale, setPendingLocale] = useState(locale);
   const [showResetDialog, setShowResetDialog] = useState(false);
@@ -303,15 +305,15 @@ const Settings: React.FC = () => {
         {/* Backup Section */}
         <div className="settings-section">
           <h2>📁 Data Backup</h2>
-          <p>Export your hotel data to an external location for safekeeping.</p>
+          <p>Export your data to an external location for safekeeping.</p>
           
           <div className="backup-info">
             <div className="info-item">
               <span className="info-label">Includes:</span>
               <ul>
-                <li>Guest records and check-ins</li>
-                <li>Room information and availability</li>
-                <li>Food orders and menu items</li>
+                <li>{label.client} records and activity history</li>
+                <li>{label.unit} information and availability</li>
+                <li>Sales and catalog items</li>
                 <li>Financial records and expenses</li>
                 <li>User accounts and settings</li>
               </ul>
@@ -339,7 +341,7 @@ const Settings: React.FC = () => {
         {/* Restore Section */}
         <div className="settings-section">
           <h2>📥 Restore Database</h2>
-          <p>Restore your hotel data from a previously created backup file.</p>
+          <p>Restore your data from a previously created backup file.</p>
           
           <div className="restore-info">
             <div className="info-item">
@@ -368,15 +370,15 @@ const Settings: React.FC = () => {
         <div className="settings-section danger-section">
           <h2>🗑️ Reset Application Data</h2>
           <p className="danger-text">
-            This will permanently delete ALL data including guests, rooms, orders, and settings.
+            This will permanently delete ALL data including {label.client.toLowerCase()} records, {label.unit.toLowerCase()} records, sales, and settings.
           </p>
           
           <div className="reset-warning">
             <h3>⚠️ Warning</h3>
             <p>This action cannot be undone. Make sure you have a backup before proceeding.</p>
             <ul>
-              <li>All guest records will be deleted</li>
-              <li>All room and booking data will be lost</li>
+              <li>All {label.client.toLowerCase()} records will be deleted</li>
+              <li>All {label.unit.toLowerCase()} data will be lost</li>
               <li>All financial records will be removed</li>
               <li>Application will return to initial state</li>
             </ul>
@@ -407,9 +409,9 @@ const Settings: React.FC = () => {
                   <div className="safety-warning">
                     <p><strong>⚠️ WARNING:</strong> This action will permanently delete ALL data including:</p>
                     <ul>
-                      <li>All guest records and history</li>
-                      <li>All room bookings and reservations</li>
-                      <li>All food orders and menu items</li>
+                      <li>All {label.client.toLowerCase()} records and history</li>
+                      <li>All {label.unit.toLowerCase()} records and assignments</li>
+                      <li>All sales and catalog items</li>
                       <li>All financial records and expenses</li>
                       <li>All application settings</li>
                     </ul>
@@ -543,7 +545,7 @@ const Settings: React.FC = () => {
                       <li>Downloads folder</li>
                       <li>The app's backup directory</li>
                     </ul>
-                    <p>Look for files named like: <code>hotel_backup_YYYYMMDD_HHMMSS.db</code></p>
+                    <p>Look for files named like: <code>business_backup_YYYYMMDD_HHMMSS.db</code></p>
                   </div>
 
                   <div className="restore-path-info">
@@ -554,7 +556,7 @@ const Settings: React.FC = () => {
                         type="text"
                         value={restoreFilePath}
                         onChange={(e) => setRestoreFilePath(e.target.value)}
-                        placeholder="C:\Users\YourName\Desktop\hotel_backup_20250905_143022.db"
+                        placeholder="C:\Users\YourName\Desktop\business_backup_20250905_143022.db"
                         className="restore-path-input"
                       />
                       <button 
@@ -607,11 +609,11 @@ const Settings: React.FC = () => {
 
                   <div className="final-warning">
                     <h5>⚠️ Last Warning:</h5>
-                    <p>This will permanently replace all your current hotel data including:</p>
+                    <p>This will permanently replace all your current data including:</p>
                     <ul>
-                      <li>Guest records and check-ins</li>
-                      <li>Room information</li>
-                      <li>Food orders and menu items</li>
+                      <li>{label.client} records and activity history</li>
+                      <li>{label.unit} information</li>
+                      <li>Sales and catalog items</li>
                       <li>Financial records and expenses</li>
                     </ul>
                     <p><strong>Are you absolutely sure you want to proceed?</strong></p>

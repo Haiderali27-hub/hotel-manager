@@ -1,15 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import type { ActiveGuestRow, FoodOrderSummary, Room } from '../api/client';
+import type { ActiveCustomerRow, SaleSummary, Unit } from '../api/client';
 import {
-    deleteFoodOrder,
-    getActiveGuests,
-    getAvailableRoomsForGuest,
-    getFoodOrdersByGuest,
+    deleteSale,
+    getActiveCustomers,
+    getAvailableUnitsForCustomer,
+    getSalesByCustomer,
     printOrderReceipt,
-    toggleFoodOrderPayment,
-    updateGuest
+    toggleSalePayment,
+    updateCustomer
 } from '../api/client';
 import { useCurrency } from '../context/CurrencyContext';
+import { useLabels } from '../context/LabelContext';
 import { useTheme } from '../context/ThemeContext';
 import Checkout from './Checkout';
 
@@ -18,10 +19,10 @@ interface ActiveCustomersProps {
   onAddSale: (guestId: number) => void;
 }
 
-interface ActiveGuestWithOrders extends ActiveGuestRow {
+interface ActiveGuestWithOrders extends ActiveCustomerRow {
   totalFoodOrders: number;
   stayDays: number;
-  foodOrders?: FoodOrderSummary[];
+  foodOrders?: SaleSummary[];
   totalAmountDue: number;
   roomCharges: number;
   unpaidFoodTotal: number;
@@ -30,17 +31,18 @@ interface ActiveGuestWithOrders extends ActiveGuestRow {
 const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) => {
   const { colors } = useTheme();
   const { formatMoney } = useCurrency();
+  const { current: label } = useLabels();
   const [guests, setGuests] = useState<ActiveGuestWithOrders[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [editingGuest, setEditingGuest] = useState<ActiveGuestRow | null>(null);
+  const [editingGuest, setEditingGuest] = useState<ActiveCustomerRow | null>(null);
   const [showEditForm, setShowEditForm] = useState(false);
   const [expandedGuest, setExpandedGuest] = useState<number | null>(null);
-  const [availableRooms, setAvailableRooms] = useState<Room[]>([]);
+  const [availableRooms, setAvailableRooms] = useState<Unit[]>([]);
   
   // Checkout state
   const [showCheckout, setShowCheckout] = useState(false);
-  const [selectedGuestForCheckout, setSelectedGuestForCheckout] = useState<ActiveGuestRow | null>(null);
+  const [selectedGuestForCheckout, setSelectedGuestForCheckout] = useState<ActiveCustomerRow | null>(null);
   
   // User feedback states
   const [isUpdating, setIsUpdating] = useState(false);
@@ -76,17 +78,17 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
   const loadAvailableRoomsForEdit = async (guestId?: number) => {
     setIsLoadingRooms(true);
     try {
-      const rooms = await getAvailableRoomsForGuest(guestId);
+      const rooms = await getAvailableUnitsForCustomer(guestId);
       setAvailableRooms(rooms);
     } catch (error) {
       console.error("Error loading available rooms:", error);
-      setError("Failed to load available rooms");
+      setError(`Failed to load available ${label.unit.toLowerCase()}s`);
     } finally {
       setIsLoadingRooms(false);
     }
   };
 
-  const calculateGuestTotals = (guest: ActiveGuestRow, foodOrders: FoodOrderSummary[]) => {
+  const calculateGuestTotals = (guest: ActiveCustomerRow, foodOrders: SaleSummary[]) => {
     // Calculate stay days: if checkout date exists, use it; otherwise use today's date
     const endDate = guest.check_out ? new Date(guest.check_out) : new Date();
     const startDate = new Date(guest.check_in);
@@ -111,14 +113,14 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
   const loadActiveGuests = async () => {
     try {
       setLoading(true);
-      const response = await getActiveGuests();
+      const response = await getActiveCustomers();
       
       // Transform response to include required properties and load food orders
       const guestsWithOrders: ActiveGuestWithOrders[] = await Promise.all(
-        response.map(async (guest: ActiveGuestRow) => {
+        response.map(async (guest: ActiveCustomerRow) => {
           try {
             // Load food orders for each guest
-            const foodOrders = await getFoodOrdersByGuest(guest.guest_id);
+            const foodOrders = await getSalesByCustomer(guest.guest_id);
             const totals = calculateGuestTotals(guest, foodOrders);
             
             return {
@@ -143,13 +145,13 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
       setGuests(guestsWithOrders);
     } catch (error) {
       console.error("Error loading active guests:", error);
-      setError("Failed to load active guests");
+      setError(`Failed to load active ${label.client.toLowerCase()}s`);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleEditGuest = async (guest: ActiveGuestRow) => {
+  const handleEditGuest = async (guest: ActiveCustomerRow) => {
     setEditingGuest(guest);
     setEditName(guest.name);
     setEditCheckinDate(guest.check_in);
@@ -191,20 +193,20 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
         daily_rate: parseFloat(editDailyRate)
       };
 
-      await updateGuest(editingGuest.guest_id, updates);
-      setSuccessMessage(`Guest ${editName} updated successfully!`);
+      await updateCustomer(editingGuest.guest_id, updates);
+      setSuccessMessage(`${label.client} ${editName} updated successfully!`);
       setShowEditForm(false);
       setEditingGuest(null);
       loadActiveGuests();
     } catch (err) {
-      setError(`Failed to update guest: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      setError(`Failed to update ${label.client.toLowerCase()}: ${err instanceof Error ? err.message : 'Unknown error'}`);
       console.error(err);
     } finally {
       setIsUpdating(false);
     }
   };
 
-  const handleCheckoutGuest = (guest: ActiveGuestRow) => {
+  const handleCheckoutGuest = (guest: ActiveCustomerRow) => {
     setSelectedGuestForCheckout(guest);
     setShowCheckout(true);
   };
@@ -226,7 +228,7 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
   const handleTogglePayment = async (orderId: number) => {
     setError(null);
     try {
-      const result = await toggleFoodOrderPayment(orderId);
+      const result = await toggleSalePayment(orderId);
       setSuccessMessage('Payment status updated successfully!');
       console.log('Payment toggle result:', result);
       // Reload the guests to update the payment status
@@ -238,15 +240,15 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
   };
 
   const handleDeleteOrder = async (orderId: number) => {
-    if (confirm('Are you sure you want to delete this food order? This action cannot be undone.')) {
+    if (confirm('Are you sure you want to delete this order? This action cannot be undone.')) {
       setError(null);
       try {
-        await deleteFoodOrder(orderId);
-        setSuccessMessage('Food order deleted successfully!');
+        await deleteSale(orderId);
+        setSuccessMessage('Order deleted successfully!');
         // Reload the guests to update the orders list
         loadActiveGuests();
       } catch (err) {
-        setError(`Failed to delete food order: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        setError(`Failed to delete order: ${err instanceof Error ? err.message : 'Unknown error'}`);
         console.error(err);
       }
     }
@@ -287,7 +289,7 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
           ← Back
         </button>
         <h1 style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold' }}>
-          Active Guests
+          Active {label.client}s
         </h1>
       </div>
 
@@ -339,11 +341,11 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
           borderBottom: `1px solid ${colors.border}`,
           gap: '1rem'
         }}>
-          <div>Guest Name</div>
-          <div>Room No.</div>
-          <div>Check-in / Check-out</div>
+          <div>{label.client} Name</div>
+          <div>{label.unit} No.</div>
+          <div>{label.action} / {label.actionOut}</div>
           <div>Stay Days</div>
-          <div>Food Orders</div>
+          <div>Sales</div>
           <div>Total Amount Due</div>
           <div>Actions</div>
         </div>
@@ -351,11 +353,11 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
         {/* Table Body */}
         {loading ? (
           <div style={{ padding: '2rem', textAlign: 'center' }}>
-            Loading active guests...
+            Loading active {label.client.toLowerCase()}s...
           </div>
         ) : guests.length === 0 ? (
           <div style={{ padding: '2rem', textAlign: 'center', color: colors.textMuted }}>
-            No active guests found
+            No active {label.client.toLowerCase()}s found
           </div>
         ) : (
           <>
@@ -370,7 +372,7 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
                   color: colors.accent,
                   borderBottom: `2px solid ${colors.accent}`
                 }}>
-                  🏨 Room Guests ({roomGuests.length})
+                  {label.unit} {label.client}s ({roomGuests.length})
                 </div>
                 {roomGuests.map((guest) => (
                   <React.Fragment key={guest.guest_id}>
@@ -387,7 +389,7 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
                       }}
                     >
                       <div style={{ fontWeight: '500' }}>{guest.name}</div>
-                      <div>Room {guest.room_number}</div>
+                      <div>{label.unit} {guest.room_number}</div>
                       <div style={{ fontSize: '0.875rem', color: colors.textSecondary }}>
                         <div>{formatDate(guest.check_in)}</div>
                         <div>{guest.check_out ? formatDate(guest.check_out) : 'Open'}</div>
@@ -472,7 +474,7 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
                         borderBottom: `1px solid ${colors.border}`
                       }}>
                         <h4 style={{ margin: '0 0 1rem 0', color: colors.accent }}>
-                          Food Orders for {guest.name}
+                          Sales for {guest.name}
                         </h4>
                         {guest.foodOrders && guest.foodOrders.length > 0 ? (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -555,7 +557,7 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
                           </div>
                         ) : (
                           <div style={{ textAlign: 'center', color: colors.textMuted, padding: '2rem' }}>
-                            No food orders found for this guest
+                            No sales found for this {label.client.toLowerCase()}
                           </div>
                         )}
                       </div>
@@ -577,7 +579,7 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
                   borderBottom: `2px solid ${colors.accent}`,
                   marginTop: roomGuests.length > 0 ? '2rem' : '0'
                 }}>
-                  🚶 Walk-in Customers ({walkinGuests.length})
+                  🚶 Walk-in {label.client}s ({walkinGuests.length})
                 </div>
                 {walkinGuests.map((guest) => (
                   <React.Fragment key={guest.guest_id}>
@@ -676,7 +678,7 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
                         borderBottom: `1px solid ${colors.border}`
                       }}>
                         <h4 style={{ margin: '0 0 1rem 0', color: colors.accent }}>
-                          Food Orders for {guest.name} (Walk-in Customer)
+                          Sales for {guest.name} (Walk-in {label.client})
                         </h4>
                         {guest.foodOrders && guest.foodOrders.length > 0 ? (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -759,7 +761,7 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
                           </div>
                         ) : (
                           <div style={{ textAlign: 'center', color: colors.textMuted, padding: '2rem' }}>
-                            No food orders found for this customer
+                            No sales found for this {label.client.toLowerCase()}
                           </div>
                         )}
                       </div>
@@ -795,12 +797,12 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
             width: '90%'
           }}>
             <h3 style={{ margin: '0 0 1.5rem 0', color: colors.text }}>
-              Edit Guest: {editingGuest.name}
+              Edit {label.client}: {editingGuest.name}
             </h3>
             
             <div style={{ marginBottom: '1rem' }}>
               <label style={{ display: 'block', marginBottom: '0.5rem', color: colors.text }}>
-                Guest Name
+                {label.client} Name
               </label>
               <input
                 type="text"
@@ -815,13 +817,13 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
                   color: colors.text,
                   fontSize: '1rem'
                 }}
-                placeholder="Guest name"
+                placeholder={`${label.client.toLowerCase()} name`}
               />
             </div>
 
             <div style={{ marginBottom: '1rem' }}>
               <label style={{ display: 'block', marginBottom: '0.5rem', color: colors.text }}>
-                Check-in Date
+                {label.action} Date
               </label>
               <input
                 type="date"
@@ -841,7 +843,7 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
 
             <div style={{ marginBottom: '1rem' }}>
               <label style={{ display: 'block', marginBottom: '0.5rem', color: colors.text }}>
-                Check-out Date
+                {label.actionOut} Date
               </label>
               <input
                 type="date"
@@ -861,7 +863,7 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
 
             <div style={{ marginBottom: '1rem' }}>
               <label style={{ display: 'block', marginBottom: '0.5rem', color: colors.text }}>
-                Room
+                {label.unit}
               </label>
               <select
                 value={editRoomId}
@@ -879,11 +881,11 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
                 }}
               >
                 <option value="">
-                  {isLoadingRooms ? 'Loading available rooms...' : 'Select a room'}
+                  {isLoadingRooms ? `Loading available ${label.unit.toLowerCase()}s...` : `Select a ${label.unit.toLowerCase()}`}
                 </option>
                 {availableRooms.map((room) => (
                   <option key={room.id} value={room.id}>
-                    Room {room.number} - {room.room_type} ({formatMoney(room.daily_rate)}/day)
+                    {label.unit} {room.number} - {room.room_type} ({formatMoney(room.daily_rate)}/day)
                     {room.is_occupied && room.guest_id === editingGuest?.guest_id ? ' (Current)' : ''}
                   </option>
                 ))}
@@ -894,7 +896,7 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
                   fontSize: '0.875rem', 
                   marginTop: '0.5rem' 
                 }}>
-                  No available rooms found. All rooms are currently occupied.
+                  No available {label.unit.toLowerCase()}s found. All {label.unit.toLowerCase()}s are currently occupied.
                 </div>
               )}
             </div>

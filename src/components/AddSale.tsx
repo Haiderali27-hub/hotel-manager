@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import {
-    addFoodOrder,
-    getActiveGuests,
+    addSale,
+    getActiveCustomers,
     getMenuItems,
     printOrderReceipt,
-    toggleFoodOrderPayment,
-    type ActiveGuestRow,
+    toggleSalePayment,
+    type ActiveCustomerRow,
     type MenuItem,
-    type NewFoodOrder,
+    type NewSale,
     type OrderItem
 } from '../api/client';
 import { useCurrency } from '../context/CurrencyContext';
@@ -33,7 +33,7 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded }) => {
   const [customerType, setCustomerType] = useState<'active' | 'walkin'>('active');
   const [selectedGuestId, setSelectedGuestId] = useState<number>(0);
   const [walkinCustomerName, setWalkinCustomerName] = useState('Walk-in');
-  const [activeGuests, setActiveGuests] = useState<ActiveGuestRow[]>([]);
+  const [activeGuests, setActiveGuests] = useState<ActiveCustomerRow[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItemWithDetails[]>([]);
   const [selectedMenuItemId, setSelectedMenuItemId] = useState<number>(0);
@@ -49,7 +49,7 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded }) => {
     const loadData = async () => {
       try {
         const [guests, menu] = await Promise.all([
-          getActiveGuests(),
+          getActiveCustomers(),
           getMenuItems()
         ]);
         setActiveGuests(guests);
@@ -133,7 +133,7 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded }) => {
     try {
       // Validate
       if (customerType === 'active' && selectedGuestId === 0) {
-        throw new Error('Please select an active guest');
+        throw new Error(`Please select an active ${label.client.toLowerCase()}`);
       }
       if (orderItems.length === 0) {
         throw new Error('Please add at least one item to the order');
@@ -147,7 +147,7 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded }) => {
         guestId = null;
       }
 
-      const newOrder: NewFoodOrder = {
+      const newOrder: NewSale = {
         guest_id: guestId,
         items: orderItems.map(item => ({
           menu_item_id: item.menu_item_id,
@@ -157,16 +157,16 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded }) => {
         }))
       };
 
-      const orderId = await addFoodOrder(newOrder);
-      console.log('✅ Food order added successfully:', orderId);
+      const orderId = await addSale(newOrder);
+      console.log('✅ Sale added successfully:', orderId);
       
       const customerInfo = customerType === 'walkin' 
         ? walkinCustomerName 
-        : activeGuests.find(g => g.guest_id === selectedGuestId)?.name || 'Guest';
+        : activeGuests.find(g => g.guest_id === selectedGuestId)?.name || label.client;
       
       showSuccess(
-        'Food Order Created!',
-        `Order #${orderId} has been created for ${customerInfo} (Total: ${formatMoney(getTotalAmount())})`
+        'Sale Created!',
+        `Sale #${orderId} has been created for ${customerInfo} (Total: ${formatMoney(getTotalAmount())})`
       );
       
       setLastOrderId(orderId);
@@ -182,10 +182,10 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded }) => {
 
       onSaleAdded();
     } catch (err) {
-      console.error('❌ Failed to add food order:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to add food order';
+      console.error('❌ Failed to add sale:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to add sale';
       setError(errorMessage);
-      showError('Failed to Create Order', errorMessage);
+      showError('Failed to Create Sale', errorMessage);
     } finally {
       setLoading(false);
     }
@@ -221,7 +221,7 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded }) => {
     if (!lastOrderId) return;
     
     try {
-      const result = await toggleFoodOrderPayment(lastOrderId);
+      const result = await toggleSalePayment(lastOrderId);
       console.log('Payment status toggled:', result);
       
       // Update the local payment status
@@ -286,7 +286,7 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded }) => {
           WebkitBackgroundClip: 'text',
           WebkitTextFillColor: 'transparent'
         }}>
-          Add Food Order
+          Add Sale
         </h1>
       </div>
 
@@ -605,7 +605,7 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded }) => {
               marginBottom: '1rem',
               fontSize: '1.5rem'
             }}>
-              Food Order Added
+              Sale Added
             </h2>
             <p style={{
               marginBottom: '1rem',

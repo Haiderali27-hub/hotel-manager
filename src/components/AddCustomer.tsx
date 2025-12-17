@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { addGuest, getRooms, type NewGuest, type Room } from '../api/client';
+import { addCustomer, getUnits, type NewCustomer, type Unit } from '../api/client';
 import { useCurrency } from '../context/CurrencyContext';
 import { useLabels } from '../context/LabelContext';
 import { useNotification } from '../context/NotificationContext';
@@ -25,7 +25,7 @@ const AddCustomer: React.FC<AddCustomerProps> = ({ onBack, onCustomerAdded, refr
     daily_rate: 0
   });
   
-  const [rooms, setRooms] = useState<Room[]>([]);
+  const [rooms, setRooms] = useState<Unit[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isWalkIn, setIsWalkIn] = useState(false);  // New state for walk-in toggle
@@ -34,7 +34,7 @@ const AddCustomer: React.FC<AddCustomerProps> = ({ onBack, onCustomerAdded, refr
   useEffect(() => {
     const loadRooms = async () => {
       try {
-        const allRooms = await getRooms();
+        const allRooms = await getUnits();
         // Filter only available rooms (not occupied)
         const availableRooms = allRooms.filter(room => !room.is_occupied);
         setRooms(availableRooms);
@@ -111,20 +111,20 @@ const AddCustomer: React.FC<AddCustomerProps> = ({ onBack, onCustomerAdded, refr
         throw new Error(`Please select a ${label.unit.toLowerCase()} or choose walk-in ${label.client.toLowerCase()}`);
       }
       if (!formData.check_in) {
-        throw new Error('Check-in date is required');
+        throw new Error(`${label.action} date is required`);
       }
       if (!isWalkIn && !formData.check_out) {
-        throw new Error(`Check-out date is required for ${label.unit.toLowerCase()} ${label.client.toLowerCase()}s`);
+        throw new Error(`${label.actionOut} date is required for ${label.unit.toLowerCase()} ${label.client.toLowerCase()}s`);
       }
       if (!isWalkIn && formData.check_in && formData.check_out) {
         const checkIn = new Date(formData.check_in);
         const checkOut = new Date(formData.check_out);
         if (checkOut <= checkIn) {
-          throw new Error('Check-out date must be after check-in date');
+          throw new Error(`${label.actionOut} date must be after ${label.action.toLowerCase()} date`);
         }
       }
 
-      const newGuest: NewGuest = {
+      const newCustomer: NewCustomer = {
         name: formData.name.trim(),
         phone: formData.phone.trim() || undefined,
         room_id: isWalkIn ? undefined : formData.room_id,  // Don't assign room for walk-in
@@ -133,8 +133,8 @@ const AddCustomer: React.FC<AddCustomerProps> = ({ onBack, onCustomerAdded, refr
         daily_rate: formData.daily_rate
       };
 
-      const guestId = await addGuest(newGuest);
-      console.log('✅ Guest added successfully:', guestId);
+      const customerId = await addCustomer(newCustomer);
+      console.log(`✅ ${label.client} added successfully:`, customerId);
       
       // Show success notification
       const guestType = isWalkIn
@@ -159,7 +159,7 @@ const AddCustomer: React.FC<AddCustomerProps> = ({ onBack, onCustomerAdded, refr
       onCustomerAdded();
       onBack();
     } catch (err) {
-      console.error('❌ Failed to add guest:', err);
+      console.error(`❌ Failed to add ${label.client.toLowerCase()}:`, err);
       const errorMessage = err instanceof Error ? err.message : `Failed to add ${label.client.toLowerCase()}`;
       setError(errorMessage);
       showError(`Failed to add ${label.client.toLowerCase()}`, errorMessage);
@@ -257,7 +257,7 @@ const AddCustomer: React.FC<AddCustomerProps> = ({ onBack, onCustomerAdded, refr
 
       {/* Form */}
       <form onSubmit={handleSubmit} style={{ maxWidth: '600px' }}>
-        {/* Guest Name */}
+        {/* Name */}
         <div style={{ marginBottom: '1.5rem' }}>
           <label style={{
             display: 'block',
@@ -314,7 +314,7 @@ const AddCustomer: React.FC<AddCustomerProps> = ({ onBack, onCustomerAdded, refr
           />
         </div>
 
-        {/* Room Number - Only for non-walk-in customers */}
+        {/* Unit Number - Only for non-walk-in customers */}
         {!isWalkIn && (
           <div style={{ marginBottom: '1.5rem' }}>
             <label style={{
@@ -356,7 +356,7 @@ const AddCustomer: React.FC<AddCustomerProps> = ({ onBack, onCustomerAdded, refr
           </div>
         )}
 
-        {/* Check-in Date */}
+        {/* Action Date */}
         <div style={{ marginBottom: '1.5rem' }}>
           <label style={{
             display: 'block',
@@ -364,7 +364,7 @@ const AddCustomer: React.FC<AddCustomerProps> = ({ onBack, onCustomerAdded, refr
             fontWeight: '500',
             color: colors.text
           }}>
-            Check-in Date
+            {label.action} Date
           </label>
           <input
             type="date"
@@ -384,7 +384,7 @@ const AddCustomer: React.FC<AddCustomerProps> = ({ onBack, onCustomerAdded, refr
           />
         </div>
 
-        {/* Check-out Date - Optional for walk-in customers */}
+        {/* Action Out Date - Optional for walk-in customers */}
         <div style={{ marginBottom: '1.5rem' }}>
           <label style={{
             display: 'block',
@@ -392,7 +392,7 @@ const AddCustomer: React.FC<AddCustomerProps> = ({ onBack, onCustomerAdded, refr
             fontWeight: '500',
             color: colors.text
           }}>
-            Check-out Date {!isWalkIn && '(required)'}
+            {label.actionOut} Date {!isWalkIn && '(required)'}
             {isWalkIn && (
               <span style={{ color: colors.textMuted, fontSize: '0.875rem' }}>
                 {' '}(optional for walk-in customers)
@@ -425,7 +425,7 @@ const AddCustomer: React.FC<AddCustomerProps> = ({ onBack, onCustomerAdded, refr
             fontWeight: '500',
             color: colors.text
           }}>
-            {isWalkIn ? 'Daily Service Rate (optional)' : 'Daily Room Rate'}
+            {isWalkIn ? 'Daily Service Rate (optional)' : `Daily ${label.unit} Rate`}
           </label>
           <input
             type="number"
@@ -445,7 +445,7 @@ const AddCustomer: React.FC<AddCustomerProps> = ({ onBack, onCustomerAdded, refr
               fontSize: '1rem',
               cursor: (!isWalkIn && formData.room_id > 0) ? 'not-allowed' : 'text'
             }}
-            placeholder={isWalkIn ? "Enter daily service rate (optional)" : "Rate will be auto-filled when room is selected"}
+            placeholder={isWalkIn ? "Enter daily service rate (optional)" : `Rate will be auto-filled when ${label.unit.toLowerCase()} is selected`}
           />
         </div>
 
@@ -483,7 +483,7 @@ const AddCustomer: React.FC<AddCustomerProps> = ({ onBack, onCustomerAdded, refr
           </div>
         )}
 
-        {/* Save Guest Button */}
+        {/* Save Button */}
         <button
           type="submit"
           disabled={loading}
@@ -499,7 +499,7 @@ const AddCustomer: React.FC<AddCustomerProps> = ({ onBack, onCustomerAdded, refr
             width: '100%'
           }}
         >
-          {loading ? 'Saving Guest...' : 'Save Guest'}
+          {loading ? `Saving ${label.client}...` : `Save ${label.client}`}
         </button>
       </form>
     </div>

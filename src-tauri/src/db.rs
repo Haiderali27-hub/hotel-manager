@@ -109,12 +109,12 @@ fn create_initial_schema(conn: &Connection) -> SqliteResult<()> {
         "CREATE TABLE IF NOT EXISTS resources (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             number TEXT UNIQUE NOT NULL,
-            room_type TEXT NOT NULL DEFAULT 'Single Room',
+            room_type TEXT NOT NULL DEFAULT 'Standard',
             daily_rate REAL NOT NULL DEFAULT 100.0,
             is_occupied INTEGER NOT NULL DEFAULT 0,
             guest_id INTEGER,
             is_active INTEGER NOT NULL DEFAULT 1,
-            resource_type TEXT NOT NULL DEFAULT 'ROOM',
+            resource_type TEXT NOT NULL DEFAULT 'Room',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (guest_id) REFERENCES customers(id)
@@ -359,7 +359,7 @@ fn migrate_database(conn: &Connection) -> SqliteResult<()> {
 
     // Add room_type column if it doesn't exist
     let _ = conn.execute(
-        "ALTER TABLE resources ADD COLUMN room_type TEXT NOT NULL DEFAULT 'Single Room'",
+        "ALTER TABLE resources ADD COLUMN room_type TEXT NOT NULL DEFAULT 'Standard'",
         [],
     );
     
@@ -383,7 +383,7 @@ fn migrate_database(conn: &Connection) -> SqliteResult<()> {
 
     // Add resource_type column if it doesn't exist
     let _ = conn.execute(
-        "ALTER TABLE resources ADD COLUMN resource_type TEXT NOT NULL DEFAULT 'ROOM'",
+        "ALTER TABLE resources ADD COLUMN resource_type TEXT NOT NULL DEFAULT 'Room'",
         [],
     );
     
@@ -664,10 +664,15 @@ fn ensure_business_table_renames(conn: &Connection) -> SqliteResult<()> {
         let _ = conn.execute("ALTER TABLE order_items RENAME TO sale_items", []);
     }
 
-    // Ensure resource_type is set for existing resources
+    // Ensure resource_type is set for existing resources.
+    // Accept older values like 'ROOM' and normalize to title-case values.
     // (Safe even if the column doesn't exist yet; ignored.)
     let _ = conn.execute(
-        "UPDATE resources SET resource_type = 'ROOM' WHERE resource_type IS NULL OR resource_type = ''",
+        "UPDATE resources
+         SET resource_type = 'Room'
+         WHERE resource_type IS NULL
+            OR TRIM(resource_type) = ''
+            OR UPPER(resource_type) = 'ROOM'",
         [],
     );
 

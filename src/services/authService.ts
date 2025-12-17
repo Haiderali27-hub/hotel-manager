@@ -30,19 +30,49 @@ class AuthService {
   private saveSession(token: string, adminId: number): void {
     this.sessionToken = token;
     this.adminId = adminId;
-    localStorage.setItem('hotel_session_token', token);
-    localStorage.setItem('hotel_admin_id', adminId.toString());
+    localStorage.setItem('bm_session_token', token);
+    localStorage.setItem('bm_admin_id', adminId.toString());
+    // Cleanup legacy keys
+    localStorage.removeItem('hotel_session_token');
+    localStorage.removeItem('hotel_admin_id');
   }
 
   private loadSession(): void {
-    this.sessionToken = localStorage.getItem('hotel_session_token');
-    const adminIdStr = localStorage.getItem('hotel_admin_id');
-    this.adminId = adminIdStr ? parseInt(adminIdStr) : null;
+    const token = localStorage.getItem('bm_session_token');
+    const adminIdStr = localStorage.getItem('bm_admin_id');
+
+    if (token) {
+      this.sessionToken = token;
+      this.adminId = adminIdStr ? parseInt(adminIdStr) : null;
+      return;
+    }
+
+    // Migrate legacy session keys if present
+    const legacyToken = localStorage.getItem('hotel_session_token');
+    const legacyAdminIdStr = localStorage.getItem('hotel_admin_id');
+    if (legacyToken) {
+      localStorage.setItem('bm_session_token', legacyToken);
+      if (legacyAdminIdStr) {
+        localStorage.setItem('bm_admin_id', legacyAdminIdStr);
+      }
+      localStorage.removeItem('hotel_session_token');
+      localStorage.removeItem('hotel_admin_id');
+
+      this.sessionToken = legacyToken;
+      this.adminId = legacyAdminIdStr ? parseInt(legacyAdminIdStr) : null;
+      return;
+    }
+
+    this.sessionToken = null;
+    this.adminId = null;
   }
 
   private clearSession(): void {
     this.sessionToken = null;
     this.adminId = null;
+    localStorage.removeItem('bm_session_token');
+    localStorage.removeItem('bm_admin_id');
+    // Cleanup legacy keys
     localStorage.removeItem('hotel_session_token');
     localStorage.removeItem('hotel_admin_id');
   }

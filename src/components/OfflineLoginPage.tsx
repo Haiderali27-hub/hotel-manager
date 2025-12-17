@@ -224,7 +224,7 @@ const OfflineLoginPage: React.FC = () => {
       <div className="login-background">
         <div className="login-card">
           <div className="login-header">
-            <div className="hotel-logo">
+            <div className="brand-logo">
               <img src={logoImage} alt="Business Manager" className="logo-image" />
               <h1>Business Manager</h1>
             </div>

@@ -1,15 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import type { MenuItem, Room } from '../api/client';
+import type { MenuItem, Unit } from '../api/client';
 import {
     addMenuItem,
-    addRoom,
-    cleanupSoftDeletedRooms,
+    addUnit,
+    cleanupSoftDeletedUnits,
     deleteMenuItem,
-    deleteRoom,
+    deleteUnit,
     getMenuItems,
-    getRooms,
     getTaxEnabled,
     getTaxRate,
+    getUnits,
     setTaxEnabled as saveTaxEnabled,
     setTaxRate as saveTaxRate,
     updateMenuItem
@@ -30,7 +30,7 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
     const { current: label } = useLabels();
     const [activeTab, setActiveTab] = useState<'menu' | 'rooms' | 'settings'>('menu');
     const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-    const [rooms, setRooms] = useState<Room[]>([]);
+    const [rooms, setRooms] = useState<Unit[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -43,8 +43,7 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
     // Room form states
     const [showRoomForm, setShowRoomForm] = useState(false);
     const [roomNumber, setRoomNumber] = useState('');
-    const [roomType, setRoomType] = useState('Single Room');
-    const [customRoomType, setCustomRoomType] = useState('');
+    const [roomType, setRoomType] = useState('Standard');
     const [roomPrice, setRoomPrice] = useState('');
 
     // Settings states
@@ -61,7 +60,7 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
         try {
             const [menuData, roomData] = await Promise.all([
                 getMenuItems(),
-                getRooms()
+                getUnits()
             ]);
             setMenuItems(menuData);
             setRooms(roomData);
@@ -238,9 +237,9 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
             return;
         }
 
-        const finalRoomType = roomType === 'Other' ? customRoomType.trim() : roomType;
+        const finalRoomType = roomType.trim();
         if (!finalRoomType) {
-            const errorMessage = 'Please specify room type';
+            const errorMessage = 'Please specify a type';
             setError(errorMessage);
             showError('Validation Error', `${label.unit} type is required`);
             return;
@@ -255,7 +254,7 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
         }
 
         try {
-            await addRoom({
+            await addUnit({
                 number: roomNumber.trim(),
                 room_type: finalRoomType,
                 daily_rate: price
@@ -263,8 +262,7 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
             
             showSuccess(`${label.unit} Added`, `${label.unit} ${roomNumber} has been added successfully`);
             setRoomNumber('');
-            setRoomType('Single Room');
-            setCustomRoomType('');
+            setRoomType('Standard');
             setRoomPrice('');
             setShowRoomForm(false);
             setError(null);
@@ -286,7 +284,7 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
         if (confirm(`Are you sure you want to cleanup all soft-deleted ${label.unit.toLowerCase()}s? This will permanently remove them from the database.`)) {
             try {
                 setLoading(true);
-                const result = await cleanupSoftDeletedRooms();
+                const result = await cleanupSoftDeletedUnits();
                 showSuccess('Cleanup Complete', result);
                 setError(null);
                 loadData(); // Reload rooms to reflect changes
@@ -306,7 +304,7 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
         
         if (confirm(`Are you sure you want to delete ${roomInfo}?`)) {
             try {
-                await deleteRoom(id);
+                await deleteUnit(id);
                 showSuccess(`${label.unit} Deleted`, `${roomInfo} has been deleted successfully`);
                 setError(null);
                 loadData();
@@ -314,7 +312,7 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
                 const errorMessage = err instanceof Error ? err.message : `Failed to delete ${label.unit.toLowerCase()}`;
                 setError(errorMessage);
                 
-                if (errorMessage.toLowerCase().includes('occupied') || errorMessage.toLowerCase().includes('guest')) {
+                if (errorMessage.toLowerCase().includes('occupied') || errorMessage.toLowerCase().includes('guest') || errorMessage.toLowerCase().includes('customer')) {
                     showError(`Cannot Delete ${label.unit}`, `${label.unit} cannot be deleted because it is currently occupied`);
                 } else {
                     showError(`Failed to Delete ${label.unit}`, errorMessage);
@@ -332,8 +330,7 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
 
     const resetRoomForm = () => {
         setRoomNumber('');
-        setRoomType('Single Room');
-        setCustomRoomType('');
+        setRoomType('Standard');
         setRoomPrice('');
         setShowRoomForm(false);
     };
@@ -367,7 +364,7 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
                     ← Back
                 </button>
                 <h1 style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold' }}>
-                    Manage Menu & Rooms
+                    Manage Catalog
                 </h1>
             </div>
 
@@ -419,7 +416,7 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
                         fontWeight: '600'
                     }}
                 >
-                    Rooms
+                    {label.unit}s
                 </button>
                 <button
                     onClick={() => setActiveTab('settings')}
@@ -543,7 +540,7 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
                 </div>
             )}
 
-            {/* Rooms Tab */}
+            {/* Resources Tab */}
             {activeTab === 'rooms' && (
                 <div>
                     {/* Add Room Button */}
@@ -599,7 +596,7 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
                             <div>S.NO</div>
                             <div>{label.unit} Number</div>
                             <div>Type</div>
-                            <div>Daily Rate</div>
+                            <div>Rate</div>
                             <div>Status</div>
                             <div>Action</div>
                         </div>
@@ -628,7 +625,7 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
                                     <div>{index + 1}</div>
                                     <div>{label.unit} {room.number}</div>
                                     <div>{room.room_type}</div>
-                                    <div>{formatMoney(room.daily_rate)}/night</div>
+                                    <div>{formatMoney(room.daily_rate)}</div>
                                     <div>
                                         {room.is_occupied ? (
                                             <span style={{
@@ -639,10 +636,10 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
                                                 borderRadius: '4px',
                                                 fontSize: '0.75rem'
                                             }}>
-                                                ASSIGNED
+                                                IN USE
                                                 {room.guest_name && (
                                                     <div style={{ fontSize: '0.7rem', fontWeight: 'normal', marginTop: '2px' }}>
-                                                        to {room.guest_name}
+                                                        Assigned to {room.guest_name}
                                                     </div>
                                                 )}
                                             </span>
@@ -838,7 +835,8 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
                             <label style={{ display: 'block', marginBottom: '0.5rem', color: colors.text }}>
                                 {label.unit} Type
                             </label>
-                            <select
+                            <input
+                                type="text"
                                 value={roomType}
                                 onChange={(e) => setRoomType(e.target.value)}
                                 style={{
@@ -850,37 +848,9 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
                                     color: colors.text,
                                     fontSize: '1rem'
                                 }}
-                            >
-                                <option value="Single Room">Single Room</option>
-                                <option value="Delux Room">Delux Room</option>
-                                <option value="Family Room">Family Room</option>
-                                <option value="Master Room">Master Room</option>
-                                <option value="Other">Other</option>
-                            </select>
+                                placeholder="e.g., Standard"
+                            />
                         </div>
-
-                        {roomType === 'Other' && (
-                            <div style={{ marginBottom: '1.5rem' }}>
-                                <label style={{ display: 'block', marginBottom: '0.5rem', color: colors.text }}>
-                                    Custom {label.unit} Type
-                                </label>
-                                <input
-                                    type="text"
-                                    value={customRoomType}
-                                    onChange={(e) => setCustomRoomType(e.target.value)}
-                                    style={{
-                                        width: '100%',
-                                        padding: '0.75rem',
-                                        backgroundColor: colors.surface,
-                                        border: `1px solid ${colors.border}`,
-                                        borderRadius: '8px',
-                                        color: colors.text,
-                                        fontSize: '1rem'
-                                    }}
-                                    placeholder={`Enter custom ${label.unit.toLowerCase()} type`}
-                                />
-                            </div>
-                        )}
 
                         <div style={{ marginBottom: '1.5rem' }}>
                             <label style={{ display: 'block', marginBottom: '0.5rem', color: colors.text }}>

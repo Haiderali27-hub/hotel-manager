@@ -1,15 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
 import {
-    getAllGuests,
+    getCustomers,
     getExpensesByDateRange,
-    getFoodOrders,
+    getSales,
+    type Customer,
     type ExpenseRecord,
-    type FoodOrderSummary,
-    type Guest
+    type SaleSummary
 } from '../api/client';
 import logoImage from '../assets/Logo/logo.png';
 import { useCurrency } from '../context/CurrencyContext';
+import { useLabels } from '../context/LabelContext';
 import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
 
@@ -38,6 +39,7 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ onBack }) => {
   const { colors } = useTheme();
   const { showError, showSuccess, showWarning } = useNotification();
   const { formatMoney } = useCurrency();
+  const { current: label } = useLabels();
 
   // State management
   const [selectedMonth, setSelectedMonth] = useState<string>('');
@@ -97,33 +99,33 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ onBack }) => {
       console.log('Generating report for:', startDate, 'to', endDate);
 
       // Fetch data in parallel
-      const [guests, foodOrders, expenses] = await Promise.all([
-        getAllGuests(),
-        getFoodOrders(),
+      const [customers, sales, expenses] = await Promise.all([
+        getCustomers(),
+        getSales(),
         getExpensesByDateRange(startDate, endDate)
       ]);
 
       // Filter data for the selected month
-      const monthGuests = guests.filter(guest => {
-        const guestDate = guest.check_in.substring(0, 7); // YYYY-MM format
-        return guestDate === `${selectedYear}-${selectedMonth}`;
+      const monthCustomers = customers.filter(customer => {
+        const customerDate = customer.check_in.substring(0, 7); // YYYY-MM format
+        return customerDate === `${selectedYear}-${selectedMonth}`;
       });
 
-      const monthFoodOrders = foodOrders.filter(order => {
-        const orderDate = order.created_at.substring(0, 7); // YYYY-MM format
-        return orderDate === `${selectedYear}-${selectedMonth}`;
+      const monthSales = sales.filter(sale => {
+        const saleDate = sale.created_at.substring(0, 7); // YYYY-MM format
+        return saleDate === `${selectedYear}-${selectedMonth}`;
       });
 
       // Calculate totals
-      const roomIncome = monthGuests.reduce((sum, guest) => {
+      const roomIncome = monthCustomers.reduce((sum, customer) => {
         // Calculate days stayed
-        const checkIn = new Date(guest.check_in);
-        const checkOut = guest.check_out ? new Date(guest.check_out) : new Date();
+        const checkIn = new Date(customer.check_in);
+        const checkOut = customer.check_out ? new Date(customer.check_out) : new Date();
         const daysStayed = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
-        return sum + (guest.daily_rate * Math.max(1, daysStayed));
+        return sum + (customer.daily_rate * Math.max(1, daysStayed));
       }, 0);
 
-      const foodIncome = monthFoodOrders.reduce((sum, order) => sum + order.total_amount, 0);
+      const foodIncome = monthSales.reduce((sum, sale) => sum + sale.total_amount, 0);
       const totalIncome = roomIncome + foodIncome;
       const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
       const profitLoss = totalIncome - totalExpenses;
@@ -134,12 +136,12 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ onBack }) => {
         foodIncome,
         totalExpenses,
         profitLoss,
-        guestCount: monthGuests.length,
-        foodOrderCount: monthFoodOrders.length
+        guestCount: monthCustomers.length,
+        foodOrderCount: monthSales.length
       });
 
       // Generate weekly breakdown
-      generateWeeklyData(selectedYear, selectedMonth, monthGuests, monthFoodOrders, expenses);
+      generateWeeklyData(selectedYear, selectedMonth, monthCustomers, monthSales, expenses);
       
       setDataLoaded(true);
       showSuccess('Report Generated', 'Monthly report has been generated successfully');
@@ -151,7 +153,7 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ onBack }) => {
     }
   };
 
-  const generateWeeklyData = (year: string, month: string, guests: Guest[], foodOrders: FoodOrderSummary[], expenses: ExpenseRecord[]) => {
+  const generateWeeklyData = (year: string, month: string, customers: Customer[], sales: SaleSummary[], expenses: ExpenseRecord[]) => {
     const daysInMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
     const weeks: WeeklyData[] = [];
 
@@ -166,14 +168,14 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ onBack }) => {
       const weekEnd = `${year}-${month}-${endDay.toString().padStart(2, '0')}`;
 
       // Filter data for this week
-      const weekGuests = guests.filter(guest => {
-        const guestDate = guest.check_in;
-        return guestDate >= weekStart && guestDate <= weekEnd;
+      const weekCustomers = customers.filter(customer => {
+        const customerDate = customer.check_in;
+        return customerDate >= weekStart && customerDate <= weekEnd;
       });
 
-      const weekFoodOrders = foodOrders.filter(order => {
-        const orderDate = order.created_at.substring(0, 10);
-        return orderDate >= weekStart && orderDate <= weekEnd;
+      const weekSales = sales.filter(sale => {
+        const saleDate = sale.created_at.substring(0, 10);
+        return saleDate >= weekStart && saleDate <= weekEnd;
       });
 
       const weekExpenses = expenses.filter(expense => {
@@ -182,14 +184,14 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ onBack }) => {
       });
 
       // Calculate week totals
-      const weekRoomIncome = weekGuests.reduce((sum, guest) => {
-        const checkIn = new Date(guest.check_in);
-        const checkOut = guest.check_out ? new Date(guest.check_out) : new Date();
+      const weekRoomIncome = weekCustomers.reduce((sum, customer) => {
+        const checkIn = new Date(customer.check_in);
+        const checkOut = customer.check_out ? new Date(customer.check_out) : new Date();
         const daysStayed = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
-        return sum + (guest.daily_rate * Math.max(1, daysStayed));
+        return sum + (customer.daily_rate * Math.max(1, daysStayed));
       }, 0);
 
-      const weekFoodIncome = weekFoodOrders.reduce((sum, order) => sum + order.total_amount, 0);
+      const weekFoodIncome = weekSales.reduce((sum, sale) => sum + sale.total_amount, 0);
       const weekIncome = weekRoomIncome + weekFoodIncome;
       const weekExpenseTotal = weekExpenses.reduce((sum, expense) => sum + expense.amount, 0);
 
@@ -220,14 +222,14 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ onBack }) => {
         [''],
         ['Financial Overview'],
         ['Total Income:', formatMoney(monthlyData.totalIncome)],
-        ['Room Income:', formatMoney(monthlyData.roomIncome)],
-        ['Food Income:', formatMoney(monthlyData.foodIncome)],
+        [`${label.unit} Income:`, formatMoney(monthlyData.roomIncome)],
+        ['Sales Income:', formatMoney(monthlyData.foodIncome)],
         ['Total Expenses:', formatMoney(monthlyData.totalExpenses)],
         ['Net Profit/Loss:', formatMoney(monthlyData.profitLoss)],
         [''],
         ['Statistics'],
-        ['Total Guests:', monthlyData.guestCount.toString()],
-        ['Food Orders:', monthlyData.foodOrderCount.toString()],
+        [`Total ${label.client}s:`, monthlyData.guestCount.toString()],
+        ['Sales:', monthlyData.foodOrderCount.toString()],
         ['']
       ];
 
@@ -318,8 +320,8 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ onBack }) => {
         </head>
         <body>
           <div class="header">
-            <img src="${logoImage}" alt="Yasin Heaven Star Hotel" class="logo">
-            <h1>Yasin Heaven Star Hotel</h1>
+            <img src="${logoImage}" alt="Business Manager" class="logo">
+            <h1>Business Manager</h1>
             <h2>Monthly Financial Report</h2>
             <h3>${monthName} ${selectedYear}</h3>
             <p>Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}</p>
@@ -329,11 +331,11 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ onBack }) => {
             <div class="summary-card">
               <h3>Income Summary</h3>
               <div class="summary-item">
-                <span>Room Income:</span>
+                <span>${label.unit} Income:</span>
                 <span class="amount positive">${formatMoney(monthlyData.roomIncome)}</span>
               </div>
               <div class="summary-item">
-                <span>Food Income:</span>
+                <span>Sales Income:</span>
                 <span class="amount positive">${formatMoney(monthlyData.foodIncome)}</span>
               </div>
               <div class="summary-item">
@@ -355,11 +357,11 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ onBack }) => {
                 </span>
               </div>
               <div class="summary-item">
-                <span>Total Guests:</span>
+                <span>Total ${label.client}s:</span>
                 <span class="amount">${monthlyData.guestCount}</span>
               </div>
               <div class="summary-item">
-                <span>Food Orders:</span>
+                <span>Sales:</span>
                 <span class="amount">${monthlyData.foodOrderCount}</span>
               </div>
             </div>
@@ -394,8 +396,8 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ onBack }) => {
           </table>
 
           <div class="footer">
-            <p>This report was automatically generated by the Hotel Management System</p>
-            <p>© ${new Date().getFullYear()} Hotel Management System</p>
+            <p>This report was automatically generated by Business Manager</p>
+            <p>© ${new Date().getFullYear()} Business Manager</p>
           </div>
         </body>
       </html>
@@ -560,7 +562,7 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ onBack }) => {
               </div>
               <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>Total Income</div>
               <div style={{ fontSize: '0.8rem', marginTop: '0.5rem' }}>
-                Room: {formatMoney(monthlyData.roomIncome)} | Food: {formatMoney(monthlyData.foodIncome)}
+                {label.unit}: {formatMoney(monthlyData.roomIncome)} | Sales: {formatMoney(monthlyData.foodIncome)}
               </div>
             </div>
 
@@ -584,9 +586,9 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ onBack }) => {
               <div style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
                 {monthlyData.guestCount}
               </div>
-              <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>Total Guests</div>
+              <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>Total {label.client}s</div>
               <div style={{ fontSize: '0.8rem', marginTop: '0.5rem' }}>
-                Food Orders: {monthlyData.foodOrderCount}
+                Sales: {monthlyData.foodOrderCount}
               </div>
             </div>
           </div>

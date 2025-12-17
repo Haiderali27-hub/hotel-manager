@@ -13,6 +13,19 @@ const isTauri = typeof window !== 'undefined' && window.__TAURI_INTERNALS__;
 if (!isTauri) {
   console.warn('Tauri APIs not available - running in web mode');
 }
+
+async function invokeCompat<T>(
+  primary: string,
+  primaryArgs: Record<string, unknown> | undefined,
+  fallback: string,
+  fallbackArgs?: Record<string, unknown>
+): Promise<T> {
+  try {
+    return await invoke<T>(primary, primaryArgs);
+  } catch {
+    return await invoke<T>(fallback, fallbackArgs ?? primaryArgs);
+  }
+}
 // ============================================================================
 // TYPE DEFINITIONS - IPC Contract
 // ============================================================================
@@ -27,7 +40,7 @@ export const printOrderReceipt = (orderId: number): Promise<string> =>
 
 // ============================================================================
 
-// Room Management
+// Resource Management (legacy name: Room)
 export interface Room {
   id: number;
   number: string;
@@ -38,13 +51,25 @@ export interface Room {
   guest_name?: string;
 }
 
+// De-hotelified alias
+export type Resource = Room;
+
+// UI-facing generic alias (preferred)
+export type Unit = Room;
+
 export interface NewRoom {
   number: string;
   room_type: string;
   daily_rate: number;
 }
 
-// Guest Management
+// De-hotelified alias
+export type NewResource = NewRoom;
+
+// UI-facing generic alias (preferred)
+export type NewUnit = NewRoom;
+
+// Customer Management (legacy name: Guest)
 export interface Guest {
   id: number;
   name: string;
@@ -58,6 +83,8 @@ export interface Guest {
   updated_at: string;
 }
 
+export type Customer = Guest;
+
 export interface ActiveGuestRow {
   guest_id: number;
   name: string;
@@ -68,6 +95,8 @@ export interface ActiveGuestRow {
   is_walkin: boolean;  // New field to identify walk-in customers
 }
 
+export type ActiveCustomerRow = ActiveGuestRow;
+
 export interface NewGuest {
   name: string;
   phone?: string;
@@ -76,6 +105,8 @@ export interface NewGuest {
   check_out?: string;
   daily_rate: number;
 }
+
+export type NewCustomer = NewGuest;
 
 // Menu & Food Orders
 export interface MenuItem {
@@ -120,6 +151,8 @@ export interface FoodOrderSummary {
   guest_name?: string;
 }
 
+export type SaleSummary = FoodOrderSummary;
+
 export interface FoodOrderInfo {
   id: number;
   guest_id?: number;
@@ -130,6 +163,8 @@ export interface FoodOrderInfo {
   paid_at?: string;
   total_amount: number;
 }
+
+export type SaleRecord = FoodOrderInfo;
 
 export interface OrderItemDetail {
   id: number;
@@ -145,10 +180,14 @@ export interface FoodOrderDetails {
   items: OrderItemDetail[];
 }
 
+export type SaleDetails = FoodOrderDetails;
+
 export interface NewFoodOrder {
   guest_id: number | null;  // Allow null for walk-in customers
   items: OrderItem[];
 }
+
+export type NewSale = NewFoodOrder;
 
 // Guest with orders for display purposes
 export interface GuestWithOrders extends Guest {
@@ -236,19 +275,31 @@ export interface DatabaseStats {
  * ```
  */
 export const addRoom = async (room: NewRoom): Promise<number> => {
-  const params = { 
-    number: room.number, 
-    roomType: room.room_type,  // Use camelCase to match expected parameter
-    dailyRate: room.daily_rate  // Use camelCase to match expected parameter
+  const primaryParams = {
+    number: room.number,
+    resourceType: room.room_type,
+    dailyRate: room.daily_rate,
+  };
+
+  const fallbackParams = {
+    number: room.number,
+    roomType: room.room_type,
+    dailyRate: room.daily_rate,
   };
   
   try {
-    const result = await invoke("add_room", params);
+    const result = await invokeCompat<number>("add_resource", primaryParams, "add_room", fallbackParams);
     return result as number;
   } catch (error) {
     throw error;
   }
 };
+
+// De-hotelified wrappers
+export const addResource = (resource: NewResource): Promise<number> => addRoom(resource);
+
+// UI-facing generic wrapper (preferred)
+export const addUnit = (unit: NewUnit): Promise<number> => addRoom(unit);
 
 /**
  * Get all rooms in the hotel
@@ -260,7 +311,12 @@ export const addRoom = async (room: NewRoom): Promise<number> => {
  * ```
  */
 export const getRooms = (): Promise<Room[]> => 
-  invoke("get_rooms");
+  invokeCompat<Room[]>("get_resources", undefined, "get_rooms");
+
+export const getResources = (): Promise<Resource[]> => getRooms();
+
+// UI-facing generic wrapper (preferred)
+export const getUnits = (): Promise<Unit[]> => getRooms();
 
 /**
  * Get available rooms for guest assignment/editing
@@ -273,7 +329,19 @@ export const getRooms = (): Promise<Room[]> =>
  * ```
  */
 export const getAvailableRoomsForGuest = (guestId?: number): Promise<Room[]> => 
-  invoke("get_available_rooms_for_guest", { guestId: guestId || null });
+  invokeCompat<Room[]>(
+    "get_available_resources_for_customer",
+    { customerId: guestId || null },
+    "get_available_rooms_for_guest",
+    { guestId: guestId || null }
+  );
+
+export const getAvailableResourcesForCustomer = (customerId?: number): Promise<Resource[]> =>
+  getAvailableRoomsForGuest(customerId);
+
+// UI-facing generic wrapper (preferred)
+export const getAvailableUnitsForCustomer = (customerId?: number): Promise<Unit[]> =>
+  getAvailableRoomsForGuest(customerId);
 
 /**
  * Update room details
@@ -282,7 +350,16 @@ export const getAvailableRoomsForGuest = (guestId?: number): Promise<Room[]> =>
  * @returns Success status
  */
 export const updateRoom = (roomId: number, updates: Partial<NewRoom>): Promise<boolean> => 
-  invoke("update_room", { room_id: roomId, number: updates.number, daily_rate: updates.daily_rate });
+  invokeCompat<boolean>(
+    "update_resource",
+    { resource_id: roomId, number: updates.number, daily_rate: updates.daily_rate },
+    "update_room",
+    { room_id: roomId, number: updates.number, daily_rate: updates.daily_rate }
+  );
+
+// UI-facing generic wrapper (preferred)
+export const updateUnit = (unitId: number, updates: Partial<NewUnit>): Promise<boolean> =>
+  updateRoom(unitId, updates);
 
 /**
  * Delete a room from the system
@@ -291,12 +368,15 @@ export const updateRoom = (roomId: number, updates: Partial<NewRoom>): Promise<b
  */
 export const deleteRoom = async (roomId: number): Promise<boolean> => {
   try {
-    const result = await invoke("delete_room", { id: roomId });
+    const result = await invokeCompat<boolean>("delete_resource", { id: roomId }, "delete_room", { id: roomId });
     return result as boolean;
   } catch (error) {
     throw error;
   }
 };
+
+// UI-facing generic wrapper (preferred)
+export const deleteUnit = (unitId: number): Promise<boolean> => deleteRoom(unitId);
 
 /**
  * Clean up any soft-deleted rooms that might be blocking room number reuse
@@ -310,6 +390,9 @@ export const cleanupSoftDeletedRooms = async (): Promise<string> => {
     throw error;
   }
 };
+
+// UI-facing generic wrapper (preferred)
+export const cleanupSoftDeletedUnits = (): Promise<string> => cleanupSoftDeletedRooms();
 
 // Guest Management APIs
 /**
@@ -338,26 +421,35 @@ export const addGuest = async (guest: NewGuest): Promise<number> => {
   };
   
   try {
-    const result = await invoke("add_guest", params);
+    const result = await invokeCompat<number>("add_customer", params, "add_guest", params);
     return result as number;
   } catch (error) {
     throw error;
   }
 };
 
+// UI-facing generic wrapper (preferred)
+export const addCustomer = (customer: NewCustomer): Promise<number> => addGuest(customer);
+
 /**
  * Get all currently active guests
  * @returns Array of active guests with their details
  */
 export const getActiveGuests = (): Promise<ActiveGuestRow[]> => 
-  invoke("get_active_guests");
+  invokeCompat<ActiveGuestRow[]>("get_active_customers", undefined, "get_active_guests");
+
+// UI-facing generic wrapper (preferred)
+export const getActiveCustomers = (): Promise<ActiveCustomerRow[]> => getActiveGuests();
 
 /**
  * Get all guests (active and checked out)
  * @returns Array of all guests
  */
 export const getAllGuests = (): Promise<Guest[]> => 
-  invoke("get_all_guests");
+  invokeCompat<Guest[]>("get_all_customers", undefined, "get_all_guests");
+
+// UI-facing generic wrapper (preferred)
+export const getCustomers = (): Promise<Customer[]> => getAllGuests();
 
 /**
  * Get a specific guest by ID
@@ -365,7 +457,10 @@ export const getAllGuests = (): Promise<Guest[]> =>
  * @returns Guest details with current bill
  */
 export const getGuest = (guestId: number): Promise<Guest> => 
-  invoke("get_guest", { guestId });
+  invokeCompat<Guest>("get_customer", { customerId: guestId }, "get_guest", { guestId });
+
+// UI-facing generic wrapper (preferred)
+export const getCustomer = (customerId: number): Promise<Customer> => getGuest(customerId);
 
 /**
  * Check out a guest and calculate final bill
@@ -379,7 +474,11 @@ export const getGuest = (guestId: number): Promise<Guest> =>
  * ```
  */
 export const checkoutGuest = (guestId: number, checkOutDate: string): Promise<number> => 
-  invoke("checkout_guest", { guestId, checkOutDate });
+  invokeCompat<number>("checkout_customer", { customerId: guestId, checkOutDate }, "checkout_guest", { guestId, checkOutDate });
+
+// UI-facing generic wrapper (preferred)
+export const checkoutCustomer = (customerId: number, actionOutDate: string): Promise<number> =>
+  checkoutGuest(customerId, actionOutDate);
 
 /**
  * Update guest information
@@ -388,7 +487,15 @@ export const checkoutGuest = (guestId: number, checkOutDate: string): Promise<nu
  * @returns Success status
  */
 export const updateGuest = (guestId: number, updates: Partial<NewGuest>): Promise<boolean> => 
-  invoke("update_guest", { 
+  invokeCompat<boolean>("update_customer", {
+    guest_id: guestId,
+    name: updates.name,
+    phone: updates.phone,
+    room_id: updates.room_id,
+    check_in: updates.check_in,
+    check_out: updates.check_out === undefined ? null : updates.check_out,
+    daily_rate: updates.daily_rate
+  }, "update_guest", { 
     guest_id: guestId,
     name: updates.name,
     phone: updates.phone,
@@ -397,6 +504,10 @@ export const updateGuest = (guestId: number, updates: Partial<NewGuest>): Promis
     check_out: updates.check_out === undefined ? null : updates.check_out,
     daily_rate: updates.daily_rate
   });
+
+// UI-facing generic wrapper (preferred)
+export const updateCustomer = (customerId: number, updates: Partial<NewCustomer>): Promise<boolean> =>
+  updateGuest(customerId, updates);
 
 // Menu Management APIs
 /**
@@ -489,19 +600,25 @@ export const addFoodOrder = async (order: NewFoodOrder): Promise<number> => {
   };
   
   try {
-    const result = await invoke("add_food_order", params);
+    const result = await invokeCompat<number>("add_sale", params, "add_food_order", params);
     return result as number;
   } catch (error) {
     throw error;
   }
 };
 
+// UI-facing generic wrapper (preferred)
+export const addSale = (sale: NewSale): Promise<number> => addFoodOrder(sale);
+
 /**
  * Get all food orders
  * @returns Array of all food orders with summary details
  */
 export const getFoodOrders = (): Promise<FoodOrderSummary[]> => 
-  invoke("get_food_orders");
+  invokeCompat<FoodOrderSummary[]>("get_sales", undefined, "get_food_orders");
+
+// UI-facing generic wrapper (preferred)
+export const getSales = (): Promise<SaleSummary[]> => getFoodOrders();
 
 /**
  * Get food orders for a specific guest
@@ -509,7 +626,7 @@ export const getFoodOrders = (): Promise<FoodOrderSummary[]> =>
  * @returns Array of orders for that guest
  */
 export const getGuestOrders = (guestId: number): Promise<FoodOrder[]> => 
-  invoke("get_food_orders_by_guest", { guestId });
+  invokeCompat<FoodOrder[]>("get_sales_by_customer", { customerId: guestId }, "get_food_orders_by_guest", { guestId });
 
 /**
  * Alias for getGuestOrders - same functionality
@@ -517,7 +634,11 @@ export const getGuestOrders = (guestId: number): Promise<FoodOrder[]> =>
  * @returns Array of orders for that guest
  */
 export const getFoodOrdersByGuest = (guestId: number): Promise<FoodOrderSummary[]> => 
-  invoke("get_food_orders_by_guest", { guestId });
+  invokeCompat<FoodOrderSummary[]>("get_sales_by_customer", { customerId: guestId }, "get_food_orders_by_guest", { guestId });
+
+// UI-facing generic wrapper (preferred)
+export const getSalesByCustomer = (customerId: number): Promise<SaleSummary[]> =>
+  getFoodOrdersByGuest(customerId);
 
 /**
  * Mark a food order as paid
@@ -525,7 +646,7 @@ export const getFoodOrdersByGuest = (guestId: number): Promise<FoodOrderSummary[
  * @returns Success status
  */
 export const markOrderPaid = (orderId: number): Promise<string> => 
-  invoke("mark_order_paid", { orderId });
+  invokeCompat<string>("mark_sale_paid", { orderId }, "mark_order_paid", { orderId });
 
 /**
  * Toggle payment status of a food order (paid/unpaid)
@@ -533,7 +654,10 @@ export const markOrderPaid = (orderId: number): Promise<string> =>
  * @returns Success message
  */
 export const toggleFoodOrderPayment = (orderId: number): Promise<string> => 
-  invoke("toggle_food_order_payment", { orderId });
+  invokeCompat<string>("toggle_sale_payment", { orderId }, "toggle_food_order_payment", { orderId });
+
+// UI-facing generic wrapper (preferred)
+export const toggleSalePayment = (saleId: number): Promise<string> => toggleFoodOrderPayment(saleId);
 
 /**
  * Delete a food order and all its items
@@ -541,7 +665,10 @@ export const toggleFoodOrderPayment = (orderId: number): Promise<string> =>
  * @returns Success message
  */
 export const deleteFoodOrder = (orderId: number): Promise<string> => 
-  invoke("delete_food_order", { orderId });
+  invokeCompat<string>("delete_sale", { orderId }, "delete_food_order", { orderId });
+
+// UI-facing generic wrapper (preferred)
+export const deleteSale = (saleId: number): Promise<string> => deleteFoodOrder(saleId);
 
 /**
  * Get detailed information about a food order including all items
@@ -549,7 +676,10 @@ export const deleteFoodOrder = (orderId: number): Promise<string> =>
  * @returns Order details with items
  */
 export const getOrderDetails = (orderId: number): Promise<FoodOrderDetails> => 
-  invoke("get_order_details", { orderId });
+  invokeCompat<FoodOrderDetails>("get_sale_details", { orderId }, "get_order_details", { orderId });
+
+// UI-facing generic wrapper (preferred)
+export const getSaleDetails = (saleId: number): Promise<SaleDetails> => getOrderDetails(saleId);
 
 // Expense Management APIs
 /**
@@ -779,14 +909,16 @@ export const checkoutGuestWithDiscount = (
   discountType: 'flat' | 'percentage' = 'flat',
   discountAmount: number = 0,
   discountDescription: string = ''
-): Promise<number> => 
-  invoke("checkout_guest_with_discount", { 
-    guestId, 
-    checkOutDate, 
-    discountType, 
-    discountAmount, 
-    discountDescription 
-  });
+): Promise<number> => {
+  void discountType;
+  void discountDescription;
+  return invokeCompat<number>(
+    "checkout_customer_with_discount",
+    { customerId: guestId, checkOutDate, discountAmount },
+    "checkout_guest_with_discount",
+    { guestId, checkOutDate, discountAmount }
+  );
+};
 
 // Database Management APIs
 /**

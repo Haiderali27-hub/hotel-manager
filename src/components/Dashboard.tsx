@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import { getDashboardStats, type DashboardStats } from '../api/client';
 import logoImage from '../assets/Logo/logo.png';
 import { useCurrency } from '../context/CurrencyContext';
 import { useLabels } from '../context/LabelContext';
 import { useAuth } from '../context/SimpleAuthContext';
 import { getGradientColors, useTheme } from '../context/ThemeContext';
-import type { DashboardStats } from '../services/DatabaseService';
-import DatabaseService from '../services/DatabaseService';
 import ActiveCustomers from './ActiveCustomers';
 import AddCustomer from './AddCustomer';
 import AddExpense from './AddExpense';
@@ -50,7 +49,7 @@ const Dashboard: React.FC = () => {
 
   const refreshData = async () => {
     try {
-      const stats = await DatabaseService.getDashboardStats();
+      const stats = await getDashboardStats();
       setDbStats(stats);
     } catch (error) {
       console.error('Database error:', error);

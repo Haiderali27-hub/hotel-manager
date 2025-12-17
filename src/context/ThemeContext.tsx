@@ -123,15 +123,25 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
 
   // Load theme from localStorage on mount
   useEffect(() => {
-    const savedTheme = localStorage.getItem('hotel-app-theme') as ThemeType;
+    const savedTheme = localStorage.getItem('bm-app-theme') as ThemeType;
     if (savedTheme && (savedTheme === 'light' || savedTheme === 'dark')) {
       setTheme(savedTheme);
+      return;
+    }
+
+    // Migrate legacy theme key
+    const legacyTheme = localStorage.getItem('hotel-app-theme') as ThemeType;
+    if (legacyTheme && (legacyTheme === 'light' || legacyTheme === 'dark')) {
+      localStorage.setItem('bm-app-theme', legacyTheme);
+      localStorage.removeItem('hotel-app-theme');
+      setTheme(legacyTheme);
     }
   }, []);
 
   // Save theme to localStorage when it changes
   useEffect(() => {
-    localStorage.setItem('hotel-app-theme', theme);
+    localStorage.setItem('bm-app-theme', theme);
+    localStorage.removeItem('hotel-app-theme');
     // Set data-theme attribute on document for CSS styling
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);

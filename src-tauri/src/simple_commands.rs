@@ -224,6 +224,34 @@ pub fn cleanup_soft_deleted_rooms() -> Result<String, String> {
     Ok(format!("Cleaned up {} soft-deleted rooms", affected))
 }
 
+// ===== RESOURCE (ALIAS) COMMANDS =====
+// These provide business-generic command names while keeping legacy "room" commands.
+
+#[command]
+pub fn add_resource(number: String, resource_type: String, daily_rate: f64) -> Result<String, String> {
+    add_room(number, resource_type, daily_rate)
+}
+
+#[command]
+pub fn get_resources() -> Result<Vec<Room>, String> {
+    get_rooms()
+}
+
+#[command]
+pub fn get_available_resources_for_customer(customer_id: Option<i64>) -> Result<Vec<Room>, String> {
+    get_available_rooms_for_guest(customer_id)
+}
+
+#[command]
+pub fn update_resource(resource_id: i64, number: Option<String>, daily_rate: Option<f64>) -> Result<String, String> {
+    update_room(resource_id, number, daily_rate)
+}
+
+#[command]
+pub fn delete_resource(id: i64) -> Result<String, String> {
+    delete_room(id)
+}
+
 // ===== GUEST COMMANDS =====
 
 #[command]
@@ -300,6 +328,68 @@ pub fn add_guest(name: String, phone: Option<String>, room_id: Option<i64>, chec
     tx.commit().map_err(|e| e.to_string())?;
     
     Ok(guest_id)
+}
+
+// ===== CUSTOMER (ALIAS) COMMANDS =====
+// Generic naming wrappers for legacy "guest" commands.
+
+#[command]
+pub fn add_customer(name: String, phone: Option<String>, room_id: Option<i64>, check_in: String, check_out: Option<String>, daily_rate: f64) -> Result<i64, String> {
+    add_guest(name, phone, room_id, check_in, check_out, daily_rate)
+}
+
+#[command]
+pub fn get_active_customers() -> Result<Vec<ActiveGuestRow>, String> {
+    get_active_guests()
+}
+
+#[command]
+pub fn get_all_customers() -> Result<Vec<Guest>, String> {
+    get_all_guests()
+}
+
+#[command]
+pub fn get_customer(customer_id: i64) -> Result<ActiveGuestRow, String> {
+    get_guest(customer_id)
+}
+
+#[command]
+pub fn checkout_customer(customer_id: i64, check_out_date: String) -> Result<f64, String> {
+    checkout_guest_with_discount(
+        customer_id,
+        check_out_date,
+        "flat".to_string(),
+        0.0,
+        "".to_string(),
+    )
+}
+
+#[command]
+pub fn checkout_customer_with_discount(
+    customer_id: i64,
+    check_out_date: String,
+    discount_amount: f64,
+) -> Result<f64, String> {
+    checkout_guest_with_discount(
+        customer_id,
+        check_out_date,
+        "flat".to_string(),
+        discount_amount,
+        "".to_string(),
+    )
+}
+
+#[command]
+pub fn update_customer(
+    guest_id: i64,
+    name: Option<String>,
+    phone: Option<String>,
+    room_id: Option<i64>,
+    check_in: Option<String>,
+    check_out: Option<String>,
+    daily_rate: Option<f64>,
+ ) -> Result<bool, String> {
+    update_guest(guest_id, name, phone, room_id, check_in, check_out, daily_rate)
 }
 
 #[command]
@@ -1262,6 +1352,49 @@ pub fn get_order_details(order_id: i64) -> Result<FoodOrderDetails, String> {
     })
 }
 
+// ===== SALES (ALIAS) COMMANDS =====
+// Generic naming wrappers for legacy "food order" commands.
+
+#[command]
+pub fn add_sale(
+    guest_id: Option<i64>,
+    customer_type: String,
+    customer_name: Option<String>,
+    items: Vec<OrderItemInput>,
+) -> Result<i64, String> {
+    add_food_order(guest_id, customer_type, customer_name, items)
+}
+
+#[command]
+pub fn get_sales() -> Result<Vec<FoodOrderSummary>, String> {
+    get_food_orders()
+}
+
+#[command]
+pub fn get_sales_by_customer(customer_id: i64) -> Result<Vec<FoodOrderSummary>, String> {
+    get_food_orders_by_guest(customer_id)
+}
+
+#[command]
+pub fn mark_sale_paid(order_id: i64) -> Result<String, String> {
+    mark_order_paid(order_id)
+}
+
+#[command]
+pub fn toggle_sale_payment(order_id: i64) -> Result<String, String> {
+    toggle_food_order_payment(order_id)
+}
+
+#[command]
+pub fn delete_sale(order_id: i64) -> Result<String, String> {
+    delete_food_order(order_id)
+}
+
+#[command]
+pub fn get_sale_details(order_id: i64) -> Result<FoodOrderDetails, String> {
+    get_order_details(order_id)
+}
+
 // Enhanced checkout function with discount support
 #[command]
 pub fn checkout_guest_with_discount(
@@ -1583,4 +1716,42 @@ pub fn get_business_name() -> Result<String, String> {
 
     let result: Result<String, _> = stmt.query_row([], |row| row.get(0));
     Ok(result.unwrap_or_else(|_| "Business Manager".to_string()))
+}
+
+// ===== BUSINESS MODE SETTINGS =====
+
+#[command]
+pub fn set_business_mode(mode: String) -> Result<String, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_settings_table(&conn)?;
+
+    let normalized = mode.trim().to_lowercase();
+    match normalized.as_str() {
+        "hotel" | "restaurant" | "retail" => {}
+        _ => {
+            return Err("Business mode must be one of: hotel, restaurant, retail".to_string());
+        }
+    }
+
+    let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    conn.execute(
+        "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('business_mode', ?1, ?2)",
+        rusqlite::params![normalized, now],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok("Business mode updated".to_string())
+}
+
+#[command]
+pub fn get_business_mode() -> Result<String, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_settings_table(&conn)?;
+
+    let mut stmt = conn
+        .prepare("SELECT value FROM settings WHERE key = 'business_mode'")
+        .map_err(|e| e.to_string())?;
+
+    let result: Result<String, _> = stmt.query_row([], |row| row.get(0));
+    Ok(result.unwrap_or_else(|_| "hotel".to_string()))
 }

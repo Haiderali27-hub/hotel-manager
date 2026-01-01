@@ -957,6 +957,31 @@ pub fn dashboard_stats() -> Result<DashboardStats, String> {
     })
 }
 
+// Get low stock items for dashboard alerts
+#[tauri::command]
+pub fn get_low_stock_items() -> Result<Vec<LowStockItem>, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    let mut stmt = conn.prepare(
+        "SELECT id, name, stock_quantity, low_stock_limit 
+         FROM menu_items 
+         WHERE track_stock = 1 
+         AND stock_quantity <= low_stock_limit
+         ORDER BY stock_quantity ASC"
+    ).map_err(|e| e.to_string())?;
+    
+    let items = stmt.query_map([], |row| {
+        Ok(LowStockItem {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            stock_quantity: row.get(2)?,
+            low_stock_limit: row.get(3)?,
+        })
+    }).map_err(|e| e.to_string())?;
+    
+    items.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
 // ===== FOOD ORDER COMMANDS =====
 
 #[command]
@@ -973,6 +998,26 @@ pub fn add_food_order(guest_id: Option<i64>, customer_type: String, customer_nam
         return Err("Order must have at least one item".to_string());
     }
     
+    // Check stock availability for tracked items BEFORE starting transaction
+    for item in &items {
+        if let Some(menu_item_id) = item.menu_item_id {
+            let stock_info: Result<(i32, i32), _> = conn.query_row(
+                "SELECT stock_quantity, track_stock FROM menu_items WHERE id = ?1",
+                params![menu_item_id],
+                |row| Ok((row.get(0)?, row.get(1)?))
+            );
+            
+            if let Ok((current_stock, track_stock)) = stock_info {
+                if track_stock == 1 && current_stock < item.quantity {
+                    return Err(format!(
+                        "Insufficient stock for '{}'. Available: {}, Requested: {}",
+                        item.item_name, current_stock, item.quantity
+                    ));
+                }
+            }
+        }
+    }
+    
     // Calculate total
     let total_amount: f64 = items.iter().map(|item| item.unit_price * item.quantity as f64).sum();
     println!("🐛 DEBUG add_food_order - Total amount: {:?}", total_amount);
@@ -987,7 +1032,7 @@ pub fn add_food_order(guest_id: Option<i64>, customer_type: String, customer_nam
     
     let order_id = conn.last_insert_rowid();
     
-    // Insert order items
+    // Insert order items and decrement stock
     for item in items {
         conn.execute(
             "INSERT INTO sale_items (order_id, menu_item_id, item_name, unit_price, quantity, line_total)
@@ -995,6 +1040,16 @@ pub fn add_food_order(guest_id: Option<i64>, customer_type: String, customer_nam
             params![order_id, item.menu_item_id, item.item_name, item.unit_price, item.quantity, 
                    item.unit_price * item.quantity as f64],
         ).map_err(|e| e.to_string())?;
+        
+        // Decrement stock for tracked items
+        if let Some(menu_item_id) = item.menu_item_id {
+            conn.execute(
+                "UPDATE menu_items 
+                 SET stock_quantity = stock_quantity - ?1 
+                 WHERE id = ?2 AND track_stock = 1",
+                params![item.quantity, menu_item_id],
+            ).map_err(|e| format!("Failed to decrement stock: {}", e))?;
+        }
     }
     
     Ok(order_id)
@@ -1754,4 +1809,175 @@ pub fn get_business_mode() -> Result<String, String> {
 
     let result: Result<String, _> = stmt.query_row([], |row| row.get(0));
     Ok(result.unwrap_or_else(|_| "hotel".to_string()))
+}
+
+// ===== SHIFT MANAGEMENT (Z-REPORT) =====
+
+#[tauri::command]
+pub fn open_shift(admin_id: i64, start_cash: f64) -> Result<i64, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    // Check if there's already an open shift
+    let existing_shift: Result<i64, _> = conn.query_row(
+        "SELECT id FROM shifts WHERE status = 'open'",
+        [],
+        |row| row.get(0)
+    );
+    
+    if existing_shift.is_ok() {
+        return Err("There is already an open shift. Please close it first.".to_string());
+    }
+    
+    let now = get_current_timestamp();
+    
+    conn.execute(
+        "INSERT INTO shifts (opened_at, opened_by, start_cash, status) 
+         VALUES (?1, ?2, ?3, 'open')",
+        params![now, admin_id, start_cash],
+    ).map_err(|e| e.to_string())?;
+    
+    let shift_id = conn.last_insert_rowid();
+    Ok(shift_id)
+}
+
+#[tauri::command]
+pub fn close_shift(
+    shift_id: i64,
+    admin_id: i64,
+    end_cash_actual: f64,
+    notes: Option<String>
+) -> Result<ShiftSummary, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    // Get shift info
+    let shift_info: Result<(String, i64, f64), _> = conn.query_row(
+        "SELECT opened_at, opened_by, start_cash FROM shifts WHERE id = ?1 AND status = 'open'",
+        params![shift_id],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+    );
+    
+    let (opened_at, opened_by, start_cash) = shift_info.map_err(|_| "Shift not found or already closed".to_string())?;
+    
+    let now = get_current_timestamp();
+    
+    // Calculate total sales during this shift (paid sales only)
+    let total_sales: f64 = conn.query_row(
+        "SELECT COALESCE(SUM(total_amount), 0) FROM sales 
+         WHERE paid = 1 AND paid_at >= ?1 AND paid_at <= ?2",
+        params![opened_at, now],
+        |row| row.get(0)
+    ).map_err(|e| e.to_string())?;
+    
+    // Calculate total expenses during this shift
+    let total_expenses: f64 = conn.query_row(
+        "SELECT COALESCE(SUM(amount), 0) FROM expenses 
+         WHERE date >= ?1 AND date <= ?2",
+        params![opened_at.split(' ').next().unwrap_or(&opened_at), now.split(' ').next().unwrap_or(&now)],
+        |row| row.get(0)
+    ).map_err(|e| e.to_string())?;
+    
+    // Expected end cash = start cash + sales - expenses
+    let end_cash_expected = start_cash + total_sales - total_expenses;
+    let difference = end_cash_actual - end_cash_expected;
+    
+    // Update shift
+    conn.execute(
+        "UPDATE shifts 
+         SET closed_at = ?1, closed_by = ?2, end_cash_expected = ?3, end_cash_actual = ?4, 
+             difference = ?5, total_sales = ?6, total_expenses = ?7, status = 'closed', notes = ?8
+         WHERE id = ?9",
+        params![now, admin_id, end_cash_expected, end_cash_actual, difference, 
+                total_sales, total_expenses, notes, shift_id],
+    ).map_err(|e| e.to_string())?;
+    
+    Ok(ShiftSummary {
+        id: shift_id,
+        opened_at,
+        closed_at: Some(now.clone()),
+        opened_by,
+        closed_by: Some(admin_id),
+        start_cash,
+        end_cash_expected,
+        end_cash_actual,
+        difference,
+        total_sales,
+        total_expenses,
+        status: "closed".to_string(),
+        notes,
+    })
+}
+
+#[tauri::command]
+pub fn get_current_shift() -> Result<Option<ShiftSummary>, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    let mut stmt = conn.prepare(
+        "SELECT id, opened_at, closed_at, opened_by, closed_by, start_cash, 
+                end_cash_expected, end_cash_actual, difference, total_sales, 
+                total_expenses, status, notes
+         FROM shifts 
+         WHERE status = 'open'
+         LIMIT 1"
+    ).map_err(|e| e.to_string())?;
+    
+    let shift = stmt.query_row([], |row| {
+        Ok(ShiftSummary {
+            id: row.get(0)?,
+            opened_at: row.get(1)?,
+            closed_at: row.get(2)?,
+            opened_by: row.get(3)?,
+            closed_by: row.get(4)?,
+            start_cash: row.get(5)?,
+            end_cash_expected: row.get::<_, Option<f64>>(6)?.unwrap_or(0.0),
+            end_cash_actual: row.get::<_, Option<f64>>(7)?.unwrap_or(0.0),
+            difference: row.get::<_, Option<f64>>(8)?.unwrap_or(0.0),
+            total_sales: row.get::<_, Option<f64>>(9)?.unwrap_or(0.0),
+            total_expenses: row.get::<_, Option<f64>>(10)?.unwrap_or(0.0),
+            status: row.get(11)?,
+            notes: row.get(12)?,
+        })
+    });
+    
+    match shift {
+        Ok(s) => Ok(Some(s)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
+pub fn get_shift_history(limit: Option<i64>) -> Result<Vec<ShiftSummary>, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    let query = format!(
+        "SELECT id, opened_at, closed_at, opened_by, closed_by, start_cash, 
+                end_cash_expected, end_cash_actual, difference, total_sales, 
+                total_expenses, status, notes
+         FROM shifts 
+         ORDER BY opened_at DESC
+         LIMIT {}",
+        limit.unwrap_or(50)
+    );
+    
+    let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
+    
+    let shifts = stmt.query_map([], |row| {
+        Ok(ShiftSummary {
+            id: row.get(0)?,
+            opened_at: row.get(1)?,
+            closed_at: row.get(2)?,
+            opened_by: row.get(3)?,
+            closed_by: row.get(4)?,
+            start_cash: row.get(5)?,
+            end_cash_expected: row.get::<_, Option<f64>>(6)?.unwrap_or(0.0),
+            end_cash_actual: row.get::<_, Option<f64>>(7)?.unwrap_or(0.0),
+            difference: row.get::<_, Option<f64>>(8)?.unwrap_or(0.0),
+            total_sales: row.get::<_, Option<f64>>(9)?.unwrap_or(0.0),
+            total_expenses: row.get::<_, Option<f64>>(10)?.unwrap_or(0.0),
+            status: row.get(11)?,
+            notes: row.get(12)?,
+        })
+    }).map_err(|e| e.to_string())?;
+    
+    shifts.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }

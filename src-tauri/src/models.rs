@@ -227,6 +227,35 @@ pub struct SaleDetails {
 // Backwards-compatible alias
 pub type FoodOrderDetails = SaleDetails;
 
+// ===== INVENTORY MODELS =====
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LowStockItem {
+    pub id: i64,
+    pub name: String,
+    pub stock_quantity: i32,
+    pub low_stock_limit: i32,
+}
+
+// ===== SHIFT MANAGEMENT MODELS =====
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ShiftSummary {
+    pub id: i64,
+    pub opened_at: String,
+    pub closed_at: Option<String>,
+    pub opened_by: i64,
+    pub closed_by: Option<i64>,
+    pub start_cash: f64,
+    pub end_cash_expected: f64,
+    pub end_cash_actual: f64,
+    pub difference: f64,
+    pub total_sales: f64,
+    pub total_expenses: f64,
+    pub status: String, // 'open' or 'closed'
+    pub notes: Option<String>,
+}
+
 // ===== EXPENSE MODELS =====
 
 #[derive(Debug, Serialize, Deserialize)]

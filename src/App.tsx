@@ -4,19 +4,16 @@ import './App.css';
 import Dashboard from './components/Dashboard';
 import NotificationToast from './components/NotificationToast';
 import OfflineLoginPage from './components/OfflineLoginPage';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { CurrencyProvider } from './context/CurrencyContext';
 import { LabelProvider } from './context/LabelContext';
 import { NotificationProvider } from './context/NotificationContext';
-import { AuthProvider, useAuth } from './context/SimpleAuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 
 const AppContent: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth();
 
-  console.log('🔍 App State:', { isAuthenticated, isLoading });
-
   if (isLoading) {
-    console.log('⏳ Showing loading spinner');
     return (
       <div style={{
         display: 'flex',
@@ -38,11 +35,8 @@ const AppContent: React.FC = () => {
       </div>
     );
   }
-
-  console.log('📱 Showing main content, authenticated:', isAuthenticated);
   
   if (isAuthenticated) {
-    console.log('✅ User is authenticated - showing Dashboard');
     return (
       <>
         <Dashboard />
@@ -50,13 +44,11 @@ const AppContent: React.FC = () => {
       </>
     );
   } else {
-    console.log('❌ User not authenticated - showing Login Page');
     return <OfflineLoginPage />;
   }
 };
 
 function App() {
-  console.log('🚀 App component rendering');
   return (
     <ThemeProvider>
       <NotificationProvider>

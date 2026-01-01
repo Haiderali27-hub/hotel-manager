@@ -61,6 +61,7 @@ fn create_initial_schema(conn: &Connection) -> SqliteResult<()> {
             security_answer_hash TEXT,
             failed_attempts INTEGER NOT NULL DEFAULT 0,
             locked_until TEXT,
+            role TEXT NOT NULL DEFAULT 'admin',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )",
@@ -141,13 +142,16 @@ fn create_initial_schema(conn: &Connection) -> SqliteResult<()> {
         [],
     )?;
     
-    // Menu items table with created_at/updated_at
+    // Menu items table with created_at/updated_at and inventory tracking
     conn.execute(
         "CREATE TABLE IF NOT EXISTS menu_items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT UNIQUE NOT NULL,
             price REAL NOT NULL,
             is_active INTEGER NOT NULL DEFAULT 1,
+            stock_quantity INTEGER DEFAULT 0,
+            track_stock INTEGER DEFAULT 0,
+            low_stock_limit INTEGER DEFAULT 5,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )",
@@ -195,6 +199,26 @@ fn create_initial_schema(conn: &Connection) -> SqliteResult<()> {
             description TEXT,
             amount REAL NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )",
+        [],
+    )?;
+
+    // Shifts table for Z-reports (end-of-day closing)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS shifts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            opened_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            closed_at DATETIME,
+            opened_by TEXT,
+            closed_by TEXT,
+            start_cash REAL DEFAULT 0.0,
+            end_cash_expected REAL,
+            end_cash_actual REAL,
+            difference REAL,
+            total_sales REAL DEFAULT 0.0,
+            total_expenses REAL DEFAULT 0.0,
+            status TEXT DEFAULT 'open',
+            notes TEXT
         )",
         [],
     )?;
@@ -517,6 +541,24 @@ fn migrate_database(conn: &Connection) -> SqliteResult<()> {
     );
     let _ = conn.execute(
         "ALTER TABLE admin_settings ADD COLUMN receipt_footer TEXT",
+        [],
+    );
+
+    // Phase 4: RBAC and Inventory Management (safe no-op if already present)
+    let _ = conn.execute(
+        "ALTER TABLE admin_auth ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'",
+        [],
+    );
+    let _ = conn.execute(
+        "ALTER TABLE menu_items ADD COLUMN stock_quantity INTEGER DEFAULT 0",
+        [],
+    );
+    let _ = conn.execute(
+        "ALTER TABLE menu_items ADD COLUMN track_stock INTEGER DEFAULT 0",
+        [],
+    );
+    let _ = conn.execute(
+        "ALTER TABLE menu_items ADD COLUMN low_stock_limit INTEGER DEFAULT 5",
         [],
     );
 

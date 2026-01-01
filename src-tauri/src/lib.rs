@@ -19,12 +19,13 @@ use simple_commands::{
     add_room, get_rooms, get_available_rooms_for_guest, update_room, delete_room, cleanup_soft_deleted_rooms,
         add_guest, get_active_guests, get_all_guests, get_guest, checkout_guest, checkout_guest_with_discount, update_guest,
     add_menu_item, get_menu_items, update_menu_item, delete_menu_item,
-        dashboard_stats, add_food_order, get_food_orders, get_food_orders_by_guest, mark_order_paid,
+        dashboard_stats, get_low_stock_items, add_food_order, get_food_orders, get_food_orders_by_guest, mark_order_paid,
     add_expense, get_expenses, get_expenses_by_date_range, update_expense, delete_expense,
     toggle_food_order_payment, delete_food_order, get_order_details,
     set_tax_rate, get_tax_rate, set_tax_enabled, get_tax_enabled,
     set_currency_code, get_currency_code, set_locale, get_locale,
     set_business_name, get_business_name,
+    open_shift, close_shift, get_current_shift, get_shift_history,
     // Generic alias commands
     add_resource, get_resources, get_available_resources_for_customer, update_resource, delete_resource,
     add_customer, get_active_customers, get_all_customers, get_customer, checkout_customer, checkout_customer_with_discount, update_customer,
@@ -134,6 +135,7 @@ pub fn run() {
             delete_expense,
             // Dashboard
             dashboard_stats,
+            get_low_stock_items,
             // Database management
             reset_database,
             get_database_path,
@@ -178,7 +180,12 @@ pub fn run() {
             set_receipt_header,
             get_receipt_header,
             set_receipt_footer,
-            get_receipt_footer
+            get_receipt_footer,
+            // Shift management (Phase 4)
+            open_shift,
+            close_shift,
+            get_current_shift,
+            get_shift_history
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

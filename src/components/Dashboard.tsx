@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { getDashboardStats, type DashboardStats } from '../api/client';
 import logoImage from '../assets/Logo/logo.png';
+import { useAuth } from '../context/AuthContext';
 import { useCurrency } from '../context/CurrencyContext';
 import { useLabels } from '../context/LabelContext';
-import { useAuth } from '../context/SimpleAuthContext';
 import { getGradientColors, useTheme } from '../context/ThemeContext';
 import ActiveCustomers from './ActiveCustomers';
 import AddCustomer from './AddCustomer';
@@ -11,11 +11,14 @@ import AddExpense from './AddExpense';
 import AddSale from './AddSale';
 import FinancialReport from './FinancialReport';
 import History from './History';
+import LowStockAlert from './LowStockAlert';
 import ManageCatalogResources from './ManageCatalogResources';
+import { ProtectedRoute } from './ProtectedRoute';
 import Settings from './SettingsNew';
+import ShiftManager from './ShiftManager';
 
 const Dashboard: React.FC = () => {
-  const { logout } = useAuth();
+  const { logout, userRole, adminId } = useAuth();
   const { theme, colors, toggleTheme } = useTheme();
   const { formatMoney } = useCurrency();
   const { current: label } = useLabels();
@@ -83,7 +86,7 @@ const Dashboard: React.FC = () => {
     if (dbStats) {
       return [
         { 
-          title: `Total ${label.client}s This Month`, 
+          title: 'Total Customers This Month', 
           value: dbStats.total_guests_this_month.toString(), 
           icon: '👥', 
           color: gradients.primary,
@@ -177,13 +180,14 @@ const Dashboard: React.FC = () => {
   };
 
   const navigationItems = [
-    { page: 'add-customer', title: `Add ${label.client}`, icon: '➕' },
+    { page: 'add-customer', title: 'Add Customer', icon: '➕' },
     { page: 'add-sale', title: 'Add Sale', icon: '🧾' },
-    { page: 'active-customers', title: `Active ${label.client}s`, icon: '👥' },
+    { page: 'active-customers', title: 'Active Customers', icon: '👥' },
     { page: 'add-expense', title: 'Add Expense', icon: '💵' },
     { page: 'history', title: 'History', icon: '📋' },
     { page: 'financial-report', title: 'Financial Report', icon: '📊' },
-    { page: 'manage-catalog-resources', title: `Manage Catalog / ${label.unit}s`, icon: '⚙️' },
+    { page: 'shifts', title: 'Shift Management', icon: '💼' },
+    { page: 'manage-catalog-resources', title: 'Manage Catalog / Resources', icon: '⚙️' },
     { page: 'settings', title: 'Settings', icon: '⚙️' }
   ];
 
@@ -260,6 +264,9 @@ const Dashboard: React.FC = () => {
             </div>
           ))}
         </div>
+
+        {/* Low Stock Alert (Phase 4) */}
+        <LowStockAlert />
       </div>
     );
   };
@@ -400,7 +407,7 @@ const Dashboard: React.FC = () => {
                   }
                 }}
               >
-                👤 Add {label.client}
+                👤 Add Customer
               </div>
               <div
                 onClick={() => handleQuickNavigation('active-customers')}
@@ -422,7 +429,7 @@ const Dashboard: React.FC = () => {
                   }
                 }}
               >
-                👥 Active {label.client}s
+                👥 Active Customers
               </div>
               <div
                 onClick={() => handleQuickNavigation('add-sale')}
@@ -466,7 +473,7 @@ const Dashboard: React.FC = () => {
                   }
                 }}
               >
-                ⚙️ Manage Catalog/{label.unit}s
+                ⚙️ Manage Catalog/Resources
               </div>
               <div
                 onClick={() => handleQuickNavigation('history')}
@@ -489,6 +496,28 @@ const Dashboard: React.FC = () => {
                 }}
               >
                 📊 History
+              </div>
+              <div
+                onClick={() => handleQuickNavigation('shifts')}
+                style={{
+                  padding: '0.75rem 1rem',
+                  cursor: 'pointer',
+                  backgroundColor: currentPage === 'shifts' ? colors.accent : 'transparent',
+                  color: currentPage === 'shifts' ? (theme === 'dark' ? 'black' : 'white') : colors.text,
+                  transition: 'background-color 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  if (currentPage !== 'shifts') {
+                    e.currentTarget.style.backgroundColor = colors.border;
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (currentPage !== 'shifts') {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }
+                }}
+              >
+                💼 Shift Management
               </div>
             </div>
           )}
@@ -516,7 +545,26 @@ const Dashboard: React.FC = () => {
           >
             {theme === 'dark' ? '☀️' : '🌙'}
           </button>
-          <span style={{ color: colors.textMuted }}>Admin</span>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
+            <span style={{ color: colors.text, fontSize: '0.875rem', fontWeight: '600' }}>Admin #{adminId}</span>
+            <span
+              style={{
+                color: '#fff',
+                fontSize: '0.75rem',
+                padding: '0.25rem 0.5rem',
+                borderRadius: '8px',
+                fontWeight: '600',
+                background:
+                  userRole === 'admin'
+                    ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                    : userRole === 'manager'
+                    ? 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)'
+                    : 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+              }}
+            >
+              {userRole === 'admin' ? '👑 Admin' : userRole === 'manager' ? '📊 Manager' : '🛒 Staff'}
+            </span>
+          </div>
           <button
             onClick={logout}
             style={{
@@ -651,17 +699,28 @@ const Dashboard: React.FC = () => {
             />
           )}
           {currentPage === 'history' && (
-            <History 
-              onBack={goBackToDashboard}
-            />
+            <ProtectedRoute requiredRole="manager">
+              <History 
+                onBack={goBackToDashboard}
+              />
+            </ProtectedRoute>
           )}
           {currentPage === 'financial-report' && (
-            <FinancialReport 
-              onBack={goBackToDashboard}
-            />
+            <ProtectedRoute requiredRole="manager">
+              <FinancialReport 
+                onBack={goBackToDashboard}
+              />
+            </ProtectedRoute>
+          )}
+          {currentPage === 'shifts' && (
+            <ProtectedRoute requiredRole="manager">
+              <ShiftManager />
+            </ProtectedRoute>
           )}
           {currentPage === 'settings' && (
-            <Settings />
+            <ProtectedRoute requiredRole="admin">
+              <Settings />
+            </ProtectedRoute>
           )}
           {/* TODO: Add other page components */}
           {currentPage !== 'dashboard' && 
@@ -671,6 +730,7 @@ const Dashboard: React.FC = () => {
            currentPage !== 'active-customers' && 
            currentPage !== 'history' && 
            currentPage !== 'financial-report' && 
+           currentPage !== 'shifts' && 
            currentPage !== 'manage-catalog-resources' && 
            currentPage !== 'settings' && (
             <div style={{

@@ -4,6 +4,27 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 use chrono::{Utc, Duration};
 use crate::db::get_db_path;
+use std::sync::OnceLock;
+
+fn auth_debug_enabled() -> bool {
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    *ENABLED.get_or_init(|| {
+        std::env::var("HOTEL_AUTH_DEBUG")
+            .map(|v| {
+                let v = v.trim();
+                v == "1" || v.eq_ignore_ascii_case("true") || v.eq_ignore_ascii_case("yes")
+            })
+            .unwrap_or(false)
+    })
+}
+
+macro_rules! auth_debug {
+    ($($arg:tt)*) => {{
+        if auth_debug_enabled() {
+            eprintln!("[auth] {}", format_args!($($arg)*));
+        }
+    }};
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LoginRequest {
@@ -16,6 +37,8 @@ pub struct LoginResponse {
     pub success: bool,
     pub message: String,
     pub session_token: Option<String>,
+    pub admin_id: Option<i32>,
+    pub role: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -74,8 +97,17 @@ impl AuthManager {
     }
 
     fn verify_password(&self, password: &str, stored_hash: &str, salt: &str) -> bool {
+        auth_debug!(
+            "verify_password password_len={} stored_hash_len={} salt_len={}",
+            password.len(),
+            stored_hash.len(),
+            salt.len()
+        );
+
         let computed_hash = self.hash_password_pbkdf2(password, salt);
-        computed_hash == stored_hash
+        let matches = computed_hash == stored_hash;
+        auth_debug!("verify_password match={}", matches);
+        matches
     }
 
     fn verify_combined_hash(&self, input: &str, stored_combined: &str) -> bool {
@@ -91,40 +123,56 @@ impl AuthManager {
     pub fn login(&self, request: LoginRequest) -> SqliteResult<LoginResponse> {
         let conn = self.get_connection()?;
 
+        let normalized_username = request.username.trim().to_string();
+        auth_debug!("login start username='{}'", normalized_username);
+
         // Check if account is locked
-        let locked_until: Option<String> = conn.query_row(
+        let locked_until: Option<String> = conn
+            .query_row(
             "SELECT locked_until FROM admin_auth WHERE LOWER(username) = LOWER(?1)",
-            [&request.username],
+            [&normalized_username],
             |row| row.get(0),
-        ).unwrap_or(None);
+        )
+            .unwrap_or(None);
 
         if let Some(locked_until_str) = locked_until {
             if let Ok(locked_until) = chrono::DateTime::parse_from_rfc3339(&locked_until_str) {
                 if locked_until > Utc::now() {
-                    self.log_security_event(&conn, &request.username, "login_attempt_while_locked")?;
+                    auth_debug!("login locked username='{}'", normalized_username);
+                    self.log_security_event(&conn, &normalized_username, "login_attempt_while_locked")?;
                     return Ok(LoginResponse {
                         success: false,
                         message: "Account is temporarily locked due to multiple failed attempts".to_string(),
                         session_token: None,
+                        admin_id: None,
+                        role: None,
                     });
                 }
             }
         }
 
         // Get user credentials
-        let user_result: Result<(String, String, i32), rusqlite::Error> = conn.query_row(
-            "SELECT password_hash, salt, failed_attempts FROM admin_auth WHERE LOWER(username) = LOWER(?1)",
-            [&request.username],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        let user_result: Result<(String, String, i32, String, i32), rusqlite::Error> = conn.query_row(
+            "SELECT password_hash, salt, failed_attempts, COALESCE(role, 'admin'), id FROM admin_auth WHERE LOWER(username) = LOWER(?1)",
+            [&normalized_username],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
         );
 
         match user_result {
-            Ok((stored_hash, salt, failed_attempts)) => {
+            Ok((stored_hash, salt, failed_attempts, role, admin_id)) => {
+                auth_debug!(
+                    "login user_found username='{}' admin_id={} role='{}' failed_attempts={}",
+                    normalized_username,
+                    admin_id,
+                    role,
+                    failed_attempts
+                );
+
                 if self.verify_password(&request.password, &stored_hash, &salt) {
                     // Successful login - reset failed attempts and clear lock
                     conn.execute(
                         "UPDATE admin_auth SET failed_attempts = 0, locked_until = NULL WHERE LOWER(username) = LOWER(?1)",
-                        [&request.username],
+                        [&normalized_username],
                     )?;
 
                     // Create session
@@ -132,58 +180,75 @@ impl AuthManager {
                     let expires_at = Utc::now() + Duration::hours(8);
 
                     conn.execute(
-                        "INSERT INTO admin_sessions (session_token, admin_id, expires_at) VALUES (?1, 1, ?2)",
-                        [&session_token, &expires_at.to_rfc3339()],
+                        "INSERT INTO admin_sessions (session_token, admin_id, expires_at) VALUES (?1, ?2, ?3)",
+                        [&session_token, &admin_id.to_string(), &expires_at.to_rfc3339()],
                     )?;
 
-                    self.log_security_event(&conn, &request.username, "successful_login")?;
+                    auth_debug!("login success username='{}' admin_id={}", normalized_username, admin_id);
+                    self.log_security_event(&conn, &normalized_username, "successful_login")?;
 
                     Ok(LoginResponse {
                         success: true,
                         message: "Login successful".to_string(),
                         session_token: Some(session_token),
+                        admin_id: Some(admin_id),
+                        role: Some(role),
                     })
                 } else {
                     // Failed login - increment failed attempts
                     let new_failed_attempts = failed_attempts + 1;
+
+                    auth_debug!(
+                        "login invalid_password username='{}' failed_attempts={} -> {}",
+                        normalized_username,
+                        failed_attempts,
+                        new_failed_attempts
+                    );
                     
                     if new_failed_attempts >= 5 {
                         // Lock account for 15 minutes
                         let lock_until = Utc::now() + Duration::minutes(15);
                         conn.execute(
                             "UPDATE admin_auth SET failed_attempts = ?1, locked_until = ?2 WHERE LOWER(username) = LOWER(?3)",
-                            [&new_failed_attempts.to_string(), &lock_until.to_rfc3339(), &request.username],
+                            [&new_failed_attempts.to_string(), &lock_until.to_rfc3339(), &normalized_username],
                         )?;
                         
-                        self.log_security_event(&conn, &request.username, "account_locked_failed_attempts")?;
+                        self.log_security_event(&conn, &normalized_username, "account_locked_failed_attempts")?;
                         
                         Ok(LoginResponse {
                             success: false,
                             message: "Account locked due to multiple failed attempts. Try again in 15 minutes.".to_string(),
+                            admin_id: None,
                             session_token: None,
+                            role: None,
                         })
                     } else {
                         conn.execute(
                             "UPDATE admin_auth SET failed_attempts = ?1 WHERE LOWER(username) = LOWER(?2)",
-                            [&new_failed_attempts.to_string(), &request.username],
+                            [&new_failed_attempts.to_string(), &normalized_username],
                         )?;
                         
-                        self.log_security_event(&conn, &request.username, "failed_login_attempt")?;
+                        self.log_security_event(&conn, &normalized_username, "failed_login_attempt")?;
                         
                         Ok(LoginResponse {
                             success: false,
                             message: format!("Invalid credentials. {} attempts remaining.", 5 - new_failed_attempts),
+                            admin_id: None,
                             session_token: None,
+                            role: None,
                         })
                     }
                 }
             }
             Err(_) => {
-                self.log_security_event(&conn, &request.username, "login_attempt_invalid_user")?;
+                auth_debug!("login invalid_user username='{}'", normalized_username);
+                self.log_security_event(&conn, &normalized_username, "login_attempt_invalid_user")?;
                 Ok(LoginResponse {
                     success: false,
+                    admin_id: None,
                     message: "Invalid username or password".to_string(),
                     session_token: None,
+                    role: None,
                 })
             }
         }
@@ -349,8 +414,8 @@ impl AuthManager {
         let security_answer_hash = format!("{}:{}", answer_hash, answer_salt);
 
         conn.execute(
-            "INSERT INTO admin_auth (username, password_hash, salt, security_question, security_answer_hash, failed_attempts, locked_until)
-             VALUES (?1, ?2, ?3, ?4, ?5, 0, NULL)",
+            "INSERT INTO admin_auth (username, password_hash, salt, role, security_question, security_answer_hash, failed_attempts, locked_until)
+             VALUES (?1, ?2, ?3, 'admin', ?4, ?5, 0, NULL)",
             [
                 username,
                 &password_hash,
@@ -369,11 +434,19 @@ impl AuthManager {
 // Tauri commands for the frontend
 #[tauri::command]
 pub async fn login_admin(request: LoginRequest) -> Result<LoginResponse, String> {
+    auth_debug!("login_admin called username='{}'", request.username.trim());
+
     let auth_manager = AuthManager::new();
-    
+
     match auth_manager.login(request) {
-        Ok(response) => Ok(response),
-        Err(e) => Err(format!("Database error: {}", e)),
+        Ok(response) => {
+            auth_debug!("login_admin returning success={} admin_id={:?}", response.success, response.admin_id);
+            Ok(response)
+        },
+        Err(e) => {
+            eprintln!("[auth] login_admin db_error: {}", e);
+            Err(format!("Database error: {}", e))
+        },
     }
 }
 

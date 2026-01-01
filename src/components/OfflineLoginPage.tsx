@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import React, { useEffect, useState } from 'react';
 import logoImage from '../assets/Logo/logo.png';
-import { useAuth } from '../context/SimpleAuthContext';
+import { useAuth } from '../context/AuthContext';
 import '../styles/LoginPage.css';
 import SetupWizard from './SetupWizard';
 
@@ -53,7 +53,7 @@ const OfflineLoginPage: React.FC = () => {
         const setup = await invoke<boolean>('check_is_setup');
         if (isMounted) setIsSetupComplete(setup);
       } catch (e) {
-        console.error('Failed to check setup status (login page):', e);
+        console.error('[auth] check_is_setup failed', e);
         // If we can't determine setup status, keep login usable.
         if (isMounted) setIsSetupComplete(null);
       }
@@ -88,22 +88,22 @@ const OfflineLoginPage: React.FC = () => {
     setError('');
 
     try {
-      if (!formData.username || !formData.password) {
+      const username = formData.username.trim();
+      const password = formData.password;
+      
+      if (!username || !password) {
         setError('Please enter both username and password');
         return;
       }
 
-      const result = await login({
-        username: formData.username,
-        password: formData.password
-      });
+      const result = await login(username, password);
 
       if (!result.success) {
         setError(result.message);
       }
     } catch (err) {
       setError('An unexpected error occurred. Please try again.');
-      console.error('Login error:', err);
+      console.error('[auth] login submit error', err);
     } finally {
       setIsLoading(false);
     }
@@ -129,7 +129,7 @@ const OfflineLoginPage: React.FC = () => {
       setSecurityQuestion(result.question);
       setSuccess('Security question loaded.');
     } catch (err) {
-      console.error('Get security question error:', err);
+      console.error('[auth] get security question error', err);
       setError('Failed to retrieve security question');
     } finally {
       setIsLoading(false);
@@ -181,7 +181,7 @@ const OfflineLoginPage: React.FC = () => {
 
       setSuccess('Password reset successfully. You can now log in.');
     } catch (err) {
-      console.error('Reset password error:', err);
+      console.error('[auth] reset password error', err);
       setError('An error occurred while resetting your password');
     } finally {
       setIsLoading(false);

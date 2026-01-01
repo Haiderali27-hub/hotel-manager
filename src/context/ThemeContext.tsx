@@ -46,71 +46,71 @@ interface ThemeContextType {
 }
 
 const lightTheme: ThemeColors = {
-  // Background colors
-  primary: 'var(--app-bg)',
-  secondary: 'var(--app-surface)',
-  surface: 'var(--app-surface)',
-  card: 'var(--app-surface)',
+  // Background colors - Modern SaaS Light Palette
+  primary: '#fdfdfd',
+  secondary: '#e8eaec',
+  surface: '#e8eaec',
+  card: '#ffffff',
   
   // Text colors
-  text: 'var(--app-text)',
-  textSecondary: 'var(--app-text)',
-  textMuted: 'var(--app-text-muted)',
+  text: '#393741',
+  textSecondary: '#665f5f',
+  textMuted: '#8892a9',
   
   // Border colors
-  border: 'var(--app-border)',
-  borderLight: 'var(--app-border)',
+  border: '#d2d6db',
+  borderLight: '#e8eaec',
   
   // Interactive colors
-  accent: 'var(--bm-accent)',
-  accentHover: 'var(--bm-accent-soft)',
-  success: 'var(--bm-primary)',
-  error: 'var(--bm-accent)',
-  warning: 'var(--bm-accent-soft)',
+  accent: '#8892a9',
+  accentHover: '#665f5f',
+  success: '#845c58',
+  error: '#845c58',
+  warning: '#b7bac3',
   
   // Status colors
-  successBg: 'rgba(43, 87, 109, 0.12)',
-  errorBg: 'rgba(221, 159, 82, 0.12)',
-  warningBg: 'rgba(220, 200, 148, 0.18)',
-  infoBg: 'rgba(141, 161, 175, 0.18)',
+  successBg: 'rgba(132, 92, 88, 0.1)',
+  errorBg: 'rgba(132, 92, 88, 0.1)',
+  warningBg: 'rgba(183, 186, 195, 0.15)',
+  infoBg: 'rgba(136, 146, 169, 0.1)',
   
   // Special colors
-  shadow: 'var(--bm-primary-shadow)',
-  overlay: 'rgba(43, 87, 109, 0.55)'
+  shadow: 'rgba(57, 55, 65, 0.08)',
+  overlay: 'rgba(57, 55, 65, 0.5)'
 };
 
 const darkTheme: ThemeColors = {
-  // Background colors
-  primary: 'var(--bm-primary)',
-  secondary: 'var(--bm-primary-alt)',
-  surface: 'rgba(255, 255, 255, 0.06)',
-  card: 'rgba(255, 255, 255, 0.08)',
+  // Background colors - Modern SaaS Dark Palette
+  primary: '#0b0b0b',
+  secondary: '#1e1e1f',
+  surface: '#1e1e1f',
+  card: '#393741',
   
   // Text colors
-  text: 'white',
-  textSecondary: 'rgba(255, 255, 255, 0.9)',
-  textMuted: 'rgba(255, 255, 255, 0.7)',
+  text: '#cdd0dc',
+  textSecondary: '#958f9e',
+  textMuted: '#665f5f',
   
   // Border colors
-  border: 'rgba(255, 255, 255, 0.14)',
-  borderLight: 'rgba(255, 255, 255, 0.10)',
+  border: '#393741',
+  borderLight: '#1e1e1f',
   
   // Interactive colors
-  accent: 'var(--bm-accent)',
-  accentHover: 'var(--bm-accent-soft)',
-  success: 'var(--bm-accent-soft)',
-  error: 'var(--bm-accent)',
-  warning: 'var(--bm-accent-soft)',
+  accent: '#958f9e',
+  accentHover: '#cdd0dc',
+  success: '#665f5f',
+  error: '#958f9e',
+  warning: '#665f5f',
   
   // Status colors
-  successBg: 'rgba(220, 200, 148, 0.14)',
-  errorBg: 'rgba(221, 159, 82, 0.16)',
-  warningBg: 'rgba(220, 200, 148, 0.14)',
-  infoBg: 'rgba(141, 161, 175, 0.16)',
+  successBg: 'rgba(102, 95, 95, 0.15)',
+  errorBg: 'rgba(149, 143, 158, 0.15)',
+  warningBg: 'rgba(102, 95, 95, 0.15)',
+  infoBg: 'rgba(205, 208, 220, 0.1)',
   
   // Special colors
-  shadow: 'rgba(0, 0, 0, 0.35)',
-  overlay: 'rgba(0, 0, 0, 0.65)'
+  shadow: 'rgba(0, 0, 0, 0.5)',
+  overlay: 'rgba(0, 0, 0, 0.7)'
 };
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);

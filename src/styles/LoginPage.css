@@ -24,6 +24,12 @@ html, body {
   --bm-light: #bed0db;
   --bm-focus-ring: rgba(221, 159, 82, 0.22);
   --bm-primary-shadow: rgba(43, 87, 109, 0.28);
+
+  /* Translucent helpers */
+  --bm-primary-20: rgba(43, 87, 109, 0.12);
+  --bm-accent-20: rgba(221, 159, 82, 0.12);
+  --bm-accent-soft-20: rgba(220, 200, 148, 0.18);
+  --bm-muted-20: rgba(141, 161, 175, 0.12);
 }
 
 .login-container {
@@ -96,7 +102,8 @@ html, body {
   margin-bottom: 32px;
 }
 
-.hotel-logo {
+.hotel-logo,
+.brand-logo {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -105,7 +112,8 @@ html, body {
   transition: transform 0.2s ease, opacity 0.2s ease;
 }
 
-.hotel-logo:hover {
+.hotel-logo:hover,
+.brand-logo:hover {
   transform: scale(1.05);
   opacity: 0.8;
 }
@@ -125,7 +133,8 @@ html, body {
   background-clip: text;
 }
 
-.hotel-logo h1 {
+.hotel-logo h1,
+.brand-logo h1 {
   margin: 0;
   font-size: 2rem;
   font-weight: 700;
@@ -137,7 +146,7 @@ html, body {
 
 .login-subtitle {
   margin: 0;
-  color: #666;
+  color: var(--bm-muted);
   font-size: 1rem;
   font-weight: 400;
 }
@@ -156,7 +165,7 @@ html, body {
 
 .form-label {
   font-weight: 600;
-  color: #333;
+  color: var(--bm-primary);
   font-size: 0.95rem;
 }
 
@@ -170,19 +179,19 @@ html, body {
   position: absolute;
   left: 16px;
   font-size: 1.1rem;
-  color: #666;
+  color: var(--bm-muted);
   z-index: 2;
 }
 
 .form-input {
   width: 100%;
   padding: 16px 16px 16px 48px;
-  border: 2px solid #e1e5e9;
+  border: 2px solid var(--bm-light);
   border-radius: 12px;
   font-size: 1rem;
   transition: all 0.3s ease;
-  background: #fff;
-  color: #333;
+  background: white;
+  color: var(--bm-primary);
   box-sizing: border-box;
 }
 
@@ -193,13 +202,13 @@ html, body {
 }
 
 .form-input:disabled {
-  background: #f8f9fa;
+  background: var(--bm-light);
   cursor: not-allowed;
   opacity: 0.7;
 }
 
 .form-input::placeholder {
-  color: #999;
+  color: var(--bm-muted);
 }
 
 .password-toggle {
@@ -250,8 +259,8 @@ html, body {
 }
 
 .otp-display {
-  background: #e8f5e8;
-  border: 1px solid #4caf50;
+  background: var(--bm-primary-20);
+  border: 1px solid var(--bm-primary);
   border-radius: 8px;
   padding: 12px;
   margin-top: 8px;
@@ -260,13 +269,13 @@ html, body {
 
 .otp-display strong {
   display: block;
-  color: #2e7d32;
+  color: var(--bm-primary);
   font-size: 1.1rem;
   margin-bottom: 4px;
 }
 
 .otp-display small {
-  color: #666;
+  color: var(--bm-muted);
   font-size: 0.8rem;
 }
 
@@ -288,7 +297,7 @@ html, body {
 
 .security-question p {
   margin: 0;
-  color: #000;
+  color: var(--bm-primary);
   font-style: italic;
   font-weight: 500;
 }
@@ -298,10 +307,10 @@ html, body {
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
-  background: #ffebee;
-  border: 1px solid #f44336;
+  background: var(--bm-accent-20);
+  border: 1px solid var(--bm-accent);
   border-radius: 8px;
-  color: #c62828;
+  color: var(--bm-accent);
   font-size: 0.9rem;
   margin-top: -8px;
 }
@@ -315,10 +324,10 @@ html, body {
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
-  background: #e8f5e8;
-  border: 1px solid #4caf50;
+  background: var(--bm-primary-20);
+  border: 1px solid var(--bm-primary);
   border-radius: 8px;
-  color: #2e7d32;
+  color: var(--bm-primary);
   font-size: 0.9rem;
   margin-top: -8px;
 }
@@ -410,7 +419,7 @@ html, body {
 .login-footer {
   margin-top: 32px;
   text-align: center;
-  border-top: 1px solid #e1e5e9;
+  border-top: 1px solid var(--bm-light);
   padding-top: 24px;
 }
 
@@ -419,7 +428,7 @@ html, body {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: #666;
+  color: var(--bm-muted);
   font-size: 0.9rem;
   margin-bottom: 12px;
 }
@@ -430,15 +439,15 @@ html, body {
 
 .default-credentials {
   font-family: 'Courier New', monospace;
-  background: #f8f9fa;
+  background: var(--bm-light);
   padding: 8px 12px;
   border-radius: 6px;
-  border: 1px solid #e1e5e9;
+  border: 1px solid var(--bm-light);
   display: inline-block;
 }
 
 .default-credentials small {
-  color: #666;
+  color: var(--bm-muted);
   font-size: 0.8rem;
   display: block;
   margin-bottom: 4px;
@@ -463,7 +472,8 @@ html, body {
     max-height: 95vh;
   }
   
-  .hotel-logo h1 {
+  .hotel-logo h1,
+  .brand-logo h1 {
     font-size: 1.5rem;
   }
   
@@ -509,34 +519,34 @@ html, body {
 @media (prefers-color-scheme: dark) {
   .login-card {
     background: rgba(30, 30, 30, 0.95);
-    color: #fff;
+    color: white;
   }
   
   .login-subtitle {
-    color: #ccc;
+    color: var(--bm-light);
   }
   
   .form-label {
-    color: #fff;
+    color: white;
   }
   
   .form-input {
     background: rgba(50, 50, 50, 0.8);
-    border-color: #444;
-    color: #fff;
+    border-color: var(--bm-muted);
+    color: white;
   }
   
   .form-input::placeholder {
-    color: #888;
+    color: var(--bm-muted);
   }
   
   .default-credentials {
     background: rgba(50, 50, 50, 0.5);
-    border-color: #444;
+    border-color: var(--bm-muted);
   }
   
   .security-note {
-    color: #ccc;
+    color: var(--bm-light);
   }
   
   .security-question {
@@ -551,12 +561,12 @@ html, body {
 }
 
 .password-box {
-  background: linear-gradient(135deg, #4caf50, #45a049);
-  border: 2px solid #4caf50;
+  background: linear-gradient(135deg, var(--bm-primary), var(--bm-primary-alt));
+  border: 2px solid var(--bm-primary);
   border-radius: 12px;
   padding: 20px;
   text-align: center;
-  box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+  box-shadow: 0 4px 15px var(--bm-primary-shadow);
   animation: pulse 2s infinite;
 }
 
@@ -570,7 +580,7 @@ html, body {
 
 .password-text {
   background: rgba(255, 255, 255, 0.9);
-  color: #2e7d32;
+  color: var(--bm-primary);
   font-family: 'Courier New', monospace;
   font-size: 24px;
   font-weight: bold;
@@ -578,13 +588,13 @@ html, body {
   border-radius: 8px;
   margin: 10px 0;
   letter-spacing: 2px;
-  border: 2px solid #4caf50;
+  border: 2px solid var(--bm-primary);
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .password-box small {
   display: block;
-  color: #e8f5e8;
+  color: var(--bm-light);
   font-size: 12px;
   margin-top: 10px;
   font-style: italic;
@@ -593,14 +603,14 @@ html, body {
 @keyframes pulse {
   0% {
     transform: scale(1);
-    box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+    box-shadow: 0 4px 15px var(--bm-primary-shadow);
   }
   50% {
     transform: scale(1.02);
-    box-shadow: 0 6px 20px rgba(76, 175, 80, 0.5);
+    box-shadow: 0 6px 20px var(--bm-primary-shadow);
   }
   100% {
     transform: scale(1);
-    box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+    box-shadow: 0 4px 15px var(--bm-primary-shadow);
   }
 }

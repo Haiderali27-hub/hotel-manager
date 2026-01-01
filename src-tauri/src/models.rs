@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 // ===== CORE MODELS =====
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Room {
+pub struct Resource {
     pub id: i64,
     pub number: String,
     pub room_type: String,
@@ -15,8 +15,11 @@ pub struct Room {
     pub guest_name: Option<String>,
 }
 
+// Backwards-compatible alias (commands/TS types can be migrated gradually)
+pub type Room = Resource;
+
 #[derive(Debug, Serialize, Deserialize)]
-pub struct NewGuest {
+pub struct NewCustomer {
     pub name: String,
     pub phone: Option<String>,
     pub room_id: Option<i64>,  // Changed to Option to support walk-in customers
@@ -25,8 +28,10 @@ pub struct NewGuest {
     pub daily_rate: f64,
 }
 
+pub type NewGuest = NewCustomer;
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Guest {
+pub struct Customer {
     pub id: i64,
     pub name: String,
     pub phone: Option<String>,
@@ -39,8 +44,10 @@ pub struct Guest {
     pub updated_at: String,
 }
 
+pub type Guest = Customer;
+
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ActiveGuestRow {
+pub struct ActiveCustomerRow {
     pub guest_id: i64,
     pub name: String,
     pub room_number: Option<String>,  // Changed to Option for walk-in customers
@@ -49,6 +56,8 @@ pub struct ActiveGuestRow {
     pub daily_rate: f64,
     pub is_walkin: bool,  // New field to identify walk-in customers
 }
+
+pub type ActiveGuestRow = ActiveCustomerRow;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MenuItem {
@@ -159,7 +168,7 @@ pub struct HistoryRow {
     pub details: serde_json::Value,
 }
 
-// ===== FOOD ORDER MODELS =====
+// ===== SALES MODELS (De-hotelified) =====
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OrderItemInput {
@@ -170,7 +179,7 @@ pub struct OrderItemInput {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct FoodOrderSummary {
+pub struct SaleSummary {
     pub id: i64,
     pub created_at: String,
     pub paid: bool,
@@ -181,8 +190,11 @@ pub struct FoodOrderSummary {
     pub guest_name: Option<String>,
 }
 
+// Backwards-compatible alias (older command/TS naming)
+pub type FoodOrderSummary = SaleSummary;
+
 #[derive(Debug, Serialize, Deserialize)]
-pub struct FoodOrderInfo {
+pub struct SaleRecord {
     pub id: i64,
     pub guest_id: Option<i64>,
     pub customer_type: String,
@@ -192,6 +204,9 @@ pub struct FoodOrderInfo {
     pub paid_at: Option<String>,
     pub total_amount: f64,
 }
+
+// Backwards-compatible alias
+pub type FoodOrderInfo = SaleRecord;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OrderItemDetail {
@@ -204,9 +219,41 @@ pub struct OrderItemDetail {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct FoodOrderDetails {
-    pub order: FoodOrderInfo,
+pub struct SaleDetails {
+    pub order: SaleRecord,
     pub items: Vec<OrderItemDetail>,
+}
+
+// Backwards-compatible alias
+pub type FoodOrderDetails = SaleDetails;
+
+// ===== INVENTORY MODELS =====
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LowStockItem {
+    pub id: i64,
+    pub name: String,
+    pub stock_quantity: i32,
+    pub low_stock_limit: i32,
+}
+
+// ===== SHIFT MANAGEMENT MODELS =====
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ShiftSummary {
+    pub id: i64,
+    pub opened_at: String,
+    pub closed_at: Option<String>,
+    pub opened_by: i64,
+    pub closed_by: Option<i64>,
+    pub start_cash: f64,
+    pub end_cash_expected: f64,
+    pub end_cash_actual: f64,
+    pub difference: f64,
+    pub total_sales: f64,
+    pub total_expenses: f64,
+    pub status: String, // 'open' or 'closed'
+    pub notes: Option<String>,
 }
 
 // ===== EXPENSE MODELS =====

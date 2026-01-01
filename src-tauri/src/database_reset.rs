@@ -33,32 +33,32 @@ pub fn get_database_stats() -> Result<DatabaseStats, String> {
     let db_path = get_db_path();
     let conn = Connection::open(&db_path).map_err(|e| format!("Failed to open database: {}", e))?;
     
-    let total_rooms: i32 = conn.query_row("SELECT COUNT(*) FROM rooms", [], |row| row.get(0))
-        .map_err(|e| format!("Failed to count rooms: {}", e))?;
+    let total_rooms: i32 = conn.query_row("SELECT COUNT(*) FROM resources", [], |row| row.get(0))
+        .map_err(|e| format!("Failed to count resources: {}", e))?;
     
-    let occupied_rooms: i32 = conn.query_row("SELECT COUNT(*) FROM rooms WHERE is_occupied = 1", [], |row| row.get(0))
-        .map_err(|e| format!("Failed to count occupied rooms: {}", e))?;
+    let occupied_rooms: i32 = conn.query_row("SELECT COUNT(*) FROM resources WHERE is_occupied = 1", [], |row| row.get(0))
+        .map_err(|e| format!("Failed to count occupied resources: {}", e))?;
     
-    let active_guests: i32 = conn.query_row("SELECT COUNT(*) FROM guests WHERE is_active = 1", [], |row| row.get(0))
-        .map_err(|e| format!("Failed to count active guests: {}", e))?;
+    let active_guests: i32 = conn.query_row("SELECT COUNT(*) FROM customers WHERE status = 'active'", [], |row| row.get(0))
+        .map_err(|e| format!("Failed to count active customers: {}", e))?;
     
-    let total_guests: i32 = conn.query_row("SELECT COUNT(*) FROM guests", [], |row| row.get(0))
-        .map_err(|e| format!("Failed to count total guests: {}", e))?;
+    let total_guests: i32 = conn.query_row("SELECT COUNT(*) FROM customers", [], |row| row.get(0))
+        .map_err(|e| format!("Failed to count total customers: {}", e))?;
     
     let menu_items: i32 = conn.query_row("SELECT COUNT(*) FROM menu_items", [], |row| row.get(0))
         .map_err(|e| format!("Failed to count menu items: {}", e))?;
     
-    let food_orders: i32 = conn.query_row("SELECT COUNT(*) FROM food_orders", [], |row| row.get(0))
-        .map_err(|e| format!("Failed to count food orders: {}", e))?;
+    let food_orders: i32 = conn.query_row("SELECT COUNT(*) FROM sales", [], |row| row.get(0))
+        .map_err(|e| format!("Failed to count sales: {}", e))?;
     
     // Current schema uses paid=0/1 (migrations may also keep is_paid in older DBs)
     let unpaid_orders: i32 = conn
         .query_row(
-            "SELECT COUNT(*) FROM food_orders WHERE COALESCE(paid, is_paid, 0) = 0",
+            "SELECT COUNT(*) FROM sales WHERE COALESCE(paid, is_paid, 0) = 0",
             [],
             |row| row.get(0),
         )
-        .map_err(|e| format!("Failed to count unpaid orders: {}", e))?;
+        .map_err(|e| format!("Failed to count unpaid sales: {}", e))?;
     
     let expenses: i32 = conn.query_row("SELECT COUNT(*) FROM expenses", [], |row| row.get(0))
         .map_err(|e| format!("Failed to count expenses: {}", e))?;

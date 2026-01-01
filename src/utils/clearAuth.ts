@@ -2,9 +2,24 @@
 
 const validateSession = (): boolean => {
   try {
-    const sessionToken = localStorage.getItem('hotel_session_token');
-    const sessionExpiry = localStorage.getItem('hotel_session_expiry');
-    const lastActivity = localStorage.getItem('hotel_last_activity');
+    // Prefer new keys, fall back to legacy keys (and migrate if needed)
+    let sessionToken = localStorage.getItem('bm_session_token');
+    let sessionExpiry = localStorage.getItem('bm_session_expiry');
+    let lastActivity = localStorage.getItem('bm_last_activity');
+
+    if (!sessionToken && localStorage.getItem('hotel_session_token')) {
+      sessionToken = localStorage.getItem('hotel_session_token');
+      sessionExpiry = localStorage.getItem('hotel_session_expiry');
+      lastActivity = localStorage.getItem('hotel_last_activity');
+
+      if (sessionToken) localStorage.setItem('bm_session_token', sessionToken);
+      if (sessionExpiry) localStorage.setItem('bm_session_expiry', sessionExpiry);
+      if (lastActivity) localStorage.setItem('bm_last_activity', lastActivity);
+
+      localStorage.removeItem('hotel_session_token');
+      localStorage.removeItem('hotel_session_expiry');
+      localStorage.removeItem('hotel_last_activity');
+    }
     
     if (!sessionToken || !sessionExpiry || !lastActivity) {
       return false;
@@ -30,7 +45,7 @@ const validateSession = (): boolean => {
     }
     
     // Update last activity if session is valid
-    localStorage.setItem('hotel_last_activity', new Date().toISOString());
+    localStorage.setItem('bm_last_activity', new Date().toISOString());
     return true;
     
   } catch (error) {
@@ -42,6 +57,10 @@ const validateSession = (): boolean => {
 
 const clearAllAuthData = () => {
   try {
+    localStorage.removeItem('bm_session_token');
+    localStorage.removeItem('bm_session_expiry');
+    localStorage.removeItem('bm_last_activity');
+    // Cleanup legacy keys
     localStorage.removeItem('hotel_session_token');
     localStorage.removeItem('hotel_session_expiry');
     localStorage.removeItem('hotel_last_activity');

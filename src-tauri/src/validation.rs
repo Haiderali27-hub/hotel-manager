@@ -179,7 +179,7 @@ pub fn validate_id(id: i64, entity_type: &str) -> ValidationResult<()> {
 
 /// Check if room exists and is available for assignment
 pub fn validate_room_availability(conn: &rusqlite::Connection, room_id: i64, exclude_guest_id: Option<i64>) -> ValidationResult<()> {
-    let query = "SELECT is_occupied, guest_id FROM rooms WHERE id = ?".to_string();
+    let query = "SELECT is_occupied, guest_id FROM resources WHERE id = ?".to_string();
     let params: Vec<&dyn rusqlite::ToSql> = vec![&room_id];
     
     let result = conn.query_row(&query, &*params, |row| {
@@ -209,9 +209,12 @@ pub fn validate_room_availability(conn: &rusqlite::Connection, room_id: i64, exc
 /// Check if guest exists and is active
 pub fn validate_guest_active(conn: &rusqlite::Connection, guest_id: i64) -> ValidationResult<()> {
     let result = conn.query_row(
-        "SELECT is_active FROM guests WHERE id = ?",
+        "SELECT status FROM customers WHERE id = ?",
         [guest_id],
-        |row| row.get::<_, bool>(0)
+        |row| {
+            let status: String = row.get(0)?;
+            Ok(status == "active")
+        }
     );
     
     match result {
@@ -246,7 +249,7 @@ pub fn validate_menu_item_available(conn: &rusqlite::Connection, menu_item_id: i
 
 /// Check if room number is unique (excluding a specific room ID for updates)
 pub fn validate_room_number_unique(conn: &rusqlite::Connection, number: &str, exclude_room_id: Option<i64>) -> ValidationResult<()> {
-    let mut query = "SELECT COUNT(*) FROM rooms WHERE number = ?".to_string();
+    let mut query = "SELECT COUNT(*) FROM resources WHERE number = ?".to_string();
     let mut params: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(number.to_string())];
     
     if let Some(exclude_id) = exclude_room_id {

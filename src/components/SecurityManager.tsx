@@ -42,7 +42,8 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({ children }) => {
     const handleActivity = () => {
       if (isAuthenticated) {
         // Update last activity timestamp
-        localStorage.setItem('hotel_last_activity', new Date().toISOString());
+        localStorage.setItem('bm_last_activity', new Date().toISOString());
+        localStorage.removeItem('hotel_last_activity');
       }
       resetInactivityTimer();
     };
@@ -50,6 +51,9 @@ const SecurityManager: React.FC<SecurityManagerProps> = ({ children }) => {
     const handleAppClose = () => {
       if (isAuthenticated) {
         // Clear session data on app close
+        localStorage.removeItem('bm_session_token');
+        localStorage.removeItem('bm_session_expiry');
+        localStorage.removeItem('bm_last_activity');
         localStorage.removeItem('hotel_session_token');
         localStorage.removeItem('hotel_session_expiry');
         localStorage.removeItem('hotel_last_activity');

@@ -19,11 +19,18 @@ use simple_commands::{
     add_room, get_rooms, get_available_rooms_for_guest, update_room, delete_room, cleanup_soft_deleted_rooms,
         add_guest, get_active_guests, get_all_guests, get_guest, checkout_guest, checkout_guest_with_discount, update_guest,
     add_menu_item, get_menu_items, update_menu_item, delete_menu_item,
-        dashboard_stats, add_food_order, get_food_orders, get_food_orders_by_guest, mark_order_paid,
+        dashboard_stats, get_low_stock_items, add_food_order, get_food_orders, get_food_orders_by_guest, mark_order_paid,
     add_expense, get_expenses, get_expenses_by_date_range, update_expense, delete_expense,
     toggle_food_order_payment, delete_food_order, get_order_details,
     set_tax_rate, get_tax_rate, set_tax_enabled, get_tax_enabled,
-    set_currency_code, get_currency_code, set_locale, get_locale
+    set_currency_code, get_currency_code, set_locale, get_locale,
+    set_business_name, get_business_name,
+    open_shift, close_shift, get_current_shift, get_shift_history,
+    // Generic alias commands
+    add_resource, get_resources, get_available_resources_for_customer, update_resource, delete_resource,
+    add_customer, get_active_customers, get_all_customers, get_customer, checkout_customer, checkout_customer_with_discount, update_customer,
+    add_sale, get_sales, get_sales_by_customer, mark_sale_paid, toggle_sale_payment, delete_sale, get_sale_details,
+    set_business_mode, get_business_mode
 };
 use database_reset::{reset_database, get_database_path, get_database_stats};
 use export::{export_history_csv, export_history_csv_with_dialog, create_database_backup};
@@ -31,6 +38,14 @@ use print_templates::{build_order_receipt_html, build_final_invoice_html, build_
 use settings::{
     backup_database, export_json_backup, restore_database_from_backup, get_reset_security_question, 
     validate_security_answer, reset_application_data, select_backup_file, browse_backup_file
+};
+
+use settings::{
+    store_business_logo, get_business_logo_path,
+    get_business_logo_data_url,
+    set_primary_color, get_primary_color,
+    set_receipt_header, get_receipt_header,
+    set_receipt_footer, get_receipt_footer
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -69,6 +84,12 @@ pub fn run() {
             update_room,
             delete_room,
             cleanup_soft_deleted_rooms,
+            // Resource management (generic aliases)
+            add_resource,
+            get_resources,
+            get_available_resources_for_customer,
+            update_resource,
+            delete_resource,
             // Guest management
             add_guest,
             get_active_guests,
@@ -77,6 +98,14 @@ pub fn run() {
             checkout_guest,
             checkout_guest_with_discount,
             update_guest,
+            // Customer management (generic aliases)
+            add_customer,
+            get_active_customers,
+            get_all_customers,
+            get_customer,
+            checkout_customer,
+            checkout_customer_with_discount,
+            update_customer,
             // Menu management
             add_menu_item,
             get_menu_items,
@@ -90,6 +119,14 @@ pub fn run() {
             toggle_food_order_payment,
             delete_food_order,
             get_order_details,
+            // Sales (generic aliases)
+            add_sale,
+            get_sales,
+            get_sales_by_customer,
+            mark_sale_paid,
+            toggle_sale_payment,
+            delete_sale,
+            get_sale_details,
             // Expenses
             add_expense,
             get_expenses,
@@ -98,6 +135,7 @@ pub fn run() {
             delete_expense,
             // Dashboard
             dashboard_stats,
+            get_low_stock_items,
             // Database management
             reset_database,
             get_database_path,
@@ -119,6 +157,10 @@ pub fn run() {
             get_currency_code,
             set_locale,
             get_locale,
+            set_business_name,
+            get_business_name,
+            set_business_mode,
+            get_business_mode,
             // Backup & Reset
             backup_database,
             export_json_backup,
@@ -128,6 +170,22 @@ pub fn run() {
             get_reset_security_question,
             validate_security_answer,
             reset_application_data
+            ,
+            // White-labeling (Phase 3)
+            store_business_logo,
+            get_business_logo_path,
+            get_business_logo_data_url,
+            set_primary_color,
+            get_primary_color,
+            set_receipt_header,
+            get_receipt_header,
+            set_receipt_footer,
+            get_receipt_footer,
+            // Shift management (Phase 4)
+            open_shift,
+            close_shift,
+            get_current_shift,
+            get_shift_history
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -8,8 +8,8 @@
 body {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   line-height: 1.6;
-  color: #333;
-  background: #f8f9fa;
+  color: var(--app-text);
+  background: var(--app-bg);
 }
 
 /* Loading Container */
@@ -18,7 +18,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, var(--bm-primary) 0%, var(--bm-muted) 100%);
 }
 
 .loading-spinner {

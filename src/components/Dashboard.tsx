@@ -1,23 +1,27 @@
 import React, { useEffect, useState } from 'react';
+import { getDashboardStats, type DashboardStats } from '../api/client';
 import logoImage from '../assets/Logo/logo.png';
+import { useAuth } from '../context/AuthContext';
 import { useCurrency } from '../context/CurrencyContext';
-import { useAuth } from '../context/SimpleAuthContext';
+import { useLabels } from '../context/LabelContext';
 import { getGradientColors, useTheme } from '../context/ThemeContext';
-import type { DashboardStats } from '../services/DatabaseService';
-import DatabaseService from '../services/DatabaseService';
-import ActiveGuests from './ActiveGuests';
+import ActiveCustomers from './ActiveCustomers';
+import AddCustomer from './AddCustomer';
 import AddExpense from './AddExpense';
-import AddFoodOrder from './AddFoodOrder';
-import AddGuest from './AddGuest';
+import AddSale from './AddSale';
+import FinancialReport from './FinancialReport';
 import History from './History';
-import ManageMenuRooms from './ManageMenuRooms';
-import MonthlyReport from './MonthlyReport';
+import LowStockAlert from './LowStockAlert';
+import ManageCatalogResources from './ManageCatalogResources';
+import { ProtectedRoute } from './ProtectedRoute';
 import Settings from './SettingsNew';
+import ShiftManager from './ShiftManager';
 
 const Dashboard: React.FC = () => {
-  const { logout } = useAuth();
+  const { logout, userRole, adminId } = useAuth();
   const { theme, colors, toggleTheme } = useTheme();
   const { formatMoney } = useCurrency();
+  const { current: label } = useLabels();
   const gradients = getGradientColors(theme);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState('dashboard');
@@ -37,35 +41,8 @@ const Dashboard: React.FC = () => {
     setShowNavDropdown(false);
   };
 
-  const handleNavigation = (title: string) => {
-    switch (title) {
-      case 'Add Guest':
-        setCurrentPage('add-guest');
-        break;
-      case 'Add Food Order':
-        setCurrentPage('add-food-order');
-        break;
-      case 'Active Guests':
-        setCurrentPage('active-guests');
-        break;
-      case 'Add Expense':
-        setCurrentPage('add-expense');
-        break;
-      case 'History':
-        setCurrentPage('history');
-        break;
-      case 'Monthly Report':
-        setCurrentPage('monthly-report');
-        break;
-      case 'Manage Menu / Rooms':
-        setCurrentPage('manage-menu-rooms');
-        break;
-      case 'Settings':
-        setCurrentPage('settings');
-        break;
-      default:
-        setCurrentPage('dashboard');
-    }
+  const handleNavigation = (page: string) => {
+    setCurrentPage(page);
     setSidebarOpen(false); // Close sidebar on mobile after selection
   };
 
@@ -75,7 +52,7 @@ const Dashboard: React.FC = () => {
 
   const refreshData = async () => {
     try {
-      const stats = await DatabaseService.getDashboardStats();
+      const stats = await getDashboardStats();
       setDbStats(stats);
     } catch (error) {
       console.error('Database error:', error);
@@ -109,7 +86,7 @@ const Dashboard: React.FC = () => {
     if (dbStats) {
       return [
         { 
-          title: 'Total Guests This Month', 
+          title: 'Total Customers This Month', 
           value: dbStats.total_guests_this_month.toString(), 
           icon: '👥', 
           color: gradients.primary,
@@ -139,14 +116,14 @@ const Dashboard: React.FC = () => {
           change: 'Real Data' 
         },
         { 
-          title: 'Total Food Orders', 
+          title: 'Total Sales', 
           value: dbStats.total_food_orders.toString(), 
           icon: '🍽️', 
           color: gradients.warning,
           change: 'Real Data' 
         },
         { 
-          title: 'Active Guests', 
+          title: `Active ${label.client}s`, 
           value: dbStats.active_guests.toString(), 
           icon: '👥', 
           color: gradients.accent,
@@ -158,7 +135,7 @@ const Dashboard: React.FC = () => {
     // Sample data fallback
     return [
       { 
-        title: 'Total Guests This Month', 
+        title: `Total ${label.client}s This Month`, 
         value: '42', 
         icon: '👥', 
         color: gradients.primary,
@@ -186,14 +163,14 @@ const Dashboard: React.FC = () => {
         change: '+15%' 
       },
       { 
-        title: 'Total Food Orders', 
+        title: 'Total Sales', 
         value: '156', 
         icon: '🍽️', 
         color: gradients.warning,
         change: '+23%' 
       },
       { 
-        title: 'Active Guests', 
+        title: `Active ${label.client}s`, 
         value: '8', 
         icon: '👥', 
         color: gradients.accent,
@@ -203,14 +180,15 @@ const Dashboard: React.FC = () => {
   };
 
   const navigationItems = [
-    { title: 'Add Guest', icon: '➕' },
-    { title: 'Add Food Order', icon: '🍲' },
-    { title: 'Active Guests', icon: '👥' },
-    { title: 'Add Expense', icon: '💵' },
-    { title: 'History', icon: '📋' },
-    { title: 'Monthly Report', icon: '📊' },
-    { title: 'Manage Menu / Rooms', icon: '🧾' },
-    { title: 'Settings', icon: '⚙️' }
+    { page: 'add-customer', title: 'Add Customer', icon: '➕' },
+    { page: 'add-sale', title: 'Add Sale', icon: '🧾' },
+    { page: 'active-customers', title: 'Active Customers', icon: '👥' },
+    { page: 'add-expense', title: 'Add Expense', icon: '💵' },
+    { page: 'history', title: 'History', icon: '📋' },
+    { page: 'financial-report', title: 'Financial Report', icon: '📊' },
+    { page: 'shifts', title: 'Shift Management', icon: '💼' },
+    { page: 'manage-catalog-resources', title: 'Manage Catalog / Resources', icon: '⚙️' },
+    { page: 'settings', title: 'Settings', icon: '⚙️' }
   ];
 
   const renderDashboardContent = () => {
@@ -286,6 +264,9 @@ const Dashboard: React.FC = () => {
             </div>
           ))}
         </div>
+
+        {/* Low Stock Alert (Phase 4) */}
+        <LowStockAlert />
       </div>
     );
   };
@@ -306,7 +287,7 @@ const Dashboard: React.FC = () => {
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: '1rem 2rem',
-        backgroundColor: '#0a1920',
+        backgroundColor: 'var(--bm-primary)',
         borderBottom: `1px solid ${colors.border}`
       }}>
         {/* Left side - Menu */}
@@ -316,7 +297,7 @@ const Dashboard: React.FC = () => {
             style={{
               backgroundColor: colors.accent,
               border: 'none',
-              color: theme === 'dark' ? '#000' : '#FFFFFF',
+              color: theme === 'dark' ? 'black' : 'white',
               padding: '0.5rem',
               borderRadius: '6px',
               cursor: 'pointer',
@@ -356,7 +337,7 @@ const Dashboard: React.FC = () => {
           >
             <img 
               src={logoImage} 
-              alt="Hotel Logo"
+              alt="Logo"
               style={{
                 height: '50px',
                 width: 'auto',
@@ -378,7 +359,7 @@ const Dashboard: React.FC = () => {
                 backgroundColor: colors.surface,
                 border: `1px solid ${colors.border}`,
                 borderRadius: '8px',
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                boxShadow: `0 4px 12px ${colors.shadow}`,
                 zIndex: 1000,
                 minWidth: '200px',
                 padding: '0.5rem 0'
@@ -390,7 +371,7 @@ const Dashboard: React.FC = () => {
                   padding: '0.75rem 1rem',
                   cursor: 'pointer',
                   backgroundColor: currentPage === 'dashboard' ? colors.accent : 'transparent',
-                  color: currentPage === 'dashboard' ? (theme === 'dark' ? '#000' : '#FFFFFF') : colors.text,
+                  color: currentPage === 'dashboard' ? (theme === 'dark' ? 'black' : 'white') : colors.text,
                   transition: 'background-color 0.2s'
                 }}
                 onMouseEnter={(e) => {
@@ -407,92 +388,92 @@ const Dashboard: React.FC = () => {
                 🏠 Dashboard
               </div>
               <div
-                onClick={() => handleQuickNavigation('add-guest')}
+                onClick={() => handleQuickNavigation('add-customer')}
                 style={{
                   padding: '0.75rem 1rem',
                   cursor: 'pointer',
-                  backgroundColor: currentPage === 'add-guest' ? colors.accent : 'transparent',
-                  color: currentPage === 'add-guest' ? (theme === 'dark' ? '#000' : '#FFFFFF') : colors.text,
+                  backgroundColor: currentPage === 'add-customer' ? colors.accent : 'transparent',
+                  color: currentPage === 'add-customer' ? (theme === 'dark' ? 'black' : 'white') : colors.text,
                   transition: 'background-color 0.2s'
                 }}
                 onMouseEnter={(e) => {
-                  if (currentPage !== 'add-guest') {
+                  if (currentPage !== 'add-customer') {
                     e.currentTarget.style.backgroundColor = colors.border;
                   }
                 }}
                 onMouseLeave={(e) => {
-                  if (currentPage !== 'add-guest') {
+                  if (currentPage !== 'add-customer') {
                     e.currentTarget.style.backgroundColor = 'transparent';
                   }
                 }}
               >
-                👤 Add Guest
+                👤 Add Customer
               </div>
               <div
-                onClick={() => handleQuickNavigation('active-guests')}
+                onClick={() => handleQuickNavigation('active-customers')}
                 style={{
                   padding: '0.75rem 1rem',
                   cursor: 'pointer',
-                  backgroundColor: currentPage === 'active-guests' ? colors.accent : 'transparent',
-                  color: currentPage === 'active-guests' ? (theme === 'dark' ? '#000' : '#FFFFFF') : colors.text,
+                  backgroundColor: currentPage === 'active-customers' ? colors.accent : 'transparent',
+                  color: currentPage === 'active-customers' ? (theme === 'dark' ? 'black' : 'white') : colors.text,
                   transition: 'background-color 0.2s'
                 }}
                 onMouseEnter={(e) => {
-                  if (currentPage !== 'active-guests') {
+                  if (currentPage !== 'active-customers') {
                     e.currentTarget.style.backgroundColor = colors.border;
                   }
                 }}
                 onMouseLeave={(e) => {
-                  if (currentPage !== 'active-guests') {
+                  if (currentPage !== 'active-customers') {
                     e.currentTarget.style.backgroundColor = 'transparent';
                   }
                 }}
               >
-                🏨 Active Guests
+                👥 Active Customers
               </div>
               <div
-                onClick={() => handleQuickNavigation('add-food-order')}
+                onClick={() => handleQuickNavigation('add-sale')}
                 style={{
                   padding: '0.75rem 1rem',
                   cursor: 'pointer',
-                  backgroundColor: currentPage === 'add-food-order' ? colors.accent : 'transparent',
-                  color: currentPage === 'add-food-order' ? (theme === 'dark' ? '#000' : '#FFFFFF') : colors.text,
+                  backgroundColor: currentPage === 'add-sale' ? colors.accent : 'transparent',
+                  color: currentPage === 'add-sale' ? (theme === 'dark' ? 'black' : 'white') : colors.text,
                   transition: 'background-color 0.2s'
                 }}
                 onMouseEnter={(e) => {
-                  if (currentPage !== 'add-food-order') {
+                  if (currentPage !== 'add-sale') {
                     e.currentTarget.style.backgroundColor = colors.border;
                   }
                 }}
                 onMouseLeave={(e) => {
-                  if (currentPage !== 'add-food-order') {
+                  if (currentPage !== 'add-sale') {
                     e.currentTarget.style.backgroundColor = 'transparent';
                   }
                 }}
               >
-                🍽️ Add Food Order
+                🧾 Add Sale
               </div>
               <div
-                onClick={() => handleQuickNavigation('manage-menu-rooms')}
+                onClick={() => handleQuickNavigation('manage-catalog-resources')}
                 style={{
                   padding: '0.75rem 1rem',
                   cursor: 'pointer',
-                  backgroundColor: currentPage === 'manage-menu-rooms' ? colors.accent : 'transparent',
-                  color: currentPage === 'manage-menu-rooms' ? (theme === 'dark' ? '#000' : '#FFFFFF') : colors.text,
+                  backgroundColor: currentPage === 'manage-catalog-resources' ? colors.accent : 'transparent',
+                  color: currentPage === 'manage-catalog-resources' ? (theme === 'dark' ? 'black' : 'white') : colors.text,
                   transition: 'background-color 0.2s'
                 }}
                 onMouseEnter={(e) => {
-                  if (currentPage !== 'manage-menu-rooms') {
+                  if (currentPage !== 'manage-catalog-resources') {
                     e.currentTarget.style.backgroundColor = colors.border;
                   }
                 }}
                 onMouseLeave={(e) => {
-                  if (currentPage !== 'manage-menu-rooms') {
+                  if (currentPage !== 'manage-catalog-resources') {
                     e.currentTarget.style.backgroundColor = 'transparent';
                   }
                 }}
               >
-                ⚙️ Manage Menu/Rooms
+                ⚙️ Manage Catalog/Resources
               </div>
               <div
                 onClick={() => handleQuickNavigation('history')}
@@ -500,7 +481,7 @@ const Dashboard: React.FC = () => {
                   padding: '0.75rem 1rem',
                   cursor: 'pointer',
                   backgroundColor: currentPage === 'history' ? colors.accent : 'transparent',
-                  color: currentPage === 'history' ? (theme === 'dark' ? '#000' : '#FFFFFF') : colors.text,
+                  color: currentPage === 'history' ? (theme === 'dark' ? 'black' : 'white') : colors.text,
                   transition: 'background-color 0.2s'
                 }}
                 onMouseEnter={(e) => {
@@ -515,6 +496,28 @@ const Dashboard: React.FC = () => {
                 }}
               >
                 📊 History
+              </div>
+              <div
+                onClick={() => handleQuickNavigation('shifts')}
+                style={{
+                  padding: '0.75rem 1rem',
+                  cursor: 'pointer',
+                  backgroundColor: currentPage === 'shifts' ? colors.accent : 'transparent',
+                  color: currentPage === 'shifts' ? (theme === 'dark' ? 'black' : 'white') : colors.text,
+                  transition: 'background-color 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  if (currentPage !== 'shifts') {
+                    e.currentTarget.style.backgroundColor = colors.border;
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (currentPage !== 'shifts') {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }
+                }}
+              >
+                💼 Shift Management
               </div>
             </div>
           )}
@@ -542,13 +545,32 @@ const Dashboard: React.FC = () => {
           >
             {theme === 'dark' ? '☀️' : '🌙'}
           </button>
-          <span style={{ color: colors.textMuted }}>Admin</span>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
+            <span style={{ color: colors.text, fontSize: '0.875rem', fontWeight: '600' }}>Admin #{adminId}</span>
+            <span
+              style={{
+                color: '#fff',
+                fontSize: '0.75rem',
+                padding: '0.25rem 0.5rem',
+                borderRadius: '8px',
+                fontWeight: '600',
+                background:
+                  userRole === 'admin'
+                    ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                    : userRole === 'manager'
+                    ? 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)'
+                    : 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+              }}
+            >
+              {userRole === 'admin' ? '👑 Admin' : userRole === 'manager' ? '📊 Manager' : '🛒 Staff'}
+            </span>
+          </div>
           <button
             onClick={logout}
             style={{
               backgroundColor: colors.error,
               border: 'none',
-              color: '#FFFFFF',
+              color: 'white',
               padding: '0.5rem 1rem',
               borderRadius: '6px',
               cursor: 'pointer',
@@ -604,7 +626,7 @@ const Dashboard: React.FC = () => {
             {navigationItems.map((item, index) => (
               <button
                 key={index}
-                onClick={() => handleNavigation(item.title)}
+                onClick={() => handleNavigation(item.page)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -638,20 +660,20 @@ const Dashboard: React.FC = () => {
         {/* Main Content */}
         <div style={{
           flex: 1,
-          backgroundColor: currentPage === 'dashboard' ? (theme === 'light' ? '#F5F5F5' : colors.primary) : colors.primary,
+          backgroundColor: colors.primary,
           overflow: 'auto'
         }}>
           {currentPage === 'dashboard' && renderDashboardContent()}
-          {currentPage === 'add-guest' && (
-            <AddGuest 
+          {currentPage === 'add-customer' && (
+            <AddCustomer 
               onBack={goBackToDashboard} 
-              onGuestAdded={refreshData}
+              onCustomerAdded={refreshData}
             />
           )}
-          {currentPage === 'add-food-order' && (
-            <AddFoodOrder 
+          {currentPage === 'add-sale' && (
+            <AddSale 
               onBack={goBackToDashboard} 
-              onOrderAdded={refreshData}
+              onSaleAdded={refreshData}
             />
           )}
           {currentPage === 'add-expense' && (
@@ -660,16 +682,16 @@ const Dashboard: React.FC = () => {
               onExpenseAdded={refreshData}
             />
           )}
-          {currentPage === 'active-guests' && (
-            <ActiveGuests 
+          {currentPage === 'active-customers' && (
+            <ActiveCustomers 
               onBack={goBackToDashboard}
-              onAddOrder={() => {
-                setCurrentPage('add-food-order');
+              onAddSale={() => {
+                setCurrentPage('add-sale');
               }}
             />
           )}
-          {currentPage === 'manage-menu-rooms' && (
-            <ManageMenuRooms 
+          {currentPage === 'manage-catalog-resources' && (
+            <ManageCatalogResources 
               onBack={() => {
                 goBackToDashboard();
                 refreshData();
@@ -677,27 +699,39 @@ const Dashboard: React.FC = () => {
             />
           )}
           {currentPage === 'history' && (
-            <History 
-              onBack={goBackToDashboard}
-            />
+            <ProtectedRoute requiredRole="manager">
+              <History 
+                onBack={goBackToDashboard}
+              />
+            </ProtectedRoute>
           )}
-          {currentPage === 'monthly-report' && (
-            <MonthlyReport 
-              onBack={goBackToDashboard}
-            />
+          {currentPage === 'financial-report' && (
+            <ProtectedRoute requiredRole="manager">
+              <FinancialReport 
+                onBack={goBackToDashboard}
+              />
+            </ProtectedRoute>
+          )}
+          {currentPage === 'shifts' && (
+            <ProtectedRoute requiredRole="manager">
+              <ShiftManager />
+            </ProtectedRoute>
           )}
           {currentPage === 'settings' && (
-            <Settings />
+            <ProtectedRoute requiredRole="admin">
+              <Settings />
+            </ProtectedRoute>
           )}
           {/* TODO: Add other page components */}
           {currentPage !== 'dashboard' && 
-           currentPage !== 'add-guest' && 
-           currentPage !== 'add-food-order' && 
+           currentPage !== 'add-customer' && 
+           currentPage !== 'add-sale' && 
            currentPage !== 'add-expense' && 
-           currentPage !== 'active-guests' && 
+           currentPage !== 'active-customers' && 
            currentPage !== 'history' && 
-           currentPage !== 'monthly-report' && 
-           currentPage !== 'manage-menu-rooms' && 
+           currentPage !== 'financial-report' && 
+           currentPage !== 'shifts' && 
+           currentPage !== 'manage-catalog-resources' && 
            currentPage !== 'settings' && (
             <div style={{
               padding: '2rem',
@@ -710,7 +744,7 @@ const Dashboard: React.FC = () => {
                 onClick={goBackToDashboard}
                 style={{
                   backgroundColor: colors.accent,
-                  color: theme === 'dark' ? '#000' : '#FFFFFF',
+                  color: theme === 'dark' ? 'black' : 'white',
                   border: 'none',
                   padding: '0.75rem 1.5rem',
                   borderRadius: '8px',

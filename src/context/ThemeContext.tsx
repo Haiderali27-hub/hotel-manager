@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core';
 import type { ReactNode } from 'react';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
@@ -45,70 +46,70 @@ interface ThemeContextType {
 }
 
 const lightTheme: ThemeColors = {
-  // Background colors
-  primary: '#FFFFFF',
-  secondary: '#F8F9FA',
-  surface: '#FFFFFF',
-  card: '#FFFFFF',
+  // Background colors - Modern SaaS Light Palette
+  primary: '#fdfdfd',
+  secondary: '#e8eaec',
+  surface: '#e8eaec',
+  card: '#ffffff',
   
   // Text colors
-  text: '#1F2937',
-  textSecondary: '#4B5563',
-  textMuted: '#6B7280',
+  text: '#393741',
+  textSecondary: '#665f5f',
+  textMuted: '#8892a9',
   
   // Border colors
-  border: '#E5E7EB',
-  borderLight: '#F3F4F6',
+  border: '#d2d6db',
+  borderLight: '#e8eaec',
   
   // Interactive colors
-  accent: '#F59E0B',
-  accentHover: '#D97706',
-  success: '#10B981',
-  error: '#EF4444',
-  warning: '#F59E0B',
+  accent: '#8892a9',
+  accentHover: '#665f5f',
+  success: '#845c58',
+  error: '#845c58',
+  warning: '#b7bac3',
   
   // Status colors
-  successBg: '#ECFDF5',
-  errorBg: '#FEE2E2',
-  warningBg: '#FEF3C7',
-  infoBg: '#EFF6FF',
+  successBg: 'rgba(132, 92, 88, 0.1)',
+  errorBg: 'rgba(132, 92, 88, 0.1)',
+  warningBg: 'rgba(183, 186, 195, 0.15)',
+  infoBg: 'rgba(136, 146, 169, 0.1)',
   
   // Special colors
-  shadow: 'rgba(0, 0, 0, 0.1)',
-  overlay: 'rgba(0, 0, 0, 0.5)'
+  shadow: 'rgba(57, 55, 65, 0.08)',
+  overlay: 'rgba(57, 55, 65, 0.5)'
 };
 
 const darkTheme: ThemeColors = {
-  // Background colors
-  primary: '#1E1E2E',
-  secondary: '#2D2D44',
-  surface: '#3D3D5C',
-  card: '#2D2D44',
+  // Background colors - Modern SaaS Dark Palette
+  primary: '#0b0b0b',
+  secondary: '#1e1e1f',
+  surface: '#1e1e1f',
+  card: '#393741',
   
   // Text colors
-  text: '#FFFFFF',
-  textSecondary: '#D1D5DB',
-  textMuted: '#9CA3AF',
+  text: '#cdd0dc',
+  textSecondary: '#958f9e',
+  textMuted: '#665f5f',
   
   // Border colors
-  border: '#3D3D5C',
-  borderLight: '#4B5563',
+  border: '#393741',
+  borderLight: '#1e1e1f',
   
   // Interactive colors
-  accent: '#F59E0B',
-  accentHover: '#D97706',
-  success: '#22C55E',
-  error: '#EF4444',
-  warning: '#F59E0B',
+  accent: '#958f9e',
+  accentHover: '#cdd0dc',
+  success: '#665f5f',
+  error: '#958f9e',
+  warning: '#665f5f',
   
   // Status colors
-  successBg: '#064E3B',
-  errorBg: '#7F1D1D',
-  warningBg: '#78350F',
-  infoBg: '#1E3A8A',
+  successBg: 'rgba(102, 95, 95, 0.15)',
+  errorBg: 'rgba(149, 143, 158, 0.15)',
+  warningBg: 'rgba(102, 95, 95, 0.15)',
+  infoBg: 'rgba(205, 208, 220, 0.1)',
   
   // Special colors
-  shadow: 'rgba(0, 0, 0, 0.3)',
+  shadow: 'rgba(0, 0, 0, 0.5)',
   overlay: 'rgba(0, 0, 0, 0.7)'
 };
 
@@ -123,15 +124,44 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
 
   // Load theme from localStorage on mount
   useEffect(() => {
-    const savedTheme = localStorage.getItem('hotel-app-theme') as ThemeType;
+    const savedTheme = localStorage.getItem('bm-app-theme') as ThemeType;
     if (savedTheme && (savedTheme === 'light' || savedTheme === 'dark')) {
       setTheme(savedTheme);
+      return;
     }
+
+    // Migrate legacy theme key
+    const legacyTheme = localStorage.getItem('hotel-app-theme') as ThemeType;
+    if (legacyTheme && (legacyTheme === 'light' || legacyTheme === 'dark')) {
+      localStorage.setItem('bm-app-theme', legacyTheme);
+      localStorage.removeItem('hotel-app-theme');
+      setTheme(legacyTheme);
+    }
+  }, []);
+
+  useEffect(() => {
+    const applyBrandPrimaryColor = async () => {
+      try {
+        const savedPrimary = await invoke<string | null>('get_primary_color');
+        if (!savedPrimary) return;
+
+        const normalized = savedPrimary.startsWith('#') ? savedPrimary : `#${savedPrimary}`;
+        document.documentElement.style.setProperty('--primary-color', normalized);
+        // Existing theme tokens across the app.
+        document.documentElement.style.setProperty('--bm-primary', normalized);
+        document.documentElement.style.setProperty('--bm-primary-alt', normalized);
+      } catch {
+        // Branding is optional; ignore if backend isn't available.
+      }
+    };
+
+    applyBrandPrimaryColor();
   }, []);
 
   // Save theme to localStorage when it changes
   useEffect(() => {
-    localStorage.setItem('hotel-app-theme', theme);
+    localStorage.setItem('bm-app-theme', theme);
+    localStorage.removeItem('hotel-app-theme');
     // Set data-theme attribute on document for CSS styling
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
@@ -165,25 +195,13 @@ export const useTheme = (): ThemeContextType => {
 };
 
 // Utility function to get theme-aware gradient colors
-export const getGradientColors = (theme: ThemeType) => {
+export const getGradientColors = (_theme: ThemeType) => {
   return {
-    primary: theme === 'light' 
-      ? 'linear-gradient(135deg, #3B82F6, #1D4ED8)'
-      : 'linear-gradient(135deg, #60A5FA, #3B82F6)',
-    success: theme === 'light'
-      ? 'linear-gradient(135deg, #22C55E, #16A34A)'
-      : 'linear-gradient(135deg, #34D399, #22C55E)',
-    error: theme === 'light'
-      ? 'linear-gradient(135deg, #EF4444, #DC2626)'
-      : 'linear-gradient(135deg, #F87171, #EF4444)',
-    warning: theme === 'light'
-      ? 'linear-gradient(135deg, #F59E0B, #D97706)'
-      : 'linear-gradient(135deg, #FBBF24, #F59E0B)',
-    accent: theme === 'light'
-      ? 'linear-gradient(135deg, #8B5CF6, #7C3AED)'
-      : 'linear-gradient(135deg, #A78BFA, #8B5CF6)',
-    info: theme === 'light'
-      ? 'linear-gradient(135deg, #10B981, #059669)'
-      : 'linear-gradient(135deg, #34D399, #10B981)'
+    primary: 'linear-gradient(135deg, var(--bm-primary), var(--bm-muted))',
+    success: 'linear-gradient(135deg, var(--bm-primary), var(--bm-primary-alt))',
+    error: 'linear-gradient(135deg, var(--bm-accent), var(--bm-accent-soft))',
+    warning: 'linear-gradient(135deg, var(--bm-accent), var(--bm-accent-soft))',
+    accent: 'linear-gradient(135deg, var(--bm-accent), var(--bm-accent-soft))',
+    info: 'linear-gradient(135deg, var(--bm-muted), var(--bm-light))'
   };
 };

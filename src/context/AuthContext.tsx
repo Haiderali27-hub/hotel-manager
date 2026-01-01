@@ -6,7 +6,14 @@ interface AuthContextType {
   isLoading: boolean;
   login: (username: string, password: string) => Promise<{ success: boolean; message: string }>;
   logout: () => Promise<void>;
+  getSecurityQuestion: (username: string) => Promise<{ success: boolean; question?: string; message: string }>;
+  resetPassword: (
+    username: string,
+    securityAnswer: string,
+    newPassword: string
+  ) => Promise<{ success: boolean; message: string }>;
   adminId: number | null;
+  userRole: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -27,6 +34,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [adminId, setAdminId] = useState<number | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
 
   useEffect(() => {
     const checkAuthStatus = async () => {
@@ -37,6 +45,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       if (isValid) {
         setAdminId(authService.getAdminId());
+        setUserRole(authService.getUserRole());
       }
       
       setIsLoading(false);
@@ -58,6 +67,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (response.success) {
       setIsAuthenticated(true);
       setAdminId(authService.getAdminId());
+      setUserRole(authService.getUserRole());
     }
     
     return {
@@ -70,6 +80,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     await authService.logout();
     setIsAuthenticated(false);
     setAdminId(null);
+    setUserRole(null);
+  };
+
+  const getSecurityQuestion = async (username: string) => {
+    return authService.getSecurityQuestion(username);
+  };
+
+  const resetPassword = async (username: string, securityAnswer: string, newPassword: string) => {
+    return authService.resetPassword(username, securityAnswer, newPassword);
   };
 
   const value: AuthContextType = {
@@ -77,7 +96,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     isLoading,
     login,
     logout,
+    getSecurityQuestion,
+    resetPassword,
     adminId,
+    userRole,
   };
 
   return (

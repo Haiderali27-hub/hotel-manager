@@ -2,9 +2,187 @@ use tauri::command;
 use std::path::Path;
 use std::fs;
 use serde_json::{json, Value};
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use std::collections::HashMap;
 use base64::Engine;
+
+fn is_valid_hex_color(value: &str) -> bool {
+    let s = value.trim();
+    let s = s.strip_prefix('#').unwrap_or(s);
+    (s.len() == 6 || s.len() == 3) && s.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+fn upsert_setting(conn: &Connection, key: &str, value: &str) -> Result<(), String> {
+    let now = chrono::Local::now().to_rfc3339();
+    conn.execute(
+        "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?1, ?2, ?3)",
+        rusqlite::params![key, value, now],
+    )
+    .map_err(|e| format!("Failed to save setting {}: {}", key, e))?;
+    Ok(())
+}
+
+fn get_setting(conn: &Connection, key: &str) -> Result<Option<String>, String> {
+    conn.query_row(
+        "SELECT value FROM settings WHERE key = ?1",
+        [key],
+        |row| row.get(0),
+    )
+    .optional()
+    .map_err(|e| format!("Failed to read setting {}: {}", key, e))
+}
+
+fn get_assets_dir() -> Result<std::path::PathBuf, String> {
+    // Store assets in a protected per-user app-data directory.
+    // This keeps the logo available even if the user deletes the original file.
+    let base = dirs::data_local_dir().ok_or("Failed to resolve app data directory".to_string())?;
+    Ok(base.join("hotel-app").join("assets"))
+}
+
+/// Copy an uploaded logo into app_data/assets and persist its path.
+/// Returns the stored logo path.
+#[command]
+pub async fn store_business_logo(source_path: String) -> Result<String, String> {
+    use crate::db::get_db_connection;
+
+    let source = std::path::PathBuf::from(source_path.trim());
+    if !source.exists() {
+        return Err("Selected logo file does not exist".to_string());
+    }
+    if !source.is_file() {
+        return Err("Selected logo path is not a file".to_string());
+    }
+
+    let assets_dir = get_assets_dir()?;
+    fs::create_dir_all(&assets_dir)
+        .map_err(|e| format!("Failed to create assets directory: {}", e))?;
+
+    let ext = source
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|s| s.to_lowercase())
+        .unwrap_or_else(|| "png".to_string());
+
+    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+    let filename = format!("business_logo_{}.{}", timestamp, ext);
+    let dest = assets_dir.join(filename);
+
+    fs::copy(&source, &dest)
+        .map_err(|e| format!("Failed to store logo file: {}", e))?;
+
+    let dest_str = dest.to_string_lossy().to_string();
+    let conn = get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+    upsert_setting(&conn, "business_logo_path", &dest_str)?;
+    Ok(dest_str)
+}
+
+#[command]
+pub async fn get_business_logo_path() -> Result<Option<String>, String> {
+    use crate::db::get_db_connection;
+    let conn = get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+    get_setting(&conn, "business_logo_path")
+}
+
+#[command]
+pub async fn get_business_logo_data_url() -> Result<Option<String>, String> {
+    use crate::db::get_db_connection;
+
+    let conn = get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+    let path = match get_setting(&conn, "business_logo_path")? {
+        Some(p) if !p.trim().is_empty() => p,
+        _ => return Ok(None),
+    };
+
+    let path_buf = std::path::PathBuf::from(path.trim());
+    if !path_buf.exists() || !path_buf.is_file() {
+        return Ok(None);
+    }
+
+    let bytes = std::fs::read(&path_buf)
+        .map_err(|e| format!("Failed to read stored logo: {}", e))?;
+    if bytes.is_empty() {
+        return Ok(None);
+    }
+
+    // Keep previews reasonably small.
+    const MAX_BYTES: usize = 5 * 1024 * 1024;
+    if bytes.len() > MAX_BYTES {
+        return Err("Logo file is too large to preview (max 5MB)".to_string());
+    }
+
+    let mime = match path_buf
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase()
+        .as_str()
+    {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "svg" => "image/svg+xml",
+        "webp" => "image/webp",
+        _ => "application/octet-stream",
+    };
+
+    let b64 = base64::engine::general_purpose::STANDARD.encode(bytes);
+    Ok(Some(format!("data:{};base64,{}", mime, b64)))
+}
+
+#[command]
+pub async fn set_primary_color(color: String) -> Result<(), String> {
+    use crate::db::get_db_connection;
+    let trimmed = color.trim();
+    if trimmed.is_empty() {
+        // allow clearing
+        let conn = get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+        upsert_setting(&conn, "primary_color", "")?;
+        return Ok(());
+    }
+    if !is_valid_hex_color(trimmed) {
+        return Err("Primary color must be a valid hex value like #2b576d".to_string());
+    }
+    let conn = get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+    upsert_setting(&conn, "primary_color", trimmed)
+}
+
+#[command]
+pub async fn get_primary_color() -> Result<Option<String>, String> {
+    use crate::db::get_db_connection;
+    let conn = get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+    let value = get_setting(&conn, "primary_color")?;
+    Ok(value.and_then(|v| {
+        let t = v.trim().to_string();
+        if t.is_empty() { None } else { Some(t) }
+    }))
+}
+
+#[command]
+pub async fn set_receipt_header(value: String) -> Result<(), String> {
+    use crate::db::get_db_connection;
+    let conn = get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+    upsert_setting(&conn, "receipt_header", value.trim())
+}
+
+#[command]
+pub async fn get_receipt_header() -> Result<Option<String>, String> {
+    use crate::db::get_db_connection;
+    let conn = get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+    get_setting(&conn, "receipt_header")
+}
+
+#[command]
+pub async fn set_receipt_footer(value: String) -> Result<(), String> {
+    use crate::db::get_db_connection;
+    let conn = get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+    upsert_setting(&conn, "receipt_footer", value.trim())
+}
+
+#[command]
+pub async fn get_receipt_footer() -> Result<Option<String>, String> {
+    use crate::db::get_db_connection;
+    let conn = get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+    get_setting(&conn, "receipt_footer")
+}
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct SecurityQuestion {
@@ -27,7 +205,7 @@ pub async fn backup_database(backup_path: String) -> Result<String, String> {
     
     // Create timestamp for backup file
     let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
-    let backup_file_name = format!("hotel_backup_{}.db", timestamp);
+    let backup_file_name = format!("business_backup_{}.db", timestamp);
     let backup_file_path = backup_dir.join(&backup_file_name);
     
     // Copy database file
@@ -70,11 +248,21 @@ fn export_data_to_json(backup_dir: &Path, timestamp: &str) -> Result<(), String>
         .map_err(|e| format!("Failed to open database: {}", e))?;
     
     let mut export_data = HashMap::new();
+
+    let business_name: String = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'business_name'",
+            [],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| format!("Failed to read business_name: {}", e))?
+        .unwrap_or_else(|| "Business Manager".to_string());
     
     // Export all tables
     let tables = vec![
-        "guests", "rooms", "menu_items", "food_orders", 
-        "order_items", "expenses"
+        "customers", "resources", "menu_items", "sales",
+        "sale_items", "expenses"
     ];
     
     for table in tables {
@@ -92,11 +280,11 @@ fn export_data_to_json(backup_dir: &Path, timestamp: &str) -> Result<(), String>
     export_data.insert("metadata".to_string(), json!({
         "export_date": chrono::Local::now().to_rfc3339(),
         "version": "1.0",
-        "hotel_name": "Yasin Heaven Star Hotel"
+        "business_name": business_name
     }));
     
     // Write JSON file
-    let json_file_name = format!("hotel_data_{}.json", timestamp);
+    let json_file_name = format!("business_data_{}.json", timestamp);
     let json_file_path = backup_dir.join(&json_file_name);
     
     let json_string = serde_json::to_string_pretty(&export_data)
@@ -181,7 +369,7 @@ pub async fn restore_database_from_backup(backup_file_path: String) -> Result<St
     }
     
     let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
-    let current_backup_name = format!("hotel_backup_before_restore_{}.db", timestamp);
+    let current_backup_name = format!("business_backup_before_restore_{}.db", timestamp);
     let current_backup_path = current_backup_dir.join(&current_backup_name);
     
     // Backup current database first (safety net)
@@ -263,8 +451,8 @@ fn validate_backup_database(backup_path: &Path) -> Result<(), String> {
     
     // Verify required tables exist
     let required_tables = vec![
-        "rooms", "guests", "menu_items", "food_orders", 
-        "order_items", "expenses"
+        "resources", "customers", "menu_items", "sales",
+        "sale_items", "expenses"
     ];
     
     for table in required_tables {
@@ -289,10 +477,10 @@ fn validate_backup_database(backup_path: &Path) -> Result<(), String> {
     
     // Check if essential columns exist in key tables
     let column_checks = vec![
-        ("rooms", "id, number, room_type, daily_rate, is_active"),
-        ("guests", "id, name, phone, room_id, check_in"),
+        ("resources", "id, number, room_type, daily_rate, is_active"),
+        ("customers", "id, name, phone, room_id, check_in"),
         ("menu_items", "id, name, price, is_active"),
-        ("food_orders", "id, guest_id, created_at, total_amount"),
+        ("sales", "id, guest_id, created_at, total_amount"),
     ];
     
     for (table, expected_columns) in column_checks {
@@ -337,10 +525,10 @@ fn test_database_functionality(db_path: &Path) -> Result<(), String> {
     
     // Test basic queries on essential tables
     let test_queries = vec![
-        ("SELECT COUNT(*) FROM rooms", "rooms table"),
+        ("SELECT COUNT(*) FROM resources", "resources table"),
         ("SELECT COUNT(*) FROM menu_items", "menu_items table"),
-        ("SELECT COUNT(*) FROM guests", "guests table"),
-        ("SELECT COUNT(*) FROM food_orders", "food_orders table"),
+        ("SELECT COUNT(*) FROM customers", "customers table"),
+        ("SELECT COUNT(*) FROM sales", "sales table"),
     ];
     
     for (query, description) in test_queries {
@@ -356,7 +544,7 @@ fn test_database_functionality(db_path: &Path) -> Result<(), String> {
         .map_err(|e| format!("Failed to start test transaction: {}", e))?;
     
     let insert_test = tx.execute(
-        "INSERT INTO rooms (number, room_type, daily_rate, is_occupied, is_active) VALUES ('TEST', 'Test', 0.0, 0, 1)",
+        "INSERT INTO resources (number, room_type, daily_rate, is_occupied, is_active, resource_type) VALUES ('TEST', 'Test', 0.0, 0, 1, 'ROOM')",
         []
     );
     
@@ -449,10 +637,10 @@ pub async fn reset_application_data() -> Result<String, String> {
     
     // Clear data tables in correct order (child tables first)
     let tables_to_clear = vec![
-        "order_items",    // Clear child table first
-        "food_orders",    // Then parent food orders
+        "sale_items",     // Clear child table first
+        "sales",          // Then parent sales
         "expenses",       // Independent table
-        "guests"          // Finally guests table
+        "customers"       // Finally customers table
     ];
     
     for table in tables_to_clear {
@@ -466,7 +654,7 @@ pub async fn reset_application_data() -> Result<String, String> {
     
     // Reset specific tables with default data
     let tables_to_reset = vec![
-        "rooms",
+        "resources",
         "menu_items"
     ];
     
@@ -532,7 +720,7 @@ async fn create_automatic_backup_before_reset() -> Result<String, String> {
     
     // Create timestamp for backup file
     let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
-    let backup_file_name = format!("hotel_backup_before_reset_{}.db", timestamp);
+    let backup_file_name = format!("business_backup_before_reset_{}.db", timestamp);
     let backup_file_path = backup_dir.join(&backup_file_name);
     
     // Copy database file
@@ -549,7 +737,7 @@ async fn create_automatic_backup_before_reset() -> Result<String, String> {
 
 // Seed default data after reset
 fn seed_default_data(_conn: &rusqlite::Transaction) -> Result<(), String> {
-    // No default rooms - users can add their own rooms
+    // No default resources - users can add their own resources
     
     // No default menu items - users can add their own menu items
     
@@ -577,7 +765,9 @@ pub async fn select_backup_file() -> Result<String, String> {
             if let Ok(entries) = std::fs::read_dir(&backup_dir) {
                 for entry in entries.flatten() {
                     if let Some(file_name) = entry.file_name().to_str() {
-                        if file_name.ends_with(".db") && file_name.contains("hotel_backup") {
+                        if file_name.ends_with(".db")
+                            && (file_name.contains("business_backup") || file_name.contains("hotel_backup"))
+                        {
                             all_backup_files.push(entry.path());
                         }
                     }
@@ -623,7 +813,9 @@ pub async fn browse_backup_file() -> Result<String, String> {
             if let Ok(entries) = std::fs::read_dir(&backup_dir) {
                 for entry in entries.flatten() {
                     if let Some(file_name) = entry.file_name().to_str() {
-                        if file_name.ends_with(".db") && file_name.contains("hotel_backup") {
+                        if file_name.ends_with(".db")
+                            && (file_name.contains("business_backup") || file_name.contains("hotel_backup"))
+                        {
                             available_backups.push(entry.path().to_string_lossy().to_string());
                         }
                     }
@@ -633,7 +825,7 @@ pub async fn browse_backup_file() -> Result<String, String> {
     }
     
     if available_backups.is_empty() {
-        Err("No backup files found. Please use the 'Find Latest' button to automatically find your latest backup, or manually enter the full path to your backup file.\n\nBackup files should be named like 'hotel_backup_YYYYMMDD_HHMMSS.db'".to_string())
+        Err("No backup files found. Please use the 'Find Latest' button to automatically find your latest backup, or manually enter the full path to your backup file.\n\nBackup files should be named like 'business_backup_YYYYMMDD_HHMMSS.db'".to_string())
     } else {
         // Sort by modification time and show available files
         let mut backup_info = String::from("✅ Found backup files! Please copy and paste one of these paths:\n\n");

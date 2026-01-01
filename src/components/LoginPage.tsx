@@ -57,9 +57,9 @@ export const LoginPage: React.FC = () => {
       <div className="login-background">
         <div className="login-card">
           <div className="login-header">
-            <div className="hotel-logo">
-              <img src={logoImage} alt="Yasin Heaven Star Hotel" className="logo-image" />
-              <h1>Yasin Heaven Star Hotel</h1>
+            <div className="brand-logo">
+              <img src={logoImage} alt="Business Manager" className="logo-image" />
+              <h1>Business Manager</h1>
             </div>
             <p className="login-subtitle">Admin Access Portal</p>
           </div>
@@ -140,9 +140,6 @@ export const LoginPage: React.FC = () => {
             <div className="security-note">
               <span className="security-icon">🔐</span>
               <span>Secure Admin Access</span>
-            </div>
-            <div className="default-credentials">
-              <small>Default: yasinheaven / YHSHotel@2025!</small>
             </div>
           </div>
         </div>

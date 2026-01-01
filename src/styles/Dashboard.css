@@ -1,14 +1,14 @@
 .dashboard-container {
   min-height: 100vh;
-  background: #f8f9fa;
+  background: var(--app-bg);
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
 .dashboard-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, var(--bm-primary) 0%, var(--bm-muted) 100%);
   color: white;
   padding: 0;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 10px var(--bm-primary-shadow);
 }
 
 .header-content {
@@ -93,14 +93,14 @@
 .welcome-section h2 {
   margin: 0 0 12px 0;
   font-size: 2.2rem;
-  color: #333;
+  color: var(--app-text);
   font-weight: 700;
 }
 
 .welcome-section p {
   margin: 0;
   font-size: 1.1rem;
-  color: #666;
+  color: var(--app-text-muted);
 }
 
 .dashboard-cards {
@@ -116,7 +116,7 @@
   padding: 24px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   transition: all 0.3s ease;
-  border: 1px solid #e1e5e9;
+  border: 1px solid var(--app-border);
   position: relative;
   overflow: hidden;
 }
@@ -128,7 +128,7 @@
   left: 0;
   right: 0;
   height: 4px;
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: linear-gradient(135deg, var(--bm-accent), var(--bm-accent-soft));
 }
 
 .dashboard-card:hover {
@@ -145,18 +145,18 @@
 .card-content h3 {
   margin: 0 0 8px 0;
   font-size: 1.3rem;
-  color: #333;
+  color: var(--app-text);
   font-weight: 600;
 }
 
 .card-content p {
   margin: 0 0 20px 0;
-  color: #666;
+  color: var(--app-text-muted);
   line-height: 1.5;
 }
 
 .card-button {
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: linear-gradient(135deg, var(--bm-primary), var(--bm-primary-alt));
   color: white;
   border: none;
   padding: 10px 20px;
@@ -169,7 +169,7 @@
 
 .card-button:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 4px 15px var(--bm-primary-shadow);
 }
 
 .system-status {
@@ -177,13 +177,13 @@
   border-radius: 16px;
   padding: 24px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  border: 1px solid #e1e5e9;
+  border: 1px solid var(--app-border);
 }
 
 .system-status h3 {
   margin: 0 0 20px 0;
   font-size: 1.3rem;
-  color: #333;
+  color: var(--app-text);
   font-weight: 600;
 }
 
@@ -198,9 +198,9 @@
   align-items: center;
   gap: 12px;
   padding: 12px;
-  background: #f8f9fa;
+  background: rgba(255, 255, 255, 0.65);
   border-radius: 8px;
-  border: 1px solid #e1e5e9;
+  border: 1px solid var(--app-border);
 }
 
 .status-dot {
@@ -211,28 +211,28 @@
 }
 
 .status-dot.online {
-  background: #28a745;
-  box-shadow: 0 0 8px rgba(40, 167, 69, 0.4);
+  background: var(--bm-primary);
+  box-shadow: 0 0 8px var(--bm-primary-shadow);
   animation: pulse 2s infinite;
 }
 
 .status-dot.offline {
-  background: #dc3545;
+  background: var(--bm-muted);
 }
 
 .status-dot.warning {
-  background: #ffc107;
+  background: var(--bm-accent);
 }
 
 @keyframes pulse {
   0% {
-    box-shadow: 0 0 8px rgba(40, 167, 69, 0.4);
+    box-shadow: 0 0 8px var(--bm-primary-shadow);
   }
   50% {
-    box-shadow: 0 0 16px rgba(40, 167, 69, 0.6);
+    box-shadow: 0 0 16px var(--bm-primary-shadow);
   }
   100% {
-    box-shadow: 0 0 8px rgba(40, 167, 69, 0.4);
+    box-shadow: 0 0 8px var(--bm-primary-shadow);
   }
 }
 

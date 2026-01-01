@@ -1,6 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
+import { open } from '@tauri-apps/plugin-dialog';
 import React, { useEffect, useState } from 'react';
 import { useCurrency } from '../context/CurrencyContext';
+import { useLabels } from '../context/LabelContext';
 import { useNotification } from '../context/NotificationContext';
 import '../styles/SettingsNew.css';
 
@@ -13,6 +15,7 @@ interface SecurityQuestion {
 const Settings: React.FC = () => {
   const { showSuccess, showError } = useNotification();
   const { currencyCode, locale, supportedCurrencies, setCurrencyCode, setLocale, formatMoney } = useCurrency();
+  const { current: label } = useLabels();
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [pendingLocale, setPendingLocale] = useState(locale);
   const [showResetDialog, setShowResetDialog] = useState(false);
@@ -26,9 +29,117 @@ const Settings: React.FC = () => {
   const [restoreFilePath, setRestoreFilePath] = useState('');
   const [isRestoring, setIsRestoring] = useState(false);
 
+  const [businessLogoPath, setBusinessLogoPath] = useState<string>('');
+  const [businessLogoDataUrl, setBusinessLogoDataUrl] = useState<string>('');
+  const [primaryColor, setPrimaryColorState] = useState<string>('#2b576d');
+  const [receiptHeader, setReceiptHeader] = useState<string>('');
+  const [receiptFooter, setReceiptFooter] = useState<string>('');
+  const [isSavingReceiptHeader, setIsSavingReceiptHeader] = useState(false);
+  const [isSavingReceiptFooter, setIsSavingReceiptFooter] = useState(false);
+
   useEffect(() => {
     setPendingLocale(locale);
   }, [locale]);
+
+  useEffect(() => {
+    const loadBranding = async () => {
+      try {
+        const [logoPath, logoDataUrl, savedPrimary, savedHeader, savedFooter] = await Promise.all([
+          invoke<string | null>('get_business_logo_path'),
+          invoke<string | null>('get_business_logo_data_url'),
+          invoke<string | null>('get_primary_color'),
+          invoke<string | null>('get_receipt_header'),
+          invoke<string | null>('get_receipt_footer')
+        ]);
+
+        if (logoPath) setBusinessLogoPath(logoPath);
+        if (logoDataUrl) setBusinessLogoDataUrl(logoDataUrl);
+        if (savedPrimary) {
+          const normalized = savedPrimary.startsWith('#') ? savedPrimary : `#${savedPrimary}`;
+          setPrimaryColorState(normalized);
+        }
+        setReceiptHeader(savedHeader ?? '');
+        setReceiptFooter(savedFooter ?? '');
+      } catch (error) {
+        // Branding is optional; don't block Settings if unavailable.
+        console.warn('Branding settings not available:', error);
+      }
+    };
+
+    loadBranding();
+  }, []);
+
+  const handleUploadLogo = async () => {
+    try {
+      const selected = await open({
+        multiple: false,
+        directory: false,
+        title: 'Select Business Logo',
+        filters: [
+          { name: 'Image', extensions: ['png', 'jpg', 'jpeg', 'svg', 'webp'] }
+        ]
+      });
+
+      if (!selected || Array.isArray(selected)) return;
+
+      const storedPath = await invoke<string>('store_business_logo', {
+        sourcePath: selected
+      });
+
+      setBusinessLogoPath(storedPath);
+      try {
+        const logoDataUrl = await invoke<string | null>('get_business_logo_data_url');
+        setBusinessLogoDataUrl(logoDataUrl ?? '');
+      } catch {
+        // optional
+      }
+      showSuccess('Logo Updated', 'Business logo saved successfully');
+    } catch (error) {
+      console.error('Logo upload failed:', error);
+      showError('Logo Upload Failed', `${error}`);
+    }
+  };
+
+  const saveReceiptHeader = async () => {
+    setIsSavingReceiptHeader(true);
+    try {
+      await invoke('set_receipt_header', { value: receiptHeader });
+      showSuccess('Saved', 'Receipt header saved successfully');
+    } catch (error) {
+      console.error('Failed to save receipt header:', error);
+      showError('Save Failed', `${error}`);
+    } finally {
+      setIsSavingReceiptHeader(false);
+    }
+  };
+
+  const saveReceiptFooter = async () => {
+    setIsSavingReceiptFooter(true);
+    try {
+      await invoke('set_receipt_footer', { value: receiptFooter });
+      showSuccess('Saved', 'Receipt footer saved successfully');
+    } catch (error) {
+      console.error('Failed to save receipt footer:', error);
+      showError('Save Failed', `${error}`);
+    } finally {
+      setIsSavingReceiptFooter(false);
+    }
+  };
+
+  const handlePrimaryColorChange = async (hex: string) => {
+    setPrimaryColorState(hex);
+    try {
+      await invoke('set_primary_color', { color: hex });
+      // Apply immediately for this session.
+      document.documentElement.style.setProperty('--primary-color', hex);
+      document.documentElement.style.setProperty('--bm-primary', hex);
+      document.documentElement.style.setProperty('--bm-primary-alt', hex);
+      showSuccess('Color Updated', 'Primary color saved successfully');
+    } catch (error) {
+      console.error('Failed to save primary color:', error);
+      showError('Color Save Failed', `${error}`);
+    }
+  };
 
   // Handle restore database with safety steps
   const handleRestoreDatabase = async () => {
@@ -246,6 +357,97 @@ const Settings: React.FC = () => {
       </div>
 
       <div className="settings-content">
+        {/* Branding Section */}
+        <div className="settings-section">
+          <h2>🎨 Branding</h2>
+          <p>Customize your business look and feel.</p>
+
+          <div className="backup-info">
+            <div className="info-item">
+              <span className="info-label">Business Logo</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <button
+                  className="backup-button"
+                  onClick={handleUploadLogo}
+                  type="button"
+                >
+                  Upload Logo
+                </button>
+                {businessLogoDataUrl ? (
+                  <img
+                    src={businessLogoDataUrl}
+                    alt="Logo preview"
+                    style={{ height: 48, maxWidth: 140, objectFit: 'contain' }}
+                  />
+                ) : null}
+                {businessLogoPath ? (
+                  <span className="info-value" style={{ maxWidth: 520, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {businessLogoPath}
+                  </span>
+                ) : (
+                  <span className="info-value">No logo set</span>
+                )}
+              </div>
+            </div>
+
+            <div className="info-item">
+              <span className="info-label">Primary Color</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <input
+                  type="color"
+                  value={primaryColor}
+                  onChange={(e) => handlePrimaryColorChange(e.target.value)}
+                  style={{ width: 44, height: 34, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' }}
+                  aria-label="Primary color"
+                />
+                <span className="info-value">{primaryColor.toUpperCase()}</span>
+              </div>
+            </div>
+
+            <div className="info-item">
+              <span className="info-label">Receipt Header</span>
+              <textarea
+                value={receiptHeader}
+                onChange={(e) => setReceiptHeader(e.target.value)}
+                placeholder="Shown near the top of receipts (optional)"
+                className="restore-path-input"
+                style={{ minHeight: 80, resize: 'vertical' }}
+              />
+              <div style={{ marginTop: 10 }}>
+                <button
+                  className="backup-button"
+                  onClick={saveReceiptHeader}
+                  type="button"
+                  disabled={isSavingReceiptHeader}
+                >
+                  {isSavingReceiptHeader ? 'Saving…' : 'Save Header'}
+                </button>
+              </div>
+            </div>
+
+            <div className="info-item">
+              <span className="info-label">Receipt Footer</span>
+              <textarea
+                value={receiptFooter}
+                onChange={(e) => setReceiptFooter(e.target.value)}
+                placeholder="Shown at the bottom of receipts (optional)"
+                className="restore-path-input"
+                style={{ minHeight: 80, resize: 'vertical' }}
+              />
+              <div style={{ marginTop: 10 }}>
+                <button
+                  className="backup-button"
+                  onClick={saveReceiptFooter}
+                  type="button"
+                  disabled={isSavingReceiptFooter}
+                >
+                  {isSavingReceiptFooter ? 'Saving…' : 'Save Footer'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Localization Section */}
         <div className="settings-section">
           <h2>🌍 Localization</h2>
@@ -272,7 +474,7 @@ const Settings: React.FC = () => {
                   </option>
                 ))}
               </select>
-              <p style={{ marginTop: '6px', color: '#6c757d' }}>
+              <p style={{ marginTop: '6px', color: 'var(--app-text-muted)' }}>
                 Preview: {formatMoney(1234.56)}
               </p>
             </div>
@@ -293,7 +495,7 @@ const Settings: React.FC = () => {
                 }}
                 placeholder="en-US"
               />
-              <p style={{ marginTop: '6px', color: '#6c757d' }}>
+              <p style={{ marginTop: '6px', color: 'var(--app-text-muted)' }}>
                 Tip: use values like <strong>en-US</strong>, <strong>en-GB</strong>, <strong>fr-FR</strong>, <strong>ar-SA</strong>.
               </p>
             </div>
@@ -303,15 +505,15 @@ const Settings: React.FC = () => {
         {/* Backup Section */}
         <div className="settings-section">
           <h2>📁 Data Backup</h2>
-          <p>Export your hotel data to an external location for safekeeping.</p>
+          <p>Export your data to an external location for safekeeping.</p>
           
           <div className="backup-info">
             <div className="info-item">
               <span className="info-label">Includes:</span>
               <ul>
-                <li>Guest records and check-ins</li>
-                <li>Room information and availability</li>
-                <li>Food orders and menu items</li>
+                <li>{label.client} records and activity history</li>
+                <li>{label.unit} information and availability</li>
+                <li>Sales and catalog items</li>
                 <li>Financial records and expenses</li>
                 <li>User accounts and settings</li>
               </ul>
@@ -339,7 +541,7 @@ const Settings: React.FC = () => {
         {/* Restore Section */}
         <div className="settings-section">
           <h2>📥 Restore Database</h2>
-          <p>Restore your hotel data from a previously created backup file.</p>
+          <p>Restore your data from a previously created backup file.</p>
           
           <div className="restore-info">
             <div className="info-item">
@@ -368,15 +570,15 @@ const Settings: React.FC = () => {
         <div className="settings-section danger-section">
           <h2>🗑️ Reset Application Data</h2>
           <p className="danger-text">
-            This will permanently delete ALL data including guests, rooms, orders, and settings.
+            This will permanently delete ALL data including {label.client.toLowerCase()} records, {label.unit.toLowerCase()} records, sales, and settings.
           </p>
           
           <div className="reset-warning">
             <h3>⚠️ Warning</h3>
             <p>This action cannot be undone. Make sure you have a backup before proceeding.</p>
             <ul>
-              <li>All guest records will be deleted</li>
-              <li>All room and booking data will be lost</li>
+              <li>All {label.client.toLowerCase()} records will be deleted</li>
+              <li>All {label.unit.toLowerCase()} data will be lost</li>
               <li>All financial records will be removed</li>
               <li>Application will return to initial state</li>
             </ul>
@@ -407,9 +609,9 @@ const Settings: React.FC = () => {
                   <div className="safety-warning">
                     <p><strong>⚠️ WARNING:</strong> This action will permanently delete ALL data including:</p>
                     <ul>
-                      <li>All guest records and history</li>
-                      <li>All room bookings and reservations</li>
-                      <li>All food orders and menu items</li>
+                      <li>All {label.client.toLowerCase()} records and history</li>
+                      <li>All {label.unit.toLowerCase()} records and assignments</li>
+                      <li>All sales and catalog items</li>
                       <li>All financial records and expenses</li>
                       <li>All application settings</li>
                     </ul>
@@ -543,7 +745,7 @@ const Settings: React.FC = () => {
                       <li>Downloads folder</li>
                       <li>The app's backup directory</li>
                     </ul>
-                    <p>Look for files named like: <code>hotel_backup_YYYYMMDD_HHMMSS.db</code></p>
+                    <p>Look for files named like: <code>business_backup_YYYYMMDD_HHMMSS.db</code></p>
                   </div>
 
                   <div className="restore-path-info">
@@ -554,7 +756,7 @@ const Settings: React.FC = () => {
                         type="text"
                         value={restoreFilePath}
                         onChange={(e) => setRestoreFilePath(e.target.value)}
-                        placeholder="C:\Users\YourName\Desktop\hotel_backup_20250905_143022.db"
+                        placeholder="C:\Users\YourName\Desktop\business_backup_20250905_143022.db"
                         className="restore-path-input"
                       />
                       <button 
@@ -607,11 +809,11 @@ const Settings: React.FC = () => {
 
                   <div className="final-warning">
                     <h5>⚠️ Last Warning:</h5>
-                    <p>This will permanently replace all your current hotel data including:</p>
+                    <p>This will permanently replace all your current data including:</p>
                     <ul>
-                      <li>Guest records and check-ins</li>
-                      <li>Room information</li>
-                      <li>Food orders and menu items</li>
+                      <li>{label.client} records and activity history</li>
+                      <li>{label.unit} information</li>
+                      <li>Sales and catalog items</li>
                       <li>Financial records and expenses</li>
                     </ul>
                     <p><strong>Are you absolutely sure you want to proceed?</strong></p>

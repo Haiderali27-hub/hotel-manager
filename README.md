@@ -1,51 +1,107 @@
-# 🏨 Yasin Heaven Star Hotel Management System
+# � Business Manager - Universal Business Management System
 
-A comprehensive desktop hotel management application built with **Tauri**, **React**, **TypeScript**, and **Rust**. This application provides a complete solution for managing hotel operations including guest management, room booking, food ordering, financial tracking, and reporting.
+A comprehensive desktop business management application built with **Tauri**, **React**, **TypeScript**, and **Rust**. This white-label application provides a complete solution for managing hotel, restaurant, retail, or any service-based business operations including customer management, sales tracking, inventory control, financial reporting, and multi-user access control.
 
-## 🌟 Features
+## 🌟 Key Features
 
-### 🔐 Authentication & Security
-- **Secure Admin Access**: Offline authentication system with username/password
-- **Password Recovery**: Security question-based password reset
-- **Session Management**: Automatic logout and session persistence
+### 🔐 Authentication & Multi-User Access (Phase 1 & 4)
+- **Offline Authentication**: Secure username/password system with no internet required
+- **Role-Based Access Control (RBAC)**: Three-tier permission system
+  - **Admin**: Full system access, settings, user management
+  - **Manager**: Reports, inventory, sales management (no critical settings)
+  - **Staff**: Point-of-sale operations only
+- **Password Recovery**: Security question-based reset
+- **Session Management**: Automatic session tracking and cleanup
+- **Setup Wizard**: First-run configuration with admin account creation
 
-### 👥 Guest Management
-- **Guest Registration**: Add new guests with room assignment
-- **Active Guest Tracking**: View all currently checked-in guests
-- **Guest History**: Complete guest records and stay history
-- **Flexible Check-in/Check-out**: Easy booking management
+### 🎨 White-Label Customization (Phase 3)
+- **Custom Branding**: Upload your business logo
+- **Color Themes**: Set custom primary color for your brand
+- **Receipt Customization**: Add custom header and footer text to all receipts
+- **Business Naming**: Fully customizable business name (no hard-coded "hotel" references)
+- **Multi-Mode Support**: Hotel, Restaurant, or Retail mode
 
-### 🏠 Room Management
-- **Dynamic Room Creation**: Add custom room types and numbers
-- **Room Status Tracking**: Real-time occupancy status
-- **Flexible Pricing**: Set custom daily rates per room
-- **Room Type Categories**: Standard, Deluxe, Suite, and custom types
+### 👥 Customer Management (Phase 2)
+- **Universal Customer Records**: Supports guests, walk-ins, and regular customers
+- **Flexible Registration**: Optional room/resource assignment
+- **Customer History**: Complete transaction records
+- **Active Customer Tracking**: Real-time status monitoring
+- **Generic Labels**: Adapts terminology based on business mode
 
-### 🍽️ Food & Restaurant Management
-- **Menu Management**: Add/edit/delete menu items with categories
-- **Food Ordering**: Create orders for guests or walk-in customers
-- **Order Tracking**: Monitor pending and paid orders
-- **Category Organization**: Breakfast, Main Course, Appetizers, Desserts, Beverages
+### 🏠 Resource/Room Management
+- **Dynamic Resource Creation**: Rooms, tables, workstations, or any bookable resource
+- **Status Tracking**: Real-time occupancy/availability
+- **Flexible Pricing**: Custom daily/hourly rates
+- **Type Categories**: Customizable resource types
 
-### 💰 Financial Management
-- **Expense Tracking**: Record hotel operational expenses
-- **Revenue Monitoring**: Track income from rooms and food
+### 🍽️ Menu/Catalog Management with Inventory (Phase 4)
+- **Product/Service Catalog**: Manage sellable items with categories
+- **True Inventory Tracking**: 
+  - Track physical products with stock quantities
+  - Mark services as non-tracked items
+  - Automatic stock decrement on sales
+  - Low stock alerts with customizable thresholds
+- **Category Organization**: Customizable categories for your business
+- **Price Management**: Set custom prices per item
+
+### 💰 Sales & Point of Sale
+- **Quick Sales Entry**: Fast order/sale creation
+- **Order Tracking**: Monitor pending and completed sales
+- **Payment Status**: Mark sales as paid/unpaid
+- **Customer Association**: Link sales to specific customers or walk-ins
+- **Stock Validation**: Prevents overselling tracked inventory
+
+### 💼 End-of-Day Management (Phase 4)
+- **Shift Management**: Open/close shifts with cash reconciliation
+- **Z-Report Generation**: Complete end-of-day reports with:
+  - Starting cash amount
+  - Total sales and expenses
+  - Expected vs actual cash
+  - Variance tracking and notes
+- **Shift History**: Review past shifts and performance
+- **Multi-Cashier Support**: Track who opened/closed each shift
+
+### 📊 Financial Reporting
+- **Expense Tracking**: Record operational expenses by category
+- **Revenue Monitoring**: Track income from all sources
+- **Profit/Loss Calculation**: Real-time P&L analysis
 - **Monthly Reports**: Comprehensive financial summaries
-- **Bill Generation**: Automatic guest bill calculation
-
-### 📊 Reporting & Analytics
-- **Dashboard Overview**: Real-time statistics and KPIs
-- **Monthly Reports**: Detailed financial and operational reports
-- **Guest History**: Complete stay and order records
-- **Export Options**: Generate reports for accounting
+- **Date Range Reports**: Custom period analysis
+- **Low Stock Alerts**: Dashboard widget for inventory monitoring
 
 ### ⚙️ System Features
-- **Multi-Currency Support**: Pakistani Rupees (Rs) with localized formatting
+- **Multi-Currency Support**: Customizable currency code and formatting
 - **Dark/Light Themes**: User preference theme switching
 - **Responsive Design**: Works on various screen sizes
 - **Offline Operation**: No internet connection required
-- **Data Backup**: Automatic database backups
-- **Quick Navigation**: Logo-based navigation menu
+- **Data Backup & Export**: CSV exports and database backups
+- **Protected Routes**: UI elements hidden based on user role
+- **Quick Navigation**: Intuitive menu system
+
+## 🎯 Phase Progression
+
+### ✅ Phase 1: Offline-First Foundation
+- Secure offline authentication
+- Session management
+- Setup wizard for initial configuration
+- Password recovery system
+
+### ✅ Phase 2: Generic Business Model
+- Removed hard-coded "hotel" terminology
+- Generic resource/customer models
+- Backward-compatible data structure
+- Multi-business-mode support
+
+### ✅ Phase 3: White-Labeling
+- Custom logo upload and display
+- Brand color customization
+- Receipt header/footer customization
+- Full branding control
+
+### ✅ Phase 4: Essential Business Features
+- **RBAC**: Three-tier role-based access control
+- **Inventory**: True stock tracking with alerts
+- **Shifts**: End-of-day closing and Z-reports
 
 ## 🛠️ Technology Stack
 

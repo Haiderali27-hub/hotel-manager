@@ -28,7 +28,7 @@ pub fn add_room(number: String, room_type: String, daily_rate: f64) -> Result<St
     
     println!("🐛 DEBUG add_room - Executing INSERT query...");
     let result = conn.execute(
-        "INSERT INTO rooms (number, room_type, daily_rate, is_occupied, is_active) VALUES (?1, ?2, ?3, 0, 1)",
+        "INSERT INTO resources (number, room_type, daily_rate, is_occupied, is_active, resource_type) VALUES (?1, ?2, ?3, 0, 1, 'ROOM')",
         params![number.trim(), room_type.trim(), daily_rate],
     );
     
@@ -53,9 +53,9 @@ pub fn get_rooms() -> Result<Vec<Room>, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     let mut stmt = conn.prepare(
-        "SELECT r.id, r.number, r.room_type, r.daily_rate, r.is_occupied, r.guest_id, g.name as guest_name 
-         FROM rooms r 
-         LEFT JOIN guests g ON r.guest_id = g.id AND g.status = 'active'
+           "SELECT r.id, r.number, r.room_type, r.daily_rate, r.is_occupied, r.guest_id, c.name as guest_name 
+            FROM resources r 
+            LEFT JOIN customers c ON r.guest_id = c.id AND c.status = 'active'
          WHERE r.is_active = 1 
          ORDER BY r.number"
     ).map_err(|e| e.to_string())?;
@@ -85,9 +85,9 @@ pub fn get_available_rooms_for_guest(guest_id: Option<i64>) -> Result<Vec<Room>,
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     let mut query = String::from(
-        "SELECT r.id, r.number, r.room_type, r.daily_rate, r.is_occupied, r.guest_id, g.name as guest_name 
-         FROM rooms r 
-         LEFT JOIN guests g ON r.guest_id = g.id AND g.status = 'active'
+           "SELECT r.id, r.number, r.room_type, r.daily_rate, r.is_occupied, r.guest_id, c.name as guest_name 
+            FROM resources r 
+            LEFT JOIN customers c ON r.guest_id = c.id AND c.status = 'active'
          WHERE r.is_active = 1 AND (r.is_occupied = 0"
     );
     
@@ -148,7 +148,7 @@ pub fn update_room(room_id: i64, number: Option<String>, daily_rate: Option<f64>
         return Err("No fields to update".to_string());
     }
     
-    let query = format!("UPDATE rooms SET {} WHERE id = ?", update_parts.join(", "));
+    let query = format!("UPDATE resources SET {} WHERE id = ?", update_parts.join(", "));
     params.push(Box::new(room_id));
     
     let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
@@ -176,7 +176,7 @@ pub fn delete_room(id: i64) -> Result<String, String> {
     // Check if room is in use by active guests
     println!("🐛 DEBUG delete_room - Checking for active guests...");
     let guest_count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM guests WHERE room_id = ?1 AND status = 'active'",
+        "SELECT COUNT(*) FROM customers WHERE room_id = ?1 AND status = 'active'",
         params![id],
         |row| row.get(0)
     ).map_err(|e| {
@@ -193,7 +193,7 @@ pub fn delete_room(id: i64) -> Result<String, String> {
     // Hard delete the room so the room number can be reused
     println!("🐛 DEBUG delete_room - Executing DELETE query...");
     let affected = conn.execute(
-        "DELETE FROM rooms WHERE id = ?1",
+        "DELETE FROM resources WHERE id = ?1",
         params![id],
     ).map_err(|e| {
         println!("❌ DEBUG delete_room - SQL Error: {}", e);
@@ -216,12 +216,40 @@ pub fn cleanup_soft_deleted_rooms() -> Result<String, String> {
     
     // Remove any soft-deleted rooms that might be blocking UNIQUE constraints
     let affected = conn.execute(
-        "DELETE FROM rooms WHERE is_active = 0",
+        "DELETE FROM resources WHERE is_active = 0",
         [],
     ).map_err(|e| e.to_string())?;
     
     println!("🧹 Cleaned up {} soft-deleted rooms", affected);
     Ok(format!("Cleaned up {} soft-deleted rooms", affected))
+}
+
+// ===== RESOURCE (ALIAS) COMMANDS =====
+// These provide business-generic command names while keeping legacy "room" commands.
+
+#[command]
+pub fn add_resource(number: String, resource_type: String, daily_rate: f64) -> Result<String, String> {
+    add_room(number, resource_type, daily_rate)
+}
+
+#[command]
+pub fn get_resources() -> Result<Vec<Room>, String> {
+    get_rooms()
+}
+
+#[command]
+pub fn get_available_resources_for_customer(customer_id: Option<i64>) -> Result<Vec<Room>, String> {
+    get_available_rooms_for_guest(customer_id)
+}
+
+#[command]
+pub fn update_resource(resource_id: i64, number: Option<String>, daily_rate: Option<f64>) -> Result<String, String> {
+    update_room(resource_id, number, daily_rate)
+}
+
+#[command]
+pub fn delete_resource(id: i64) -> Result<String, String> {
+    delete_room(id)
 }
 
 // ===== GUEST COMMANDS =====
@@ -253,7 +281,7 @@ pub fn add_guest(name: String, phone: Option<String>, room_id: Option<i64>, chec
     if let Some(room_id_val) = room_id {
         // Validate room exists and is active
         let room_exists: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM rooms WHERE id = ?1 AND is_active = 1",
+            "SELECT COUNT(*) FROM resources WHERE id = ?1 AND is_active = 1",
             params![room_id_val],
             |row| row.get(0)
         ).map_err(|e| e.to_string())?;
@@ -264,7 +292,7 @@ pub fn add_guest(name: String, phone: Option<String>, room_id: Option<i64>, chec
         
         // Check if room is already occupied
         let room_occupied: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM rooms WHERE id = ?1 AND is_occupied = 1",
+            "SELECT COUNT(*) FROM resources WHERE id = ?1 AND is_occupied = 1",
             params![room_id_val],
             |row| row.get(0)
         ).map_err(|e| e.to_string())?;
@@ -281,7 +309,7 @@ pub fn add_guest(name: String, phone: Option<String>, room_id: Option<i64>, chec
     
     // Insert the guest
     tx.execute(
-        "INSERT INTO guests (name, phone, room_id, check_in, check_out, daily_rate, status, created_at, updated_at) 
+        "INSERT INTO customers (name, phone, room_id, check_in, check_out, daily_rate, status, created_at, updated_at) 
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'active', ?7, ?8)",
         params![name.trim(), phone, room_id, check_in, check_out, daily_rate, now, now],
     ).map_err(|e| e.to_string())?;
@@ -291,7 +319,7 @@ pub fn add_guest(name: String, phone: Option<String>, room_id: Option<i64>, chec
     // Update room status to occupied only if room_id is provided
     if let Some(room_id_val) = room_id {
         tx.execute(
-            "UPDATE rooms SET is_occupied = 1, guest_id = ?1 WHERE id = ?2",
+            "UPDATE resources SET is_occupied = 1, guest_id = ?1 WHERE id = ?2",
             params![guest_id, room_id_val],
         ).map_err(|e| e.to_string())?;
     }
@@ -302,6 +330,68 @@ pub fn add_guest(name: String, phone: Option<String>, room_id: Option<i64>, chec
     Ok(guest_id)
 }
 
+// ===== CUSTOMER (ALIAS) COMMANDS =====
+// Generic naming wrappers for legacy "guest" commands.
+
+#[command]
+pub fn add_customer(name: String, phone: Option<String>, room_id: Option<i64>, check_in: String, check_out: Option<String>, daily_rate: f64) -> Result<i64, String> {
+    add_guest(name, phone, room_id, check_in, check_out, daily_rate)
+}
+
+#[command]
+pub fn get_active_customers() -> Result<Vec<ActiveGuestRow>, String> {
+    get_active_guests()
+}
+
+#[command]
+pub fn get_all_customers() -> Result<Vec<Guest>, String> {
+    get_all_guests()
+}
+
+#[command]
+pub fn get_customer(customer_id: i64) -> Result<ActiveGuestRow, String> {
+    get_guest(customer_id)
+}
+
+#[command]
+pub fn checkout_customer(customer_id: i64, check_out_date: String) -> Result<f64, String> {
+    checkout_guest_with_discount(
+        customer_id,
+        check_out_date,
+        "flat".to_string(),
+        0.0,
+        "".to_string(),
+    )
+}
+
+#[command]
+pub fn checkout_customer_with_discount(
+    customer_id: i64,
+    check_out_date: String,
+    discount_amount: f64,
+) -> Result<f64, String> {
+    checkout_guest_with_discount(
+        customer_id,
+        check_out_date,
+        "flat".to_string(),
+        discount_amount,
+        "".to_string(),
+    )
+}
+
+#[command]
+pub fn update_customer(
+    guest_id: i64,
+    name: Option<String>,
+    phone: Option<String>,
+    room_id: Option<i64>,
+    check_in: Option<String>,
+    check_out: Option<String>,
+    daily_rate: Option<f64>,
+ ) -> Result<bool, String> {
+    update_guest(guest_id, name, phone, room_id, check_in, check_out, daily_rate)
+}
+
 #[command]
 pub fn get_active_guests() -> Result<Vec<ActiveGuestRow>, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
@@ -309,8 +399,8 @@ pub fn get_active_guests() -> Result<Vec<ActiveGuestRow>, String> {
     let mut stmt = conn.prepare(
         "SELECT g.id, g.name, r.number, g.check_in, g.check_out, g.daily_rate, 
                 CASE WHEN g.room_id IS NULL THEN 1 ELSE 0 END as is_walkin
-         FROM guests g 
-         LEFT JOIN rooms r ON g.room_id = r.id 
+         FROM customers g 
+         LEFT JOIN resources r ON g.room_id = r.id 
          WHERE g.status = 'active'
          ORDER BY 
             CASE WHEN g.room_id IS NULL THEN 1 ELSE 0 END,  -- Walk-ins first
@@ -343,7 +433,7 @@ pub fn get_all_guests() -> Result<Vec<Guest>, String> {
     
     let mut stmt = conn.prepare(
         "SELECT id, name, phone, room_id, check_in, check_out, daily_rate, status, created_at, updated_at
-         FROM guests 
+            FROM customers 
          ORDER BY created_at DESC"
     ).map_err(|e| e.to_string())?;
     
@@ -377,8 +467,8 @@ pub fn get_guest(guest_id: i64) -> Result<ActiveGuestRow, String> {
     let result = conn.query_row(
         "SELECT g.id, g.name, r.number, g.check_in, g.check_out, g.daily_rate,
                 CASE WHEN g.room_id IS NULL THEN 1 ELSE 0 END as is_walkin
-         FROM guests g 
-         LEFT JOIN rooms r ON g.room_id = r.id 
+         FROM customers g 
+         LEFT JOIN resources r ON g.room_id = r.id 
          WHERE g.id = ?1",
         params![guest_id],
         |row| {
@@ -409,7 +499,7 @@ pub fn checkout_guest(guest_id: i64, discount_flat: Option<f64>, discount_pct: O
     
     // Get guest details
     let (check_in, daily_rate): (String, f64) = conn.query_row(
-        "SELECT check_in, daily_rate FROM guests WHERE id = ?1 AND status = 'active'",
+        "SELECT check_in, daily_rate FROM customers WHERE id = ?1 AND status = 'active'",
         params![guest_id],
         |row| Ok((row.get(0)?, row.get(1)?))
     ).map_err(|e| {
@@ -431,7 +521,7 @@ pub fn checkout_guest(guest_id: i64, discount_flat: Option<f64>, discount_pct: O
     
     // Calculate unpaid food total
     let unpaid_food: f64 = conn.query_row(
-        "SELECT COALESCE(SUM(total_amount), 0) FROM food_orders WHERE guest_id = ?1 AND paid = 0",
+        "SELECT COALESCE(SUM(total_amount), 0) FROM sales WHERE guest_id = ?1 AND paid = 0",
         params![guest_id],
         |row| row.get(0)
     ).map_err(|e| e.to_string())?;
@@ -463,23 +553,26 @@ pub fn checkout_guest(guest_id: i64, discount_flat: Option<f64>, discount_pct: O
     let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
     
     // Get the room_id before updating guest status
-    let room_id: i64 = tx.query_row(
-        "SELECT room_id FROM guests WHERE id = ?1",
+    let room_id: Option<i64> = tx.query_row(
+        "SELECT room_id FROM customers WHERE id = ?1",
         params![guest_id],
         |row| row.get(0)
     ).map_err(|e| e.to_string())?;
     
     // Update guest status
     tx.execute(
-        "UPDATE guests SET status = 'checked_out', check_out = ?1, updated_at = ?2 WHERE id = ?3",
+        "UPDATE customers SET status = 'checked_out', check_out = ?1, updated_at = ?2 WHERE id = ?3",
         params![today_str, now, guest_id],
     ).map_err(|e| e.to_string())?;
     
     // Update room status to not occupied
-    tx.execute(
-        "UPDATE rooms SET is_occupied = 0 WHERE id = ?1",
-        params![room_id],
-    ).map_err(|e| e.to_string())?;
+    if let Some(room_id) = room_id {
+        tx.execute(
+            "UPDATE resources SET is_occupied = 0, guest_id = NULL WHERE id = ?1",
+            params![room_id],
+        )
+        .map_err(|e| e.to_string())?;
+    }
     
     // Commit the transaction
     tx.commit().map_err(|e| e.to_string())?;
@@ -498,7 +591,7 @@ pub fn update_guest(guest_id: i64, name: Option<String>, phone: Option<String>, 
     
     // Check if guest exists
     let guest_exists: bool = conn.query_row(
-        "SELECT 1 FROM guests WHERE id = ?1 AND status = 'active'",
+        "SELECT 1 FROM customers WHERE id = ?1 AND status = 'active'",
         params![guest_id],
         |_| Ok(true)
     ).unwrap_or(false);
@@ -511,7 +604,7 @@ pub fn update_guest(guest_id: i64, name: Option<String>, phone: Option<String>, 
     if let Some(new_room_id) = room_id {
         // Check if the new room is available (not occupied by another guest)
         let room_occupied: bool = conn.query_row(
-            "SELECT 1 FROM guests WHERE room_id = ?1 AND status = 'active' AND id != ?2",
+            "SELECT 1 FROM customers WHERE room_id = ?1 AND status = 'active' AND id != ?2",
             params![new_room_id, guest_id],
             |_| Ok(true)
         ).unwrap_or(false);
@@ -522,7 +615,7 @@ pub fn update_guest(guest_id: i64, name: Option<String>, phone: Option<String>, 
         
         // Check if room exists
         let room_exists: bool = conn.query_row(
-            "SELECT 1 FROM rooms WHERE id = ?1",
+            "SELECT 1 FROM resources WHERE id = ?1",
             params![new_room_id],
             |_| Ok(true)
         ).unwrap_or(false);
@@ -592,7 +685,7 @@ pub fn update_guest(guest_id: i64, name: Option<String>, phone: Option<String>, 
     params_vec.push(Box::new(guest_id));
     
     let query = format!(
-        "UPDATE guests SET {} WHERE id = ?",
+        "UPDATE customers SET {} WHERE id = ?",
         update_fields.join(", ")
     );
     
@@ -738,7 +831,7 @@ pub fn delete_menu_item(item_id: i64) -> Result<String, String> {
     // Check if menu item is used in any orders
     println!("🐛 DEBUG delete_menu_item - Checking for existing orders...");
     let order_count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM order_items WHERE menu_item_id = ?1",
+        "SELECT COUNT(*) FROM sale_items WHERE menu_item_id = ?1",
         params![item_id],
         |row| row.get(0)
     ).map_err(|e| {
@@ -807,14 +900,14 @@ pub fn dashboard_stats() -> Result<DashboardStats, String> {
     
     // Total guests this month (checked in this month)
     let total_guests_this_month: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM guests WHERE check_in >= ?1 AND check_in <= ?2",
+        "SELECT COUNT(*) FROM customers WHERE check_in >= ?1 AND check_in <= ?2",
         params![current_month_start, current_month_end],
         |row| row.get(0)
     ).map_err(|e| e.to_string())?;
     
     // Active guests
     let active_guests: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM guests WHERE status = 'active'",
+        "SELECT COUNT(*) FROM customers WHERE status = 'active'",
         [],
         |row| row.get(0)
     ).map_err(|e| e.to_string())?;
@@ -822,7 +915,7 @@ pub fn dashboard_stats() -> Result<DashboardStats, String> {
     // Total income this month
     let room_income: f64 = conn.query_row(
         "SELECT COALESCE(SUM((julianday(COALESCE(check_out, date('now'))) - julianday(check_in) + 1) * daily_rate), 0)
-         FROM guests 
+         FROM customers 
          WHERE status = 'checked_out' 
          AND check_out >= ?1 AND check_out <= ?2",
         params![current_month_start, current_month_end],
@@ -831,7 +924,7 @@ pub fn dashboard_stats() -> Result<DashboardStats, String> {
     
     let food_income: f64 = conn.query_row(
         "SELECT COALESCE(SUM(total_amount), 0) 
-         FROM food_orders 
+         FROM sales 
          WHERE paid = 1 
          AND date(paid_at) >= ?1 AND date(paid_at) <= ?2",
         params![current_month_start, current_month_end],
@@ -849,7 +942,7 @@ pub fn dashboard_stats() -> Result<DashboardStats, String> {
     
     // Total food orders this month
     let total_food_orders: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM food_orders WHERE date(created_at) >= ?1 AND date(created_at) <= ?2",
+        "SELECT COUNT(*) FROM sales WHERE date(created_at) >= ?1 AND date(created_at) <= ?2",
         params![current_month_start, current_month_end],
         |row| row.get(0)
     ).map_err(|e| e.to_string())?;
@@ -862,6 +955,31 @@ pub fn dashboard_stats() -> Result<DashboardStats, String> {
         total_food_orders,
         active_guests,
     })
+}
+
+// Get low stock items for dashboard alerts
+#[tauri::command]
+pub fn get_low_stock_items() -> Result<Vec<LowStockItem>, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    let mut stmt = conn.prepare(
+        "SELECT id, name, stock_quantity, low_stock_limit 
+         FROM menu_items 
+         WHERE track_stock = 1 
+         AND stock_quantity <= low_stock_limit
+         ORDER BY stock_quantity ASC"
+    ).map_err(|e| e.to_string())?;
+    
+    let items = stmt.query_map([], |row| {
+        Ok(LowStockItem {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            stock_quantity: row.get(2)?,
+            low_stock_limit: row.get(3)?,
+        })
+    }).map_err(|e| e.to_string())?;
+    
+    items.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }
 
 // ===== FOOD ORDER COMMANDS =====
@@ -880,6 +998,26 @@ pub fn add_food_order(guest_id: Option<i64>, customer_type: String, customer_nam
         return Err("Order must have at least one item".to_string());
     }
     
+    // Check stock availability for tracked items BEFORE starting transaction
+    for item in &items {
+        if let Some(menu_item_id) = item.menu_item_id {
+            let stock_info: Result<(i32, i32), _> = conn.query_row(
+                "SELECT stock_quantity, track_stock FROM menu_items WHERE id = ?1",
+                params![menu_item_id],
+                |row| Ok((row.get(0)?, row.get(1)?))
+            );
+            
+            if let Ok((current_stock, track_stock)) = stock_info {
+                if track_stock == 1 && current_stock < item.quantity {
+                    return Err(format!(
+                        "Insufficient stock for '{}'. Available: {}, Requested: {}",
+                        item.item_name, current_stock, item.quantity
+                    ));
+                }
+            }
+        }
+    }
+    
     // Calculate total
     let total_amount: f64 = items.iter().map(|item| item.unit_price * item.quantity as f64).sum();
     println!("🐛 DEBUG add_food_order - Total amount: {:?}", total_amount);
@@ -887,21 +1025,31 @@ pub fn add_food_order(guest_id: Option<i64>, customer_type: String, customer_nam
     // Insert order
     println!("🐛 DEBUG add_food_order - Inserting food order...");
     let _rows_affected = conn.execute(
-        "INSERT INTO food_orders (guest_id, customer_type, customer_name, created_at, paid, total_amount) 
+        "INSERT INTO sales (guest_id, customer_type, customer_name, created_at, paid, total_amount) 
          VALUES (?1, ?2, ?3, ?4, 0, ?5)",
         params![guest_id, customer_type, customer_name, get_current_timestamp(), total_amount],
     ).map_err(|e| e.to_string())?;
     
     let order_id = conn.last_insert_rowid();
     
-    // Insert order items
+    // Insert order items and decrement stock
     for item in items {
         conn.execute(
-            "INSERT INTO order_items (order_id, menu_item_id, item_name, unit_price, quantity, line_total)
+            "INSERT INTO sale_items (order_id, menu_item_id, item_name, unit_price, quantity, line_total)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![order_id, item.menu_item_id, item.item_name, item.unit_price, item.quantity, 
                    item.unit_price * item.quantity as f64],
         ).map_err(|e| e.to_string())?;
+        
+        // Decrement stock for tracked items
+        if let Some(menu_item_id) = item.menu_item_id {
+            conn.execute(
+                "UPDATE menu_items 
+                 SET stock_quantity = stock_quantity - ?1 
+                 WHERE id = ?2 AND track_stock = 1",
+                params![item.quantity, menu_item_id],
+            ).map_err(|e| format!("Failed to decrement stock: {}", e))?;
+        }
     }
     
     Ok(order_id)
@@ -914,8 +1062,8 @@ pub fn get_food_orders_by_guest(guest_id: i64) -> Result<Vec<FoodOrderSummary>, 
     let mut stmt = conn.prepare(
         "SELECT fo.id, fo.created_at, fo.paid, fo.paid_at, fo.total_amount,
                 GROUP_CONCAT(oi.item_name || ' x' || oi.quantity) as items
-         FROM food_orders fo
-         LEFT JOIN order_items oi ON fo.id = oi.order_id
+            FROM sales fo
+            LEFT JOIN sale_items oi ON fo.id = oi.order_id
          WHERE fo.guest_id = ?1
          GROUP BY fo.id, fo.created_at, fo.paid, fo.paid_at, fo.total_amount
          ORDER BY fo.created_at DESC"
@@ -946,9 +1094,9 @@ pub fn get_food_orders() -> Result<Vec<FoodOrderSummary>, String> {
                 GROUP_CONCAT(oi.item_name || ' x' || oi.quantity) as items,
                 fo.guest_id,
                 COALESCE(g.name, 'Walk-in') as guest_name
-         FROM food_orders fo
-         LEFT JOIN order_items oi ON fo.id = oi.order_id
-         LEFT JOIN guests g ON fo.guest_id = g.id
+            FROM sales fo
+            LEFT JOIN sale_items oi ON fo.id = oi.order_id
+            LEFT JOIN customers g ON fo.guest_id = g.id
          GROUP BY fo.id, fo.created_at, fo.paid, fo.paid_at, fo.total_amount, fo.guest_id, g.name
          ORDER BY fo.created_at DESC"
     ).map_err(|e| e.to_string())?;
@@ -974,7 +1122,7 @@ pub fn mark_order_paid(order_id: i64) -> Result<String, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     let rows_affected = conn.execute(
-        "UPDATE food_orders SET paid = 1, paid_at = ?1 WHERE id = ?2",
+        "UPDATE sales SET paid = 1, paid_at = ?1 WHERE id = ?2",
         params![get_current_timestamp(), order_id],
     ).map_err(|e| e.to_string())?;
     
@@ -1149,7 +1297,7 @@ pub fn toggle_food_order_payment(order_id: i64) -> Result<String, String> {
     
     // Get current payment status
     let current_paid: i64 = conn.query_row(
-        "SELECT paid FROM food_orders WHERE id = ?1",
+        "SELECT paid FROM sales WHERE id = ?1",
         params![order_id],
         |row| row.get(0)
     ).map_err(|e| {
@@ -1169,7 +1317,7 @@ pub fn toggle_food_order_payment(order_id: i64) -> Result<String, String> {
     };
     
     conn.execute(
-        "UPDATE food_orders SET paid = ?1, paid_at = ?2 WHERE id = ?3",
+        "UPDATE sales SET paid = ?1, paid_at = ?2 WHERE id = ?3",
         params![new_paid, paid_at, order_id],
     ).map_err(|e| e.to_string())?;
     
@@ -1186,7 +1334,7 @@ pub fn delete_food_order(order_id: i64) -> Result<String, String> {
     
     // Delete order items first (foreign key constraint)
     conn.execute(
-        "DELETE FROM order_items WHERE order_id = ?1",
+        "DELETE FROM sale_items WHERE order_id = ?1",
         params![order_id],
     ).map_err(|e| {
         let _ = conn.execute("ROLLBACK", []);
@@ -1195,7 +1343,7 @@ pub fn delete_food_order(order_id: i64) -> Result<String, String> {
     
     // Delete the food order
     let rows_affected = conn.execute(
-        "DELETE FROM food_orders WHERE id = ?1",
+        "DELETE FROM sales WHERE id = ?1",
         params![order_id],
     ).map_err(|e| {
         let _ = conn.execute("ROLLBACK", []);
@@ -1220,7 +1368,7 @@ pub fn get_order_details(order_id: i64) -> Result<FoodOrderDetails, String> {
     // Get order details
     let order = conn.query_row(
         "SELECT id, guest_id, customer_type, customer_name, created_at, paid, paid_at, total_amount
-         FROM food_orders WHERE id = ?1",
+         FROM sales WHERE id = ?1",
         params![order_id],
         |row| Ok(FoodOrderInfo {
             id: row.get(0)?,
@@ -1237,7 +1385,7 @@ pub fn get_order_details(order_id: i64) -> Result<FoodOrderDetails, String> {
     // Get order items
     let mut stmt = conn.prepare(
         "SELECT id, menu_item_id, item_name, quantity, unit_price, line_total
-         FROM order_items WHERE order_id = ?1"
+            FROM sale_items WHERE order_id = ?1"
     ).map_err(|e| e.to_string())?;
     
     let items = stmt.query_map([order_id], |row| {
@@ -1259,6 +1407,49 @@ pub fn get_order_details(order_id: i64) -> Result<FoodOrderDetails, String> {
     })
 }
 
+// ===== SALES (ALIAS) COMMANDS =====
+// Generic naming wrappers for legacy "food order" commands.
+
+#[command]
+pub fn add_sale(
+    guest_id: Option<i64>,
+    customer_type: String,
+    customer_name: Option<String>,
+    items: Vec<OrderItemInput>,
+) -> Result<i64, String> {
+    add_food_order(guest_id, customer_type, customer_name, items)
+}
+
+#[command]
+pub fn get_sales() -> Result<Vec<FoodOrderSummary>, String> {
+    get_food_orders()
+}
+
+#[command]
+pub fn get_sales_by_customer(customer_id: i64) -> Result<Vec<FoodOrderSummary>, String> {
+    get_food_orders_by_guest(customer_id)
+}
+
+#[command]
+pub fn mark_sale_paid(order_id: i64) -> Result<String, String> {
+    mark_order_paid(order_id)
+}
+
+#[command]
+pub fn toggle_sale_payment(order_id: i64) -> Result<String, String> {
+    toggle_food_order_payment(order_id)
+}
+
+#[command]
+pub fn delete_sale(order_id: i64) -> Result<String, String> {
+    delete_food_order(order_id)
+}
+
+#[command]
+pub fn get_sale_details(order_id: i64) -> Result<FoodOrderDetails, String> {
+    get_order_details(order_id)
+}
+
 // Enhanced checkout function with discount support
 #[command]
 pub fn checkout_guest_with_discount(
@@ -1272,7 +1463,7 @@ pub fn checkout_guest_with_discount(
     
     // Get guest details
     let (check_in, daily_rate, room_id): (String, f64, Option<i64>) = conn.query_row(
-        "SELECT check_in, daily_rate, room_id FROM guests WHERE id = ?1 AND status = 'active'",
+        "SELECT check_in, daily_rate, room_id FROM customers WHERE id = ?1 AND status = 'active'",
         params![guest_id],
         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))
     ).map_err(|e| {
@@ -1295,7 +1486,7 @@ pub fn checkout_guest_with_discount(
     
     // Calculate unpaid food total
     let unpaid_food: f64 = conn.query_row(
-        "SELECT COALESCE(SUM(total_amount), 0) FROM food_orders WHERE guest_id = ?1 AND paid = 0",
+        "SELECT COALESCE(SUM(total_amount), 0) FROM sales WHERE guest_id = ?1 AND paid = 0",
         params![guest_id],
         |row| row.get(0)
     ).map_err(|e| e.to_string())?;
@@ -1330,14 +1521,14 @@ pub fn checkout_guest_with_discount(
     
     // Update guest checkout status
     tx.execute(
-        "UPDATE guests SET status = 'checked_out', check_out = ?1, updated_at = ?2 WHERE id = ?3",
+        "UPDATE customers SET status = 'checked_out', check_out = ?1, updated_at = ?2 WHERE id = ?3",
         params![check_out_date, now, guest_id],
     ).map_err(|e| e.to_string())?;
     
     // Free up the room if guest had one
     if let Some(room_id) = room_id {
         tx.execute(
-            "UPDATE rooms SET is_occupied = 0, guest_id = NULL WHERE id = ?1",
+            "UPDATE resources SET is_occupied = 0, guest_id = NULL WHERE id = ?1",
             params![room_id],
         ).map_err(|e| e.to_string())?;
     }
@@ -1542,4 +1733,251 @@ pub fn get_locale() -> Result<String, String> {
 
     let result: Result<String, _> = stmt.query_row([], |row| row.get(0));
     Ok(result.unwrap_or_else(|_| "en-US".to_string()))
+}
+
+// ===== BUSINESS PROFILE SETTINGS =====
+
+#[command]
+pub fn set_business_name(name: String) -> Result<String, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_settings_table(&conn)?;
+
+    let normalized = name.trim();
+    if normalized.is_empty() {
+        return Err("Business name is required".to_string());
+    }
+    if normalized.chars().count() > 80 {
+        return Err("Business name must be 80 characters or fewer".to_string());
+    }
+
+    let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    conn.execute(
+        "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('business_name', ?1, ?2)",
+        rusqlite::params![normalized, now],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok("Business name updated".to_string())
+}
+
+#[command]
+pub fn get_business_name() -> Result<String, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_settings_table(&conn)?;
+
+    let mut stmt = conn
+        .prepare("SELECT value FROM settings WHERE key = 'business_name'")
+        .map_err(|e| e.to_string())?;
+
+    let result: Result<String, _> = stmt.query_row([], |row| row.get(0));
+    Ok(result.unwrap_or_else(|_| "Business Manager".to_string()))
+}
+
+// ===== BUSINESS MODE SETTINGS =====
+
+#[command]
+pub fn set_business_mode(mode: String) -> Result<String, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_settings_table(&conn)?;
+
+    let normalized = mode.trim().to_lowercase();
+    match normalized.as_str() {
+        "hotel" | "restaurant" | "retail" => {}
+        _ => {
+            return Err("Business mode must be one of: hotel, restaurant, retail".to_string());
+        }
+    }
+
+    let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    conn.execute(
+        "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('business_mode', ?1, ?2)",
+        rusqlite::params![normalized, now],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok("Business mode updated".to_string())
+}
+
+#[command]
+pub fn get_business_mode() -> Result<String, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_settings_table(&conn)?;
+
+    let mut stmt = conn
+        .prepare("SELECT value FROM settings WHERE key = 'business_mode'")
+        .map_err(|e| e.to_string())?;
+
+    let result: Result<String, _> = stmt.query_row([], |row| row.get(0));
+    Ok(result.unwrap_or_else(|_| "hotel".to_string()))
+}
+
+// ===== SHIFT MANAGEMENT (Z-REPORT) =====
+
+#[tauri::command]
+pub fn open_shift(admin_id: i64, start_cash: f64) -> Result<i64, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    // Check if there's already an open shift
+    let existing_shift: Result<i64, _> = conn.query_row(
+        "SELECT id FROM shifts WHERE status = 'open'",
+        [],
+        |row| row.get(0)
+    );
+    
+    if existing_shift.is_ok() {
+        return Err("There is already an open shift. Please close it first.".to_string());
+    }
+    
+    let now = get_current_timestamp();
+    
+    conn.execute(
+        "INSERT INTO shifts (opened_at, opened_by, start_cash, status) 
+         VALUES (?1, ?2, ?3, 'open')",
+        params![now, admin_id, start_cash],
+    ).map_err(|e| e.to_string())?;
+    
+    let shift_id = conn.last_insert_rowid();
+    Ok(shift_id)
+}
+
+#[tauri::command]
+pub fn close_shift(
+    shift_id: i64,
+    admin_id: i64,
+    end_cash_actual: f64,
+    notes: Option<String>
+) -> Result<ShiftSummary, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    // Get shift info
+    let shift_info: Result<(String, i64, f64), _> = conn.query_row(
+        "SELECT opened_at, opened_by, start_cash FROM shifts WHERE id = ?1 AND status = 'open'",
+        params![shift_id],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+    );
+    
+    let (opened_at, opened_by, start_cash) = shift_info.map_err(|_| "Shift not found or already closed".to_string())?;
+    
+    let now = get_current_timestamp();
+    
+    // Calculate total sales during this shift (paid sales only)
+    let total_sales: f64 = conn.query_row(
+        "SELECT COALESCE(SUM(total_amount), 0) FROM sales 
+         WHERE paid = 1 AND paid_at >= ?1 AND paid_at <= ?2",
+        params![opened_at, now],
+        |row| row.get(0)
+    ).map_err(|e| e.to_string())?;
+    
+    // Calculate total expenses during this shift
+    let total_expenses: f64 = conn.query_row(
+        "SELECT COALESCE(SUM(amount), 0) FROM expenses 
+         WHERE date >= ?1 AND date <= ?2",
+        params![opened_at.split(' ').next().unwrap_or(&opened_at), now.split(' ').next().unwrap_or(&now)],
+        |row| row.get(0)
+    ).map_err(|e| e.to_string())?;
+    
+    // Expected end cash = start cash + sales - expenses
+    let end_cash_expected = start_cash + total_sales - total_expenses;
+    let difference = end_cash_actual - end_cash_expected;
+    
+    // Update shift
+    conn.execute(
+        "UPDATE shifts 
+         SET closed_at = ?1, closed_by = ?2, end_cash_expected = ?3, end_cash_actual = ?4, 
+             difference = ?5, total_sales = ?6, total_expenses = ?7, status = 'closed', notes = ?8
+         WHERE id = ?9",
+        params![now, admin_id, end_cash_expected, end_cash_actual, difference, 
+                total_sales, total_expenses, notes, shift_id],
+    ).map_err(|e| e.to_string())?;
+    
+    Ok(ShiftSummary {
+        id: shift_id,
+        opened_at,
+        closed_at: Some(now.clone()),
+        opened_by,
+        closed_by: Some(admin_id),
+        start_cash,
+        end_cash_expected,
+        end_cash_actual,
+        difference,
+        total_sales,
+        total_expenses,
+        status: "closed".to_string(),
+        notes,
+    })
+}
+
+#[tauri::command]
+pub fn get_current_shift() -> Result<Option<ShiftSummary>, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    let mut stmt = conn.prepare(
+        "SELECT id, opened_at, closed_at, opened_by, closed_by, start_cash, 
+                end_cash_expected, end_cash_actual, difference, total_sales, 
+                total_expenses, status, notes
+         FROM shifts 
+         WHERE status = 'open'
+         LIMIT 1"
+    ).map_err(|e| e.to_string())?;
+    
+    let shift = stmt.query_row([], |row| {
+        Ok(ShiftSummary {
+            id: row.get(0)?,
+            opened_at: row.get(1)?,
+            closed_at: row.get(2)?,
+            opened_by: row.get(3)?,
+            closed_by: row.get(4)?,
+            start_cash: row.get(5)?,
+            end_cash_expected: row.get::<_, Option<f64>>(6)?.unwrap_or(0.0),
+            end_cash_actual: row.get::<_, Option<f64>>(7)?.unwrap_or(0.0),
+            difference: row.get::<_, Option<f64>>(8)?.unwrap_or(0.0),
+            total_sales: row.get::<_, Option<f64>>(9)?.unwrap_or(0.0),
+            total_expenses: row.get::<_, Option<f64>>(10)?.unwrap_or(0.0),
+            status: row.get(11)?,
+            notes: row.get(12)?,
+        })
+    });
+    
+    match shift {
+        Ok(s) => Ok(Some(s)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
+pub fn get_shift_history(limit: Option<i64>) -> Result<Vec<ShiftSummary>, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    let query = format!(
+        "SELECT id, opened_at, closed_at, opened_by, closed_by, start_cash, 
+                end_cash_expected, end_cash_actual, difference, total_sales, 
+                total_expenses, status, notes
+         FROM shifts 
+         ORDER BY opened_at DESC
+         LIMIT {}",
+        limit.unwrap_or(50)
+    );
+    
+    let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
+    
+    let shifts = stmt.query_map([], |row| {
+        Ok(ShiftSummary {
+            id: row.get(0)?,
+            opened_at: row.get(1)?,
+            closed_at: row.get(2)?,
+            opened_by: row.get(3)?,
+            closed_by: row.get(4)?,
+            start_cash: row.get(5)?,
+            end_cash_expected: row.get::<_, Option<f64>>(6)?.unwrap_or(0.0),
+            end_cash_actual: row.get::<_, Option<f64>>(7)?.unwrap_or(0.0),
+            difference: row.get::<_, Option<f64>>(8)?.unwrap_or(0.0),
+            total_sales: row.get::<_, Option<f64>>(9)?.unwrap_or(0.0),
+            total_expenses: row.get::<_, Option<f64>>(10)?.unwrap_or(0.0),
+            status: row.get(11)?,
+            notes: row.get(12)?,
+        })
+    }).map_err(|e| e.to_string())?;
+    
+    shifts.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }

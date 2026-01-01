@@ -25,13 +25,15 @@ db.prepare(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
+    salt TEXT NOT NULL,
+    role TEXT DEFAULT 'admin',
     security_question TEXT NOT NULL,
     security_answer_hash TEXT NOT NULL,
     current_otp TEXT,
     otp_expires_at DATETIME,
     password_reset_token TEXT,
     reset_token_expires_at DATETIME,
-    failed_login_attempts INTEGER DEFAULT 0,
+    failed_attempts INTEGER DEFAULT 0,
     locked_until DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     last_login DATETIME,
@@ -54,17 +56,15 @@ db.prepare(`
   )
 `).run();
 
-// Create audit log table for security tracking
+// Create audit log table for security tracking (matching Rust schema)
 db.prepare(`
   CREATE TABLE audit_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    admin_id INTEGER,
-    action TEXT NOT NULL,
-    details TEXT,
+    timestamp TEXT NOT NULL,
+    username TEXT,
+    event_type TEXT NOT NULL,
     ip_address TEXT,
-    user_agent TEXT,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (admin_id) REFERENCES admin_auth(id)
+    user_agent TEXT
   )
 `).run();
 
@@ -76,7 +76,7 @@ function hashPassword(password, salt = null) {
     salt = crypto.randomBytes(32).toString('hex');
   }
   const hash = crypto.pbkdf2Sync(password, salt, 10000, 64, 'sha512').toString('hex');
-  return { hash: hash + ':' + salt };
+  return { hash, salt };
 }
 
 // Generate secure OTP
@@ -99,27 +99,31 @@ const otpExpiry = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 db.prepare(`
   INSERT INTO admin_auth (
     username, 
-    password_hash, 
+    password_hash,
+    salt,
+    role,
     security_question, 
     security_answer_hash,
     current_otp,
     otp_expires_at
   )
-  VALUES (?, ?, ?, ?, ?, ?)
+  VALUES (?, ?, ?, 'admin', ?, ?, ?, ?)
 `).run(
   'yasinheaven', 
-  passwordData.hash, 
+  passwordData.hash,
+  passwordData.salt,
   securityQuestion, 
-  answerData.hash,
+  answerData.hash + ':' + answerData.salt,
   initialOTP,
   otpExpiry
 );
 
-// Log the setup in audit log
+// Log the setup in audit log (using correct schema: timestamp, username, event_type)
+const setupTimestamp = new Date().toISOString();
 db.prepare(`
-  INSERT INTO audit_log (action, details, timestamp)
-  VALUES ('SYSTEM_SETUP', 'Database initialized with default admin account', CURRENT_TIMESTAMP)
-`).run();
+  INSERT INTO audit_log (timestamp, username, event_type, ip_address, user_agent)
+  VALUES (?, 'yasinheaven', 'SYSTEM_SETUP', 'localhost', 'Node.js Setup Script')
+`).run(setupTimestamp);
 
 console.log("Database and tables created successfully.");
 console.log("=== ADMIN CREDENTIALS ===");

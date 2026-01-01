@@ -1,5 +1,6 @@
 use base64::{Engine, prelude::BASE64_STANDARD};
 use rusqlite::OptionalExtension;
+use std::path::PathBuf;
 
 // Include the JPG logo as a compile-time embedded resource for final invoices
 const LOGO_DATA: &[u8] = include_bytes!("../logoforcheckout.jpg");
@@ -67,6 +68,67 @@ fn get_setting_or(conn: &rusqlite::Connection, key: &str, default_value: &str) -
         .map_err(|e| format!("Failed to read setting {}: {}", key, e))?;
 
     Ok(value.unwrap_or_else(|| default_value.to_string()))
+}
+
+fn get_setting_optional(conn: &rusqlite::Connection, key: &str) -> Result<Option<String>, String> {
+    ensure_settings_table(conn)?;
+    let mut stmt = conn
+        .prepare("SELECT value FROM settings WHERE key = ?1")
+        .map_err(|e| format!("Failed to prepare setting query: {}", e))?;
+
+    let value: Option<String> = stmt
+        .query_row([key], |row| row.get(0))
+        .optional()
+        .map_err(|e| format!("Failed to read setting {}: {}", key, e))?;
+
+    Ok(value.and_then(|v| {
+        let t = v.trim().to_string();
+        if t.is_empty() { None } else { Some(t) }
+    }))
+}
+
+fn escape_multiline(text: &str) -> String {
+    html_escape(text)
+        .replace("\r\n", "\n")
+        .replace("\n", "<br>")
+}
+
+fn guess_image_mime(path: &PathBuf) -> &'static str {
+    match path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase()
+        .as_str()
+    {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "svg" => "image/svg+xml",
+        "webp" => "image/webp",
+        _ => "application/octet-stream",
+    }
+}
+
+fn get_business_logo_data_url(conn: &rusqlite::Connection) -> Result<Option<String>, String> {
+    let path = match get_setting_optional(conn, "business_logo_path")? {
+        Some(p) => p,
+        None => return Ok(None),
+    };
+
+    let path_buf = PathBuf::from(path);
+    if !path_buf.exists() || !path_buf.is_file() {
+        return Ok(None);
+    }
+
+    let bytes = std::fs::read(&path_buf)
+        .map_err(|e| format!("Failed to read stored logo: {}", e))?;
+    if bytes.is_empty() {
+        return Ok(None);
+    }
+
+    let mime = guess_image_mime(&path_buf);
+    let b64 = BASE64_STANDARD.encode(bytes);
+    Ok(Some(format!("data:{};base64,{}", mime, b64)))
 }
 
 fn format_money(amount: f64, currency_code: &str, decimals: usize) -> String {
@@ -141,14 +203,20 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
     let currency_code = get_setting_or(&conn, "currency_code", "USD")?
         .trim()
         .to_uppercase();
+
+    let business_name = get_setting_or(&conn, "business_name", "Business Manager")?;
+    let business_address = get_setting_or(&conn, "business_address", "")?;
+
+    let receipt_header = get_setting_or(&conn, "receipt_header", "")?;
+    let receipt_footer = get_setting_or(&conn, "receipt_footer", "")?;
     
     // Get order details with optional guest information
     let mut stmt = conn.prepare(
         "SELECT fo.id, fo.created_at, fo.total_amount, fo.paid, fo.customer_type, fo.customer_name,
                 g.name as guest_name, r.number as room_number
-         FROM food_orders fo
-         LEFT JOIN guests g ON fo.guest_id = g.id
-         LEFT JOIN rooms r ON g.room_id = r.id
+            FROM sales fo
+            LEFT JOIN customers g ON fo.guest_id = g.id
+            LEFT JOIN resources r ON g.room_id = r.id
          WHERE fo.id = ?"
     ).map_err(|e| format!("Failed to prepare order query: {}", e))?;
     
@@ -160,7 +228,7 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
             row.get::<_, i64>(3)?,                          // paid (INTEGER, not bool)
             row.get::<_, String>(4)?,                       // customer_type
             row.get::<_, Option<String>>(5)?,               // customer_name
-            row.get::<_, Option<String>>(6)?,               // guest_name (from guests table)
+            row.get::<_, Option<String>>(6)?,               // customer_name (from customers table)
             row.get::<_, Option<String>>(7)?,               // room_number
         ))
     }).map_err(|e| format!("Order not found: {}", e))?;
@@ -168,8 +236,36 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
     let (_id, created_at, total_amount, paid_status, customer_type, customer_name, guest_name, room_number) = order_row;
     let is_paid = paid_status != 0;
     
-    // Get logo as base64
-    let logo_base64 = get_logo_base64();
+    // Logo: use saved business logo if available, otherwise fall back to embedded logo.
+    let logo_src = match get_business_logo_data_url(&conn)? {
+        Some(src) => src,
+        None => {
+            let embedded = get_logo_base64();
+            if embedded.is_empty() {
+                "".to_string()
+            } else {
+                format!("data:image/jpeg;base64,{}", embedded)
+            }
+        }
+    };
+
+    let logo_html = if logo_src.is_empty() {
+        "".to_string()
+    } else {
+        format!(r#"<img src=\"{}\" alt=\"Logo\" class=\"logo\">"#, logo_src)
+    };
+
+    let receipt_header_html = if receipt_header.trim().is_empty() {
+        "".to_string()
+    } else {
+        format!(r#"<div class=\"brand-message\">{}</div>"#, escape_multiline(receipt_header.trim()))
+    };
+
+    let receipt_footer_html = if receipt_footer.trim().is_empty() {
+        "".to_string()
+    } else {
+        format!(r#"<div class=\"brand-message\">{}</div>"#, escape_multiline(receipt_footer.trim()))
+    };
     
     // Format the date properly
     let formatted_date = if let Ok(parsed_date) = chrono::DateTime::parse_from_rfc3339(&created_at) {
@@ -182,7 +278,7 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
     // Get order items
     let mut stmt = conn.prepare(
         "SELECT item_name, quantity, unit_price, line_total
-         FROM order_items 
+            FROM sale_items 
          WHERE order_id = ?
          ORDER BY item_name"
     ).map_err(|e| format!("Failed to prepare items query: {}", e))?;
@@ -329,6 +425,12 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
             color: #6c757d;
             font-size: 14px;
         }}
+        .brand-message {{
+            margin-top: 10px;
+            font-size: 13px;
+            color: #444;
+            line-height: 1.4;
+        }}
         @media print {{
             body {{
                 margin: 0;
@@ -342,13 +444,10 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
 </head>
 <body>
     <div class="header">
-        <img src="data:image/png;base64,{}" alt="Hotel Logo" class="logo">
-        <h1 class="hotel-name">Yasin Heaven Star Hotel</h1>
-        <p class="hotel-subtitle">
-            Main Yasin Ghizer Gilgit Baltistan, Pakistan<br>
-            Phone: +92 355 4650686<br>
-            Email: yasinheavenstarhotel@gmail.com
-        </p>
+        {}
+        <h1 class="hotel-name">{}</h1>
+        <p class="hotel-subtitle">{}</p>
+        {}
         <h2 class="receipt-title">Food Order Receipt</h2>
     </div>
 
@@ -397,13 +496,17 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
 
     <div class="footer">
         <p>Thank you for dining with us!</p>
+        {}
         <p>Receipt generated on {}</p>
     </div>
 </body>
 </html>"#, 
         order_id,
         payment_color,
-        logo_base64,
+        logo_html,
+    html_escape(&business_name),
+    html_escape(&business_address),
+        receipt_header_html,
         order_id,
         formatted_date,
         html_escape(&customer_display),
@@ -411,6 +514,7 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
         payment_status,
         items_html,
         total_amount_fmt,
+        receipt_footer_html,
         chrono::Local::now().format("%B %d, %Y at %I:%M %p")
     );
     
@@ -418,7 +522,7 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
     if html.len() > 500 {
         println!("🔍 HTML PREVIEW (first 500 chars): {}", &html[..500]);
     }
-    if html.contains("data:image/png;base64,") {
+    if html.contains("data:image/jpeg;base64,") {
         println!("✅ Logo image tag found in HTML!");
     } else {
         println!("❌ Logo image tag NOT found in HTML!");
@@ -446,22 +550,56 @@ pub fn build_final_invoice_html_with_discount(
     let currency_code = get_setting_or(&conn, "currency_code", "USD")?
         .trim()
         .to_uppercase();
+
+    let business_name = get_setting_or(&conn, "business_name", "Business Manager")?;
+    let business_address = get_setting_or(&conn, "business_address", "")?;
+
+    let receipt_header = get_setting_or(&conn, "receipt_header", "")?;
+    let receipt_footer = get_setting_or(&conn, "receipt_footer", "")?;
     
-    // Get logo as base64
-    let logo_base64 = get_logo_base64();
+    // Logo: use saved business logo if available, otherwise fall back to embedded logo.
+    let logo_src = match get_business_logo_data_url(&conn)? {
+        Some(src) => src,
+        None => {
+            let embedded = get_logo_base64();
+            if embedded.is_empty() {
+                "".to_string()
+            } else {
+                format!("data:image/jpeg;base64,{}", embedded)
+            }
+        }
+    };
+
+    let logo_html = if logo_src.is_empty() {
+        "".to_string()
+    } else {
+        format!(r#"<img src=\"{}\" alt=\"Logo\" style=\"width: auto; height: 60px; max-width: 120px; object-fit: contain; display: block; margin: 0 auto; -webkit-print-color-adjust: exact; print-color-adjust: exact;\">"#, logo_src)
+    };
+
+    let receipt_header_html = if receipt_header.trim().is_empty() {
+        "".to_string()
+    } else {
+        format!(r#"<div style=\"margin-top: 10px; font-size: 11px; color: #333; line-height: 1.35; text-align: center;\">{}</div>"#, escape_multiline(receipt_header.trim()))
+    };
+
+    let receipt_footer_html = if receipt_footer.trim().is_empty() {
+        "".to_string()
+    } else {
+        format!(r#"<div style=\"margin-top: 8px; font-size: 10px; color: #333; line-height: 1.35; text-align: center;\">{}</div>"#, escape_multiline(receipt_footer.trim()))
+    };
     
-    if logo_base64.is_empty() {
+    if logo_src.is_empty() {
         println!("❌ WARNING: Logo base64 data is EMPTY for final invoice!");
     } else {
-        println!("✅ Logo data loaded for final invoice, length: {}", logo_base64.len());
+        println!("✅ Logo data loaded for final invoice");
     }
     
     // Get guest details
     let mut stmt = conn.prepare(
         "SELECT g.id, g.name, g.phone, g.check_in, g.check_out, g.daily_rate, g.status,
                 r.number as room_number
-         FROM guests g
-         JOIN rooms r ON g.room_id = r.id
+            FROM customers g
+            JOIN resources r ON g.room_id = r.id
          WHERE g.id = ?"
     ).map_err(|e| format!("Failed to prepare guest query: {}", e))?;
     
@@ -494,12 +632,12 @@ pub fn build_final_invoice_html_with_discount(
     // Get all food orders for this guest (both paid and unpaid)
     let mut order_stmt = conn.prepare(
         "SELECT fo.id, fo.total_amount, fo.paid
-         FROM food_orders fo
+            FROM sales fo
          WHERE fo.guest_id = ?
          ORDER BY fo.created_at"
     ).map_err(|e| format!("Failed to prepare food orders query: {}", e))?;
     
-    let food_orders = order_stmt.query_map([guest_id], |row| {
+    let sales = order_stmt.query_map([guest_id], |row| {
         Ok((
             row.get::<_, i64>(0)?,   // order_id
             row.get::<_, f64>(1)?,   // total_amount
@@ -509,12 +647,12 @@ pub fn build_final_invoice_html_with_discount(
     
     // For each order, get the items
     let mut food_table_rows = String::new();
-    for order_result in food_orders {
+    for order_result in sales {
         let (order_id, _amount, paid) = order_result.map_err(|e| format!("Failed to read order: {}", e))?;
         
         let mut item_stmt = conn.prepare(
             "SELECT oi.quantity, oi.item_name, oi.unit_price
-             FROM order_items oi
+               FROM sale_items oi
              WHERE oi.order_id = ?"
         ).map_err(|e| format!("Failed to prepare order items query: {}", e))?;
         
@@ -839,12 +977,11 @@ pub fn build_final_invoice_html_with_discount(
     <div class="invoice">
         <div class="header">
             <div class="logo-container" style="text-align: center; margin-bottom: 20px; padding: 10px;">
-                <img src="data:image/jpeg;base64,{}" alt="Hotel Logo" style="width: auto; height: 60px; max-width: 120px; object-fit: contain; display: block; margin: 0 auto; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                {}
             </div>
-            <div class="hotel-name">Yasin Heaven Star Hotel</div>
-            <div class="hotel-address">Main Yasin Ghizer Gilgit Baltistan, Pakistan</div>
-            <div class="hotel-address">Phone: +92 355 4650686</div>
-            <div class="hotel-address">Email: yasinheavenstarhotel@gmail.com</div>
+            <div class="hotel-name">{}</div>
+            <div class="hotel-address">{}</div>
+            {}
             <div class="receipt-title">Final Invoice</div>
         </div>
         
@@ -928,6 +1065,7 @@ pub fn build_final_invoice_html_with_discount(
         
         <div class="footer">
             Thank you for your stay!<br>
+            {}<br>
             Invoice generated on {} at {}
         </div>
         
@@ -937,7 +1075,10 @@ pub fn build_final_invoice_html_with_discount(
     </div>
 </body>
 </html>"#,
-        logo_base64,                  // Logo image data
+    logo_html,                    // Logo image HTML
+    html_escape(&business_name),  // Business name
+    html_escape(&business_address), // Business address
+    receipt_header_html,
         html_escape(&name),           // Customer name
         formatted_date,               // Current date
         html_escape(&room_number),    // Room number
@@ -977,6 +1118,7 @@ pub fn build_final_invoice_html_with_discount(
             "".to_string()
         },
         final_total_fmt,             // Final total
+        receipt_footer_html,          // Receipt footer
         formatted_date,              // Date for footer
         formatted_time,              // Time for footer
         formatted_date,              // Date for contact info

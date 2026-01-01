@@ -42,6 +42,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.log('AuthProvider initializing...');
     
     // Clear any existing session data to ensure fresh start
+    localStorage.removeItem('bm_session_token');
+    localStorage.removeItem('bm_session_expiry');
+    localStorage.removeItem('bm_last_activity');
     localStorage.removeItem('hotel_session_token');
     localStorage.removeItem('hotel_session_expiry');
     localStorage.removeItem('hotel_last_activity');
@@ -89,9 +92,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const expiryTime = new Date(Date.now() + 8 * 60 * 60 * 1000);
           const currentTime = new Date().toISOString();
 
-          localStorage.setItem('hotel_session_token', result.session_token);
-          localStorage.setItem('hotel_session_expiry', expiryTime.toISOString());
-          localStorage.setItem('hotel_last_activity', currentTime);
+          localStorage.setItem('bm_session_token', result.session_token);
+          localStorage.setItem('bm_session_expiry', expiryTime.toISOString());
+          localStorage.setItem('bm_last_activity', currentTime);
+
+          // Cleanup legacy keys
+          localStorage.removeItem('hotel_session_token');
+          localStorage.removeItem('hotel_session_expiry');
+          localStorage.removeItem('hotel_last_activity');
         }
 
         return {
@@ -118,6 +126,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('Logging out...');
       
       // Clear all session data
+      localStorage.removeItem('bm_session_token');
+      localStorage.removeItem('bm_session_expiry');
+      localStorage.removeItem('bm_last_activity');
       localStorage.removeItem('hotel_session_token');
       localStorage.removeItem('hotel_session_expiry');
       localStorage.removeItem('hotel_last_activity');

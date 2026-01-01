@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     addSale,
     buildFinalInvoiceHtmlWithDiscount,
@@ -46,7 +46,7 @@ interface DiscountInfo {
     description: string;
 }
 
-const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onClose: _onClose, onCheckoutComplete }) => {
+const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onCheckoutComplete }) => {
     const { colors } = useTheme();
     const { showSuccess, showError, showWarning } = useNotification();
     const { currencyCode, formatMoney } = useCurrency();
@@ -74,17 +74,7 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onClose: _onClose, o
     const [quantity, setQuantity] = useState(1);
     const [checkingOut, setCheckingOut] = useState(false);
 
-    // Load data on component mount
-    useEffect(() => {
-        loadCheckoutData();
-    }, [guest.guest_id]);
-
-    // Calculate totals when dependencies change
-    useEffect(() => {
-        calculateTotals();
-    }, [foodOrders, discount, roomCharges, taxEnabled, taxRate]);
-
-    const loadCheckoutData = async () => {
+    const loadCheckoutData = useCallback(async () => {
         setLoading(true);
         try {
             const [orderSummaries, menu] = await Promise.all([
@@ -152,15 +142,16 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onClose: _onClose, o
             
             setError(null);
         } catch (err) {
+            console.error('Failed to load checkout data:', err);
             const errorMessage = 'Failed to load checkout data';
             setError(errorMessage);
             showError('Loading Error', errorMessage);
         } finally {
             setLoading(false);
         }
-    };
+    }, [guest.check_in, guest.check_out, guest.daily_rate, guest.guest_id, showError]);
 
-    const calculateTotals = () => {
+    const calculateTotals = useCallback(() => {
         // Calculate unpaid food orders total
         const unpaidTotal = foodOrders
             .filter(order => !order.paid)
@@ -191,7 +182,17 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onClose: _onClose, o
         }
         
         setGrandTotal(finalTotal);
-    };
+    }, [discount.amount, discount.type, foodOrders, roomCharges, taxEnabled, taxRate]);
+
+    // Load data on mount / when guest changes
+    useEffect(() => {
+        void loadCheckoutData();
+    }, [loadCheckoutData]);
+
+    // Calculate totals when inputs change
+    useEffect(() => {
+        calculateTotals();
+    }, [calculateTotals]);
 
     const handleTogglePayment = async (orderId: number) => {
         try {
@@ -206,6 +207,7 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onClose: _onClose, o
             ));
             
         } catch (err) {
+            console.error('Failed to toggle payment:', err);
             const errorMessage = 'Failed to update payment status';
             showError('Payment Update Failed', errorMessage);
         }
@@ -224,6 +226,7 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onClose: _onClose, o
             setFoodOrders(prev => prev.filter(order => order.id !== orderId));
             
         } catch (err) {
+            console.error('Failed to delete order:', err);
             const errorMessage = 'Failed to delete order';
             showError('Delete Failed', errorMessage);
         }
@@ -264,6 +267,7 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onClose: _onClose, o
             setShowAddFood(false);
             
         } catch (err) {
+            console.error('Failed to add food item:', err);
             const errorMessage = 'Failed to add food item';
             showError('Add Failed', errorMessage);
         }
@@ -317,6 +321,7 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onClose: _onClose, o
             onCheckoutComplete();
             
         } catch (err) {
+            console.error('Checkout failed:', err);
             const errorMessage = `Failed to ${label.actionOut.toLowerCase()} ${guest.name}`;
             showError(`${label.actionOut} Failed`, errorMessage);
         } finally {

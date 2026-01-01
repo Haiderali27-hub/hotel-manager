@@ -1,5 +1,30 @@
 :root {
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  /* --- TYPOGRAPHY (Inertia Offline) --- */
+  /* Industrial Headers */
+  --font-heading: 'Chakra Petch', sans-serif;
+  /* Readable Data */
+  --font-body: 'Inter', system-ui, sans-serif;
+  /* Aligned Prices */
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+
+  /* --- TEXT SIZES (Optimized for POS Screens) --- */
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 24px;
+  --text-2xl: 32px;
+  --text-3xl: 48px;
+
+  /* --- COMPONENT SIZES (Touch Friendly) --- */
+  --h-input: 48px;
+  --h-input-lg: 64px;
+  --h-input-sm: 36px;
+
+  --radius-sm: 2px;
+  --radius-md: 6px;
+  --radius-lg: 12px;
+
   line-height: 1.5;
   font-weight: 400;
 
@@ -8,54 +33,63 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  /* Modern SaaS Light Mode Palette */
-  --light-bg-primary: #fdfdfd;
-  --light-bg-secondary: #e8eaec;
-  --light-surface: #e8eaec;
-  --light-text: #393741;
-  --light-text-muted: #8892a9;
-  --light-border: #d2d6db;
-  --light-accent: #8892a9;
-  --light-accent-hover: #665f5f;
-  
-  /* Modern SaaS Dark Mode Palette */
-  --dark-bg-primary: #0b0b0b;
-  --dark-bg-secondary: #1e1e1f;
-  --dark-surface: #1e1e1f;
-  --dark-card: #393741;
-  --dark-text: #cdd0dc;
-  --dark-text-muted: #958f9e;
-  --dark-border: #393741;
-  --dark-accent: #958f9e;
-  --dark-accent-hover: #cdd0dc;
+  /*
+    BizCore Offline Phase 4 Design System
+    Semantic mapping of the user-provided palettes.
+  */
+  --bizcore-light-app-bg: #fdfdfd;
+  --bizcore-light-surface: #e8eaec;
+  --bizcore-light-border: #d2d6db;
+  --bizcore-light-text: #845c58;
+  --bizcore-light-text-secondary: #8892a9;
+  --bizcore-light-action: #845c58;
+  --bizcore-light-input-bg: #fdfdfd;
 
-  /* Legacy variables for backward compatibility - point to light mode */
-  --bm-accent: var(--light-accent);
-  --bm-accent-soft: var(--light-accent-hover);
-  --bm-primary: var(--light-text);
-  --bm-primary-alt: var(--light-text-muted);
-  --bm-muted: var(--light-text-muted);
-  --bm-light: var(--light-bg-secondary);
-  --bm-focus-ring: rgba(136, 146, 169, 0.22);
-  --bm-primary-shadow: rgba(57, 55, 65, 0.08);
+  --bizcore-dark-app-bg: #0b0b0b;
+  --bizcore-dark-surface: #1e1e1f;
+  --bizcore-dark-border: #393741;
+  --bizcore-dark-text: #cdd0dc;
+  --bizcore-dark-text-secondary: #958f9e;
+  --bizcore-dark-action: #665f5f;
+  --bizcore-dark-input-bg: #0b0b0b;
 
-  /* App-level semantic tokens */
-  --app-bg: var(--light-bg-primary);
-  --app-surface: var(--light-surface);
-  --app-text: var(--light-text);
-  --app-text-muted: var(--light-text-muted);
-  --app-border: var(--light-border);
-  --app-shadow: rgba(57, 55, 65, 0.08);
+  /* Semantic tokens (default: light) */
+  --app-bg: var(--bizcore-light-app-bg);
+  --app-surface: var(--bizcore-light-surface);
+  --app-border: var(--bizcore-light-border);
+  --app-text: var(--bizcore-light-text);
+  --app-text-secondary: var(--bizcore-light-text-secondary);
+  --app-action: var(--primary-color, var(--bizcore-light-action));
+  --app-input-bg: var(--bizcore-light-input-bg);
 
-  --app-success: #845c58;
-  --app-success-bg: rgba(132, 92, 88, 0.1);
-  --app-error: #845c58;
-  --app-error-bg: rgba(132, 92, 88, 0.1);
-  --app-warning: #b7bac3;
-  --app-warning-bg: rgba(183, 186, 195, 0.15);
-  --app-info: var(--light-accent);
-  --app-info-bg: rgba(136, 146, 169, 0.1);
-  --app-overlay: rgba(57, 55, 65, 0.5);
+  /* Translucent helpers (allowed: derived alpha) */
+  --app-overlay: rgba(0, 0, 0, 0.55);
+  --app-shadow: rgba(0, 0, 0, 0.18);
+  --app-focus-ring: rgba(132, 92, 88, 0.22);
+
+  /* Legacy variables for backward compatibility */
+  --bm-primary: var(--app-text);
+  --bm-primary-alt: var(--app-text-secondary);
+  --bm-muted: var(--app-text-secondary);
+  --bm-light: var(--app-surface);
+  --bm-accent: var(--app-action);
+  --bm-accent-soft: var(--app-action);
+  --bm-focus-ring: var(--app-focus-ring);
+  --bm-primary-shadow: var(--app-shadow);
+}
+
+html[data-theme="dark"] {
+  --app-bg: var(--bizcore-dark-app-bg);
+  --app-surface: var(--bizcore-dark-surface);
+  --app-border: var(--bizcore-dark-border);
+  --app-text: var(--bizcore-dark-text);
+  --app-text-secondary: var(--bizcore-dark-text-secondary);
+  --app-action: var(--primary-color, var(--bizcore-dark-action));
+  --app-input-bg: var(--bizcore-dark-input-bg);
+
+  --app-overlay: rgba(0, 0, 0, 0.7);
+  --app-shadow: rgba(0, 0, 0, 0.45);
+  --app-focus-ring: rgba(102, 95, 95, 0.22);
 }
 
 body {
@@ -64,15 +98,139 @@ body {
   min-height: 100vh;
   background: var(--app-bg);
   color: var(--app-text);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-heading);
+}
+
+code,
+pre,
+kbd,
+samp {
+  font-family: var(--font-mono);
+}
+
+/* Shared UI primitives */
+.bc-card {
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: var(--radius-lg);
+}
+
+.bc-input {
+  width: 100%;
+  height: var(--h-input);
+  padding: 0 14px;
+  border: 2px solid var(--app-border);
+  background: var(--app-input-bg);
+  color: var(--app-text);
+  border-radius: var(--radius-sm);
+  box-sizing: border-box;
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+}
+
+.bc-input::placeholder {
+  color: var(--app-text-secondary);
+  opacity: 0.5;
+}
+
+.bc-input:focus {
+  outline: none;
+  border-color: var(--app-action);
+}
+
+.bc-btn {
+  min-height: var(--h-input);
+  padding: 0 14px;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--app-border);
+  background: transparent;
+  color: var(--app-text);
+  font-family: var(--font-heading);
+  font-size: var(--text-base);
+  font-weight: 700;
+}
+
+.bc-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.bc-btn-primary {
+  background: var(--app-action);
+  border-color: var(--app-action);
+  color: var(--bizcore-light-app-bg);
+}
+
+html[data-theme="dark"] .bc-btn-primary {
+  color: var(--bizcore-dark-text);
+}
+
+.bc-btn-outline {
+  background: transparent;
+  border-color: var(--app-border);
+  color: var(--app-text-secondary);
+}
+
+.bc-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.bc-table th {
+  text-transform: uppercase;
+  font-size: var(--text-xs);
+  letter-spacing: 0.05em;
+  color: var(--app-text-secondary);
+  font-weight: 600;
+  padding: 12px;
+  border-bottom: 1px solid var(--app-border);
+  text-align: left;
+}
+
+.bc-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--app-border);
+  color: var(--app-text);
+  font-size: var(--text-sm);
+}
+
+.bc-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--app-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.bc-modal {
+  width: min(720px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  box-shadow: 0 18px 40px var(--app-shadow);
+  border-radius: var(--radius-lg);
 }
 
 a {
-  color: var(--bm-accent);
+  color: var(--app-text);
   text-decoration: inherit;
 }
 
 a:hover {
-  color: var(--bm-primary-alt);
+  color: var(--app-text);
 }
 
 button:focus,

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   exportHistoryCsvWithDialog,
   getCustomers,
@@ -41,7 +41,7 @@ const formatDate = (dateStr: string | null | undefined): string => {
       return 'Invalid Date';
     }
     return date.toLocaleDateString();
-  } catch (error) {
+  } catch {
     return 'Invalid Date';
   }
 };
@@ -83,18 +83,9 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  // Load data based on active tab
-  useEffect(() => {
-    loadData();
-  }, [activeTab]);
+  type HistoryRow = Customer | SaleSummary | ExpenseRecord;
 
-  // Load guests on component mount for name lookups
-  useEffect(() => {
-    loadGuestsIfNeeded();
-    loadRoomsIfNeeded();
-  }, []);
-
-  const loadGuestsIfNeeded = async () => {
+  const loadGuestsIfNeeded = useCallback(async () => {
     if (customers.length === 0) {
       try {
         const customerData = await getCustomers();
@@ -103,9 +94,9 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
         console.error('Failed to load guests:', error);
       }
     }
-  };
+  }, [customers.length]);
 
-  const loadRoomsIfNeeded = async () => {
+  const loadRoomsIfNeeded = useCallback(async () => {
     if (units.length === 0) {
       try {
         const unitData = await getUnits();
@@ -114,9 +105,9 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
         console.error('Failed to load rooms:', error);
       }
     }
-  };
+  }, [units.length]);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       // Always load guests for name lookup
@@ -134,17 +125,19 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
             setCustomers(customerData);
           }
           break;
-        case 'food-orders':
+        case 'food-orders': {
           const saleData = await getSales();
           console.log('Loaded sales:', saleData);
           console.log('Sample sale:', saleData[0]);
           setSales(saleData);
           break;
-        case 'expenses':
+        }
+        case 'expenses': {
           const expenseData = await getExpenses();
           console.log('Loaded expenses:', expenseData);
           setExpenses(expenseData);
           break;
+        }
       }
     } catch (error) {
       console.error(`Failed to load ${activeTab}:`, error);
@@ -152,7 +145,18 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeTab, customers.length, showError]);
+
+  // Load data based on active tab
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
+
+  // Load guests/rooms on mount for name lookups
+  useEffect(() => {
+    void loadGuestsIfNeeded();
+    void loadRoomsIfNeeded();
+  }, [loadGuestsIfNeeded, loadRoomsIfNeeded]);
 
   const handleFilterChange = (field: keyof FilterState, value: string) => {
     setFilters(prev => ({ ...prev, [field]: value }));
@@ -171,8 +175,8 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
         const filteredExpenses = await getExpensesByDateRange(filters.startDate, filters.endDate);
         setExpenses(filteredExpenses);
         showSuccess('Filter Applied', `Found ${filteredExpenses.length} expenses in date range`);
-      } catch (error) {
-        showError('Filter Error', 'Failed to apply date filter');
+      } catch (err) {
+        showError('Filter Error', err instanceof Error ? err.message : 'Failed to apply date filter');
       } finally {
         setLoading(false);
       }
@@ -225,8 +229,8 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
   };
 
   // Filter data based on current filters
-  const getFilteredData = () => {
-    let data: any[] = [];
+  const getFilteredData = (): HistoryRow[] => {
+    let data: HistoryRow[] = [];
     
     switch (activeTab) {
       case 'guests':
@@ -327,7 +331,9 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
     color: colors.text
   };
 
-  const renderGuestsTable = () => (
+  const renderGuestsTable = () => {
+    const rows = paginatedData as Customer[];
+    return (
     <table style={tableStyle}>
       <thead>
         <tr>
@@ -341,7 +347,7 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
         </tr>
       </thead>
       <tbody>
-        {paginatedData.map((customer: Customer, index: number) => (
+        {rows.map((customer, index: number) => (
           <tr key={`customer-${customer.id || index}`}>
             <td style={tdStyle}>{customer.name}</td>
             <td style={tdStyle}>{customer.phone || 'N/A'}</td>
@@ -364,9 +370,12 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
         ))}
       </tbody>
     </table>
-  );
+    );
+  };
 
-  const renderFoodOrdersTable = () => (
+  const renderFoodOrdersTable = () => {
+    const rows = paginatedData as SaleSummary[];
+    return (
     <table style={tableStyle}>
       <thead>
         <tr>
@@ -379,7 +388,7 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
         </tr>
       </thead>
       <tbody>
-        {paginatedData.map((sale: SaleSummary, index: number) => (
+        {rows.map((sale, index: number) => (
           <tr key={`sale-${sale.id || index}`}>
             <td style={tdStyle}>#{sale.id}</td>
             <td style={tdStyle}>{sale.guest_name || `Walk-in ${label.client}`}</td>
@@ -401,9 +410,12 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
         ))}
       </tbody>
     </table>
-  );
+    );
+  };
 
-  const renderExpensesTable = () => (
+  const renderExpensesTable = () => {
+    const rows = paginatedData as ExpenseRecord[];
+    return (
     <table style={tableStyle}>
       <thead>
         <tr>
@@ -414,7 +426,7 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
         </tr>
       </thead>
       <tbody>
-        {paginatedData.map((expense: ExpenseRecord, index: number) => (
+        {rows.map((expense, index: number) => (
           <tr key={`expense-${expense.id || index}`}>
             <td style={tdStyle}>{formatDate(expense.date)}</td>
             <td style={tdStyle}>
@@ -434,7 +446,8 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
         ))}
       </tbody>
     </table>
-  );
+    );
+  };
 
   const renderPagination = () => (
     <div style={{

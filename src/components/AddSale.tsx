@@ -36,8 +36,6 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded }) => {
   const [activeGuests, setActiveGuests] = useState<ActiveCustomerRow[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItemWithDetails[]>([]);
-  const [selectedMenuItemId, setSelectedMenuItemId] = useState<number>(0);
-  const [quantity, setQuantity] = useState<number>(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -67,15 +65,15 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded }) => {
     loadData();
   }, [showError]);
 
-  const handleAddItem = () => {
-    if (selectedMenuItemId === 0 || quantity <= 0) {
-      const errorMessage = 'Please select a menu item and enter valid quantity';
+  const addItemToOrder = (menuItemId: number, qty: number) => {
+    if (!menuItemId || qty <= 0) {
+      const errorMessage = 'Please select a product and enter valid quantity';
       setError(errorMessage);
       showWarning('Invalid Selection', errorMessage);
       return;
     }
 
-    const menuItem = menuItems.find(item => item.id === selectedMenuItemId);
+    const menuItem = menuItems.find(item => item.id === menuItemId);
     if (!menuItem) {
       const errorMessage = 'Selected menu item not found';
       setError(errorMessage);
@@ -85,13 +83,13 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded }) => {
 
     // Check if item already exists in order
     const existingItemIndex = orderItems.findIndex(
-      item => item.menu_item_id === selectedMenuItemId
+      item => item.menu_item_id === menuItemId
     );
 
     if (existingItemIndex >= 0) {
       // Update existing item quantity
       const updatedItems = [...orderItems];
-      updatedItems[existingItemIndex].quantity += quantity;
+      updatedItems[existingItemIndex].quantity += qty;
       updatedItems[existingItemIndex].total_price = 
         updatedItems[existingItemIndex].quantity * menuItem.price;
       setOrderItems(updatedItems);
@@ -99,21 +97,31 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded }) => {
     } else {
       // Add new item
       const newOrderItem: OrderItemWithDetails = {
-          menu_item_id: selectedMenuItemId,
-          quantity: quantity,
+          menu_item_id: menuItemId,
+          quantity: qty,
           unit_price: menuItem.price,
           menu_item: menuItem,
-          total_price: quantity * menuItem.price,
+          total_price: qty * menuItem.price,
           item_name: ''
       };
       setOrderItems([...orderItems, newOrderItem]);
-      showSuccess('Item Added', `${quantity}x ${menuItem.name} added to order`);
+      showSuccess('Item Added', `${qty}x ${menuItem.name} added to order`);
     }
-
-    // Reset selection
-    setSelectedMenuItemId(0);
-    setQuantity(1);
     setError(null);
+  };
+
+  const handleIncreaseQty = (index: number) => {
+    const updated = [...orderItems];
+    updated[index].quantity += 1;
+    updated[index].total_price = updated[index].quantity * updated[index].unit_price;
+    setOrderItems(updated);
+  };
+
+  const handleDecreaseQty = (index: number) => {
+    const updated = [...orderItems];
+    updated[index].quantity = Math.max(1, updated[index].quantity - 1);
+    updated[index].total_price = updated[index].quantity * updated[index].unit_price;
+    setOrderItems(updated);
   };
 
   const handleRemoveItem = (index: number) => {
@@ -176,8 +184,6 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded }) => {
       setOrderItems([]);
       setSelectedGuestId(0);
       setWalkinCustomerName('Walk-in');
-      setSelectedMenuItemId(0);
-      setQuantity(1);
       setCustomerType('active');
 
       onSaleAdded();
@@ -250,423 +256,255 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded }) => {
   };
 
   return (
-    <div style={{
-      padding: '2rem',
-      backgroundColor: colors.primary,
-      color: colors.text,
-      minHeight: '100vh'
-    }}>
-      {/* Header */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        marginBottom: '2rem',
-        borderBottom: `1px solid ${colors.border}`,
-        paddingBottom: '1rem'
-      }}>
-        <button
-          onClick={onBack}
-          style={{
-            backgroundColor: 'transparent',
-            border: 'none',
-            color: colors.accent,
-            fontSize: '1.5rem',
-            cursor: 'pointer',
-            marginRight: '1rem',
-            padding: '0.5rem'
-          }}
-        >
-          ←
+    <div style={{ padding: '24px', backgroundColor: colors.primary, color: colors.text, minHeight: '100vh' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+        <button type="button" className="bc-btn bc-btn-outline" onClick={onBack} style={{ width: 'auto' }}>
+          Back
         </button>
-        <h1 style={{
-          fontSize: '1.8rem',
-          fontWeight: 'bold',
-          margin: 0,
-          background: 'linear-gradient(135deg, var(--bm-accent), var(--bm-accent-soft))',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent'
-        }}>
-          Add Sale
-        </h1>
+        <div>
+          <div style={{ fontSize: '28px', fontWeight: 800, color: colors.text }}>POS / Sales</div>
+          <div style={{ fontSize: '14px', color: colors.textSecondary }}>Create a new sale</div>
+        </div>
       </div>
 
-      <form onSubmit={handleSubmit} style={{ maxWidth: '600px' }}>
-        {/* Select Customer Type */}
-        <div style={{ marginBottom: '1.5rem' }}>
-          <label style={{
-            display: 'block',
-            marginBottom: '0.5rem',
-            fontWeight: '500',
-            color: colors.text
-          }}>
-            Select Customer type
-          </label>
-          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-              <input
-                type="radio"
-                name="customerType"
-                value="active"
-                checked={customerType === 'active'}
-                onChange={(e) => setCustomerType(e.target.value as 'active' | 'walkin')}
-                style={{ width: '16px', height: '16px' }}
-              />
-              <span style={{ color: colors.text }}>Active {label.client}</span>
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-              <input
-                type="radio"
-                name="customerType"
-                value="walkin"
-                checked={customerType === 'walkin'}
-                onChange={(e) => setCustomerType(e.target.value as 'active' | 'walkin')}
-                style={{ width: '16px', height: '16px' }}
-              />
-              <span style={{ color: colors.text }}>Walk-in {label.client.toLowerCase()}</span>
-            </label>
-          </div>
-
-          {/* Customer Selection */}
-          {customerType === 'active' ? (
-            <select
-              value={selectedGuestId}
-              onChange={(e) => setSelectedGuestId(parseInt(e.target.value))}
-              required
-              style={{
-                width: '100%',
-                padding: '0.75rem',
-                backgroundColor: colors.surface,
-                border: `1px solid ${colors.border}`,
-                borderRadius: '8px',
-                color: colors.text,
-                fontSize: '1rem',
-                cursor: 'pointer'
-              }}
-            >
-              <option value={0}>Select an active {label.client.toLowerCase()}</option>
-              {activeGuests.map(guest => (
-                <option key={guest.guest_id} value={guest.guest_id}>
-                  {guest.name} - {label.unit} {guest.room_number}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <input
-              type="text"
-              value={walkinCustomerName}
-              onChange={(e) => setWalkinCustomerName(e.target.value)}
-              placeholder={`${label.client} name (optional)`}
-              style={{
-                width: '100%',
-                padding: '0.75rem',
-                backgroundColor: colors.surface,
-                border: `1px solid ${colors.border}`,
-                borderRadius: '8px',
-                color: colors.text,
-                fontSize: '1rem'
-              }}
-            />
-          )}
-        </div>
-
-        {/* Date */}
-        <div style={{ marginBottom: '1.5rem' }}>
-          <label style={{
-            display: 'block',
-            marginBottom: '0.5rem',
-            fontWeight: '500',
-            color: colors.text
-          }}>
-            Date
-          </label>
-          <div style={{ position: 'relative' }}>
-            <input
-              type="datetime-local"
-              defaultValue={new Date().toISOString().slice(0, 16)}
-              style={{
-                width: '100%',
-                padding: '0.75rem',
-                backgroundColor: colors.surface,
-                border: `1px solid ${colors.border}`,
-                borderRadius: '8px',
-                color: colors.text,
-                fontSize: '1rem',
-                colorScheme: theme === 'dark' ? 'dark' : 'light'
-              }}
-            />
-            <style dangerouslySetInnerHTML={{
-              __html: `
-                input[type="datetime-local"]::-webkit-calendar-picker-indicator {
-                  filter: ${theme === 'light' ? 'invert(0)' : 'invert(1)'};
-                  cursor: pointer;
-                }
-                input[type="datetime-local"]::-webkit-datetime-edit {
-                  color: ${colors.text};
-                }
-              `
-            }} />
-          </div>
-        </div>
-
-        {/* Add Menu Items */}
-        <div style={{ marginBottom: '1.5rem' }}>
-          <label style={{
-            display: 'block',
-            marginBottom: '0.5rem',
-            fontWeight: '500',
-            color: colors.text
-          }}>
-            Food Item
-          </label>
-          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-            <select
-              value={selectedMenuItemId}
-              onChange={(e) => setSelectedMenuItemId(parseInt(e.target.value))}
-              style={{
-                flex: '2',
-                minWidth: '200px',
-                padding: '0.75rem',
-                backgroundColor: colors.surface,
-                border: `1px solid ${colors.border}`,
-                borderRadius: '8px',
-                color: colors.text,
-                fontSize: '1rem',
-                cursor: 'pointer'
-              }}
-            >
-              <option value={0}>Select food item</option>
-              {menuItems.map(item => (
-                <option key={item.id} value={item.id}>
-                  {item.name} - {formatMoney(item.price)}
-                </option>
-              ))}
-            </select>
-            
-            <input
-              type="number"
-              value={quantity}
-              onChange={(e) => setQuantity(parseInt(e.target.value) || 0)}
-              min="1"
-              placeholder="Qty"
-              style={{
-                flex: '1',
-                minWidth: '80px',
-                padding: '0.75rem',
-                backgroundColor: colors.surface,
-                border: `1px solid ${colors.border}`,
-                borderRadius: '8px',
-                color: colors.text,
-                fontSize: '1rem'
-              }}
-            />
-            
-            <button
-              type="button"
-              onClick={handleAddItem}
-              style={{
-                padding: '0.75rem 1.5rem',
-                backgroundColor: colors.success,
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: '1rem',
-                fontWeight: '500'
-              }}
-            >
-              Add Item
-            </button>
-          </div>
-
-          {/* Selected Items Display */}
-          {orderItems.length > 0 && (
-            <div style={{
-              backgroundColor: colors.surface,
-              borderRadius: '8px',
-              padding: '1rem',
-              border: `1px solid ${colors.border}`
-            }}>
-              <h3 style={{ margin: '0 0 1rem 0', color: colors.accent }}>Order Items:</h3>
-              {orderItems.map((item, index) => (
-                <div key={index} style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '0.5rem 0',
-                  borderBottom: index < orderItems.length - 1 ? `1px solid ${colors.border}` : 'none'
-                }}>
-                  <div>
-                    <span style={{ fontWeight: '500' }}>{item.menu_item.name}</span>
-                    <span style={{ color: colors.textMuted, marginLeft: '0.5rem' }}>
-                      x{item.quantity} @ {formatMoney(item.unit_price)}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <span style={{ fontWeight: '600' }}>{formatMoney(item.total_price)}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveItem(index)}
-                      style={{
-                        backgroundColor: colors.error,
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        padding: '0.25rem 0.5rem',
-                        cursor: 'pointer',
-                        fontSize: '0.875rem'
-                      }}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              ))}
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginTop: '1rem',
-                padding: '0.5rem 0',
-                borderTop: `2px solid ${colors.accent}`,
-                fontSize: '1.1rem',
-                fontWeight: '600'
-              }}>
-                <span>Total Amount:</span>
-                <span style={{ color: colors.success }}>{formatMoney(getTotalAmount())}</span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Error Message */}
-        {error && (
-          <div style={{
-            padding: '1rem',
-            backgroundColor: colors.error,
-            color: 'white',
-            borderRadius: '8px',
-            marginBottom: '1.5rem'
-          }}>
-            {error}
-          </div>
-        )}
-
-        {/* Submit Button */}
-        <button
-          type="submit"
-          disabled={loading || orderItems.length === 0}
+      <form onSubmit={handleSubmit}>
+        <div
           style={{
-            backgroundColor: loading || orderItems.length === 0 ? colors.textMuted : colors.success,
-            color: 'white',
-            border: 'none',
-            padding: '1rem 2rem',
-            borderRadius: '8px',
-            fontSize: '1rem',
-            fontWeight: '600',
-            cursor: loading || orderItems.length === 0 ? 'not-allowed' : 'pointer',
-            width: '100%'
+            display: 'grid',
+            gridTemplateColumns: '1fr 360px',
+            gap: '16px',
+            alignItems: 'start',
           }}
         >
-          {loading ? 'Adding Order...' : 'Add Order'}
-        </button>
+          {/* Left: Products grid */}
+          <div className="bc-card" style={{ borderRadius: '10px', padding: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '12px' }}>
+              <div style={{ fontSize: '16px', fontWeight: 800, color: colors.text }}>Products</div>
+              <div style={{ fontSize: '12px', color: colors.textSecondary }}>{menuItems.length} items</div>
+            </div>
+
+            <div
+              style={{
+                marginTop: '12px',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                gap: '10px',
+              }}
+            >
+              {menuItems.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className="bc-btn bc-btn-outline"
+                  onClick={() => addItemToOrder(item.id, 1)}
+                  style={{
+                    textAlign: 'left',
+                    padding: '12px',
+                    borderRadius: '10px',
+                    display: 'block',
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: colors.text, fontSize: '14px' }}>{item.name}</div>
+                  <div style={{ marginTop: '4px', color: colors.textSecondary, fontSize: '12px' }}>
+                    {formatMoney(item.price)}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Right: Cart */}
+          <div className="bc-card" style={{ borderRadius: '10px', padding: '16px' }}>
+            <div style={{ fontSize: '16px', fontWeight: 800, color: colors.text }}>Cart</div>
+
+            {/* Customer */}
+            <div style={{ marginTop: '12px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: colors.textSecondary, marginBottom: '6px' }}>
+                Customer
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="customerType"
+                    value="active"
+                    checked={customerType === 'active'}
+                    onChange={(e) => setCustomerType(e.target.value as 'active' | 'walkin')}
+                  />
+                  <span style={{ fontSize: '12px', color: colors.text }}>Active</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="customerType"
+                    value="walkin"
+                    checked={customerType === 'walkin'}
+                    onChange={(e) => setCustomerType(e.target.value as 'active' | 'walkin')}
+                  />
+                  <span style={{ fontSize: '12px', color: colors.text }}>Walk-in</span>
+                </label>
+              </div>
+
+              {customerType === 'active' ? (
+                <select
+                  value={selectedGuestId}
+                  onChange={(e) => setSelectedGuestId(parseInt(e.target.value))}
+                  className="bc-input"
+                  required
+                >
+                  <option value={0}>Select an active {label.client.toLowerCase()}</option>
+                  {activeGuests.map((guest) => (
+                    <option key={guest.guest_id} value={guest.guest_id}>
+                      {guest.name} - {label.unit} {guest.room_number}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={walkinCustomerName}
+                  onChange={(e) => setWalkinCustomerName(e.target.value)}
+                  placeholder={`${label.client} name (optional)`}
+                  className="bc-input"
+                />
+              )}
+            </div>
+
+            {/* Items */}
+            <div style={{ marginTop: '14px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: colors.textSecondary, marginBottom: '8px' }}>
+                Items
+              </div>
+
+              {orderItems.length === 0 ? (
+                <div style={{ fontSize: '12px', color: colors.textSecondary }}>No items yet.</div>
+              ) : (
+                <div style={{ display: 'grid', gap: '10px' }}>
+                  {orderItems.map((item, index) => (
+                    <div
+                      key={index}
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: '10px',
+                        padding: '10px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 800, fontSize: '13px', color: colors.text }}>
+                            {item.menu_item.name}
+                          </div>
+                          <div style={{ fontSize: '12px', color: colors.textSecondary, marginTop: '2px' }}>
+                            {formatMoney(item.unit_price)}
+                          </div>
+                        </div>
+                        <div style={{ fontWeight: 800, fontSize: '13px', color: colors.text }}>
+                          {formatMoney(item.total_price)}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px' }}>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <button
+                            type="button"
+                            className="bc-btn bc-btn-outline"
+                            onClick={() => handleDecreaseQty(index)}
+                            style={{ width: 'auto', padding: '8px 10px' }}
+                          >
+                            -
+                          </button>
+                          <div style={{ minWidth: '28px', textAlign: 'center', fontWeight: 800, color: colors.text }}>
+                            {item.quantity}
+                          </div>
+                          <button
+                            type="button"
+                            className="bc-btn bc-btn-outline"
+                            onClick={() => handleIncreaseQty(index)}
+                            style={{ width: 'auto', padding: '8px 10px' }}
+                          >
+                            +
+                          </button>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="bc-btn bc-btn-outline"
+                          onClick={() => handleRemoveItem(index)}
+                          style={{ width: 'auto' }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Total */}
+            <div style={{ marginTop: '14px', borderTop: `1px solid ${colors.border}`, paddingTop: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+                <div style={{ fontSize: '12px', color: colors.textSecondary, fontWeight: 700 }}>Total</div>
+                <div style={{ fontSize: '16px', color: colors.text, fontWeight: 900 }}>{formatMoney(getTotalAmount())}</div>
+              </div>
+            </div>
+
+            {error && (
+              <div
+                style={{
+                  marginTop: '12px',
+                  padding: '10px',
+                  borderRadius: '10px',
+                  border: `1px solid ${colors.border}`,
+                  background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+                  color: colors.text,
+                  fontSize: '12px',
+                }}
+              >
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              className="bc-btn bc-btn-primary"
+              disabled={loading || orderItems.length === 0}
+              style={{ marginTop: '14px' }}
+            >
+              {loading ? 'Processing…' : 'Checkout'}
+            </button>
+          </div>
+        </div>
+
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
+              @media (max-width: 980px) {
+                .bc-pos-grid { grid-template-columns: 1fr !important; }
+              }
+            `,
+          }}
+        />
       </form>
 
       {/* Success Modal */}
       {showSuccessModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: colors.overlay,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }}>
-          <div style={{
-            backgroundColor: colors.surface,
-            padding: '2rem',
-            borderRadius: '12px',
-            textAlign: 'center',
-            border: `1px solid ${colors.success}`,
-            maxWidth: '400px',
-            width: '90%'
-          }}>
-            <div style={{
-              fontSize: '3rem',
-              marginBottom: '1rem'
-            }}>
-              ✅
+        <div className="bc-modal-overlay">
+          <div className="bc-modal" style={{ maxWidth: '520px' }}>
+            <div style={{ fontSize: '18px', fontWeight: 900, color: colors.text }}>Sale created</div>
+            <div style={{ marginTop: '8px', fontSize: '13px', color: colors.textSecondary }}>
+              Payment status: <strong style={{ color: colors.text }}>{paymentStatus.toUpperCase()}</strong>
             </div>
-            <h2 style={{
-              color: colors.success,
-              marginBottom: '1rem',
-              fontSize: '1.5rem'
-            }}>
-              Sale Added
-            </h2>
-            <p style={{
-              marginBottom: '1rem',
-              color: colors.textMuted
-            }}>
-              Payment Status: <span style={{
-                color: paymentStatus === 'paid' ? colors.success : colors.warning,
-                fontWeight: 'bold'
-              }}>
-                {paymentStatus === 'paid' ? 'PAID' : 'UNPAID'}
-              </span>
-            </p>
-            <div style={{
-              display: 'flex',
-              gap: '1rem',
-              justifyContent: 'center',
-              marginTop: '1.5rem'
-            }}>
-              <button
-                onClick={handlePrintReceipt}
-                style={{
-                  backgroundColor: colors.accent,
-                  color: 'white',
-                  border: 'none',
-                  padding: '0.75rem 1.5rem',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '1rem',
-                  fontWeight: '500'
-                }}
-              >
+
+            <div style={{ display: 'flex', gap: '10px', marginTop: '16px', flexWrap: 'wrap' }}>
+              <button type="button" className="bc-btn bc-btn-primary" onClick={handlePrintReceipt} style={{ width: 'auto' }}>
                 Print Receipt
               </button>
-              <button
-                onClick={handleTogglePayment}
-                style={{
-                  backgroundColor: paymentStatus === 'paid' ? colors.error : colors.success,
-                  color: 'white',
-                  border: 'none',
-                  padding: '0.75rem 1.5rem',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '1rem',
-                  fontWeight: '500'
-                }}
-              >
+              <button type="button" className="bc-btn bc-btn-outline" onClick={handleTogglePayment} style={{ width: 'auto' }}>
                 Mark as {paymentStatus === 'paid' ? 'Unpaid' : 'Paid'}
               </button>
-              <button
-                onClick={closeSuccessModal}
-                style={{
-                  backgroundColor: colors.textMuted,
-                  color: 'white',
-                  border: 'none',
-                  padding: '0.75rem 1.5rem',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '1rem',
-                  fontWeight: '500'
-                }}
-              >
+              <button type="button" className="bc-btn bc-btn-outline" onClick={closeSuccessModal} style={{ width: 'auto' }}>
                 Close
               </button>
             </div>

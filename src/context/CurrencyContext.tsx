@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { invoke } from '@tauri-apps/api/core';
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 

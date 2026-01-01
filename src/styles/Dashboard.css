@@ -1,7 +1,7 @@
 .dashboard-container {
   min-height: 100vh;
   background: var(--app-bg);
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: var(--font-body);
 }
 
 .dashboard-header {
@@ -36,6 +36,7 @@
   font-size: 1.8rem;
   font-weight: 700;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  font-family: var(--font-heading);
 }
 
 .admin-section {

@@ -16,6 +16,7 @@ import ManageCatalogResources from './ManageCatalogResources';
 import { ProtectedRoute } from './ProtectedRoute';
 import Settings from './SettingsNew';
 import ShiftManager from './ShiftManager';
+import UserManagement from './UserManagement';
 
 const Dashboard: React.FC = () => {
   const { logout, userRole, adminId } = useAuth();
@@ -188,6 +189,7 @@ const Dashboard: React.FC = () => {
     { page: 'financial-report', title: 'Financial Report', icon: '📊' },
     { page: 'shifts', title: 'Shift Management', icon: '💼' },
     { page: 'manage-catalog-resources', title: 'Manage Catalog / Resources', icon: '⚙️' },
+    { page: 'user-management', title: 'User Management', icon: '👥' },
     { page: 'settings', title: 'Settings', icon: '⚙️' }
   ];
 
@@ -722,6 +724,11 @@ const Dashboard: React.FC = () => {
               <Settings />
             </ProtectedRoute>
           )}
+          {currentPage === 'user-management' && (
+            <ProtectedRoute requiredRole="admin">
+              <UserManagement onBack={goBackToDashboard} />
+            </ProtectedRoute>
+          )}
           {/* TODO: Add other page components */}
           {currentPage !== 'dashboard' && 
            currentPage !== 'add-customer' && 
@@ -732,6 +739,7 @@ const Dashboard: React.FC = () => {
            currentPage !== 'financial-report' && 
            currentPage !== 'shifts' && 
            currentPage !== 'manage-catalog-resources' && 
+           currentPage !== 'user-management' && 
            currentPage !== 'settings' && (
             <div style={{
               padding: '2rem',

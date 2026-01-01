@@ -283,7 +283,7 @@
   border-radius: 8px;
   text-align: center;
   margin: 15px 0;
-  font-family: monospace;
+  font-family: var(--font-mono);
 }
 
 .required-phrase strong {

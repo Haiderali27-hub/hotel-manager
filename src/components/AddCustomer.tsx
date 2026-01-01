@@ -66,7 +66,7 @@ const AddCustomer: React.FC<AddCustomerProps> = ({ onBack, onCustomerAdded, refr
         }
       }
     }
-  }, [formData.check_in, formData.check_out, formData.room_id, rooms]);
+  }, [formData.check_in, formData.check_out, formData.room_id, formData.daily_rate, rooms]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;

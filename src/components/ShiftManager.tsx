@@ -72,8 +72,9 @@ const ShiftManager: React.FC = () => {
       setShowOpenModal(false);
       setStartCash('0');
       await fetchCurrentShift();
-    } catch (error: any) {
-      showError(error.toString());
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      showError(message);
     }
   };
 
@@ -98,8 +99,9 @@ const ShiftManager: React.FC = () => {
       setNotes('');
       await fetchCurrentShift();
       await fetchShiftHistory();
-    } catch (error: any) {
-      showError(error.toString());
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      showError(message);
     }
   };
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import type { ActiveCustomerRow, SaleSummary, Unit } from '../api/client';
 import {
     deleteSale,
@@ -60,10 +60,6 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
   const roomGuests = guests.filter(guest => !guest.is_walkin);
   const walkinGuests = guests.filter(guest => guest.is_walkin);
 
-  useEffect(() => {
-    loadActiveGuests();
-  }, []);
-
   // Auto-clear success/error messages after 3 seconds
   useEffect(() => {
     if (successMessage || error) {
@@ -75,46 +71,33 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
     }
   }, [successMessage, error]);
 
-  const loadAvailableRoomsForEdit = async (guestId?: number) => {
-    setIsLoadingRooms(true);
-    try {
-      const rooms = await getAvailableUnitsForCustomer(guestId);
-      setAvailableRooms(rooms);
-    } catch (error) {
-      console.error("Error loading available rooms:", error);
-      setError(`Failed to load available ${label.unit.toLowerCase()}s`);
-    } finally {
-      setIsLoadingRooms(false);
-    }
-  };
-
-  const calculateGuestTotals = (guest: ActiveCustomerRow, foodOrders: SaleSummary[]) => {
+  const calculateGuestTotals = useCallback((guest: ActiveCustomerRow, foodOrders: SaleSummary[]) => {
     // Calculate stay days: if checkout date exists, use it; otherwise use today's date
     const endDate = guest.check_out ? new Date(guest.check_out) : new Date();
     const startDate = new Date(guest.check_in);
     const stayDays = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 3600 * 24)));
     const roomCharges = guest.daily_rate * stayDays;
-    
+
     // Calculate unpaid food orders total
     const unpaidFoodTotal = foodOrders
       .filter(order => !order.paid)
       .reduce((sum, order) => sum + order.total_amount, 0);
-    
+
     const totalAmountDue = roomCharges + unpaidFoodTotal;
-    
+
     return {
       stayDays,
       roomCharges,
       unpaidFoodTotal,
       totalAmountDue
     };
-  };
+  }, []);
 
-  const loadActiveGuests = async () => {
+  const loadActiveGuests = useCallback(async () => {
     try {
       setLoading(true);
       const response = await getActiveCustomers();
-      
+
       // Transform response to include required properties and load food orders
       const guestsWithOrders: ActiveGuestWithOrders[] = await Promise.all(
         response.map(async (guest: ActiveCustomerRow) => {
@@ -122,7 +105,7 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
             // Load food orders for each guest
             const foodOrders = await getSalesByCustomer(guest.guest_id);
             const totals = calculateGuestTotals(guest, foodOrders);
-            
+
             return {
               ...guest,
               totalFoodOrders: foodOrders.length,
@@ -141,15 +124,34 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
           }
         })
       );
-      
+
       setGuests(guestsWithOrders);
     } catch (error) {
-      console.error("Error loading active guests:", error);
+      console.error('Error loading active guests:', error);
       setError(`Failed to load active ${label.client.toLowerCase()}s`);
     } finally {
       setLoading(false);
     }
+  }, [calculateGuestTotals, label.client]);
+
+  useEffect(() => {
+    loadActiveGuests();
+  }, [loadActiveGuests]);
+
+  const loadAvailableRoomsForEdit = async (guestId?: number) => {
+    setIsLoadingRooms(true);
+    try {
+      const rooms = await getAvailableUnitsForCustomer(guestId);
+      setAvailableRooms(rooms);
+    } catch (error) {
+      console.error("Error loading available rooms:", error);
+      setError(`Failed to load available ${label.unit.toLowerCase()}s`);
+    } finally {
+      setIsLoadingRooms(false);
+    }
   };
+
+
 
   const handleEditGuest = async (guest: ActiveCustomerRow) => {
     setEditingGuest(guest);

@@ -45,7 +45,7 @@ export const LoginPage: React.FC = () => {
       if (!result.success) {
         setError(result.message);
       }
-    } catch (error) {
+    } catch {
       setError('An unexpected error occurred. Please try again.');
     } finally {
       setIsLoading(false);

@@ -66,6 +66,9 @@ pub struct MenuItem {
     pub price: f64,
     pub category: String,
     pub is_available: bool,
+    pub stock_quantity: i32,
+    pub track_stock: i32,
+    pub low_stock_limit: i32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

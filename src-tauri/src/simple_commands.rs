@@ -700,7 +700,15 @@ pub fn update_guest(guest_id: i64, name: Option<String>, phone: Option<String>, 
 // ===== MENU COMMANDS =====
 
 #[command]
-pub fn add_menu_item(name: String, price: f64, category: String, is_available: Option<bool>) -> Result<i64, String> {
+pub fn add_menu_item(
+    name: String,
+    price: f64,
+    category: String,
+    is_available: Option<bool>,
+    track_stock: Option<i32>,
+    stock_quantity: Option<i32>,
+    low_stock_limit: Option<i32>,
+) -> Result<i64, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     validate_positive_amount(price, "price")?;
@@ -714,10 +722,31 @@ pub fn add_menu_item(name: String, price: f64, category: String, is_available: O
     }
     
     let available = is_available.unwrap_or(true);
+    let track_stock = track_stock.unwrap_or(0);
+    let stock_quantity = stock_quantity.unwrap_or(0);
+    let low_stock_limit = low_stock_limit.unwrap_or(5);
+
+    if track_stock != 0 && track_stock != 1 {
+        return Err("track_stock must be 0 or 1".to_string());
+    }
+    if stock_quantity < 0 {
+        return Err("stock_quantity must be non-negative".to_string());
+    }
+    if low_stock_limit < 0 {
+        return Err("low_stock_limit must be non-negative".to_string());
+    }
     
     let result = conn.execute(
-        "INSERT INTO menu_items (name, price, category, is_available, is_active) VALUES (?1, ?2, ?3, ?4, 1)",
-        params![name.trim(), price, category.trim(), if available { 1 } else { 0 }],
+        "INSERT INTO menu_items (name, price, category, is_available, is_active, stock_quantity, track_stock, low_stock_limit) VALUES (?1, ?2, ?3, ?4, 1, ?5, ?6, ?7)",
+        params![
+            name.trim(),
+            price,
+            category.trim(),
+            if available { 1 } else { 0 },
+            stock_quantity,
+            track_stock,
+            low_stock_limit
+        ],
     );
     
     match result {
@@ -737,7 +766,7 @@ pub fn get_menu_items() -> Result<Vec<MenuItem>, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     let mut stmt = conn.prepare(
-        "SELECT id, name, price, category, is_available FROM menu_items WHERE is_active = 1 AND is_available = 1 ORDER BY name"
+        "SELECT id, name, price, category, is_available, stock_quantity, track_stock, low_stock_limit FROM menu_items WHERE is_active = 1 AND is_available = 1 ORDER BY name"
     ).map_err(|e| e.to_string())?;
     
     let item_iter = stmt.query_map([], |row| {
@@ -747,6 +776,9 @@ pub fn get_menu_items() -> Result<Vec<MenuItem>, String> {
             price: row.get(2)?,
             category: row.get(3)?,
             is_available: row.get::<_, i32>(4)? == 1,
+            stock_quantity: row.get(5)?,
+            track_stock: row.get(6)?,
+            low_stock_limit: row.get(7)?,
         })
     }).map_err(|e| e.to_string())?;
     
@@ -759,13 +791,25 @@ pub fn get_menu_items() -> Result<Vec<MenuItem>, String> {
 }
 
 #[command]
-pub fn update_menu_item(item_id: i64, name: Option<String>, price: Option<f64>, category: Option<String>, is_available: Option<bool>) -> Result<String, String> {
+pub fn update_menu_item(
+    item_id: i64,
+    name: Option<String>,
+    price: Option<f64>,
+    category: Option<String>,
+    is_available: Option<bool>,
+    track_stock: Option<i32>,
+    stock_quantity: Option<i32>,
+    low_stock_limit: Option<i32>,
+) -> Result<String, String> {
     println!("🐛 DEBUG update_menu_item - Received parameters:");
     println!("  item_id: {:?}", item_id);
     println!("  name: {:?}", name);
     println!("  price: {:?}", price);
     println!("  category: {:?}", category);
     println!("  is_available: {:?}", is_available);
+    println!("  track_stock: {:?}", track_stock);
+    println!("  stock_quantity: {:?}", stock_quantity);
+    println!("  low_stock_limit: {:?}", low_stock_limit);
     
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
@@ -797,6 +841,30 @@ pub fn update_menu_item(item_id: i64, name: Option<String>, price: Option<f64>, 
     if let Some(available) = is_available {
         update_parts.push("is_available = ?");
         params.push(Box::new(if available { 1 } else { 0 }));
+    }
+
+    if let Some(track) = track_stock {
+        if track != 0 && track != 1 {
+            return Err("track_stock must be 0 or 1".to_string());
+        }
+        update_parts.push("track_stock = ?");
+        params.push(Box::new(track));
+    }
+
+    if let Some(stock) = stock_quantity {
+        if stock < 0 {
+            return Err("stock_quantity must be non-negative".to_string());
+        }
+        update_parts.push("stock_quantity = ?");
+        params.push(Box::new(stock));
+    }
+
+    if let Some(limit) = low_stock_limit {
+        if limit < 0 {
+            return Err("low_stock_limit must be non-negative".to_string());
+        }
+        update_parts.push("low_stock_limit = ?");
+        params.push(Box::new(limit));
     }
     
     if update_parts.is_empty() {

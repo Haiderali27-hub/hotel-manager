@@ -1,7 +1,7 @@
 import React from 'react';
 import './App.css';
 
-import Dashboard from './components/Dashboard';
+import ModernDashboard from './components/ModernDashboard';
 import NotificationToast from './components/NotificationToast';
 import OfflineLoginPage from './components/OfflineLoginPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -39,7 +39,7 @@ const AppContent: React.FC = () => {
   if (isAuthenticated) {
     return (
       <>
-        <Dashboard />
+        <ModernDashboard />
         <NotificationToast />
       </>
     );

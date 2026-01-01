@@ -3,7 +3,7 @@ use rusqlite::OptionalExtension;
 use std::path::PathBuf;
 
 // Include the JPG logo as a compile-time embedded resource for final invoices
-const LOGO_DATA: &[u8] = include_bytes!("../logoforcheckout.jpg");
+const LOGO_DATA: &[u8] = include_bytes!("../logoforcheckout.png");
 
 fn get_logo_base64() -> String {
     // Use the embedded JPG logo for final invoices (ICO is too large at 410KB)

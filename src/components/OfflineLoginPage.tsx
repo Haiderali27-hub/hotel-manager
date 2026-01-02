@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import React, { useEffect, useState } from 'react';
-import logoImage from '../assets/Logo/logo.png';
+import fullCardImage from '../assets/Logo/fullcard.png';
 import { useAuth } from '../context/AuthContext';
 import '../styles/LoginPage.css';
 import SetupWizard from './SetupWizard';
@@ -219,13 +219,7 @@ const OfflineLoginPage: React.FC = () => {
       <div className="bc-login-split">
         <div className="bc-login-left bc-card">
           <div className="bc-login-left-inner">
-            <div className="bc-login-brand">
-              <img src={logoImage} alt="BizCore" className="bc-login-logo" />
-              <div>
-                <div className="bc-login-brandname">BizCore</div>
-                <div className="bc-login-tagline">Offline business suite</div>
-              </div>
-            </div>
+            <img src={fullCardImage} alt="INERTIA" className="bc-login-fullcard" />
           </div>
         </div>
 

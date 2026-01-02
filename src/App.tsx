@@ -31,7 +31,7 @@ const AppContent: React.FC = () => {
           height: '50px',
           animation: 'spin 1s linear infinite'
         }}></div>
-        <p style={{marginTop: '20px', fontSize: '18px'}}>Loading Business Manager...</p>
+        <p style={{marginTop: '20px', fontSize: '18px'}}>Loading INERTIA...</p>
       </div>
     );
   }

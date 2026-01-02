@@ -32,7 +32,7 @@ const ModernDashboard: React.FC = () => {
   const { colors, theme } = useTheme();
   const { formatMoney } = useCurrency();
   const [currentPage, setCurrentPage] = useState('dashboard');
-  const [businessName, setBusinessName] = useState('Business Manager');
+  const [businessName, setBusinessName] = useState('INERTIA');
   const [recentSales, setRecentSales] = useState<SaleSummary[]>([]);
   const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([]);
 

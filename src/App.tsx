@@ -1,7 +1,7 @@
 import React from 'react';
 import './App.css';
 
-import Dashboard from './components/Dashboard';
+import ModernDashboard from './components/ModernDashboard';
 import NotificationToast from './components/NotificationToast';
 import OfflineLoginPage from './components/OfflineLoginPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -31,7 +31,7 @@ const AppContent: React.FC = () => {
           height: '50px',
           animation: 'spin 1s linear infinite'
         }}></div>
-        <p style={{marginTop: '20px', fontSize: '18px'}}>Loading Business Manager...</p>
+        <p style={{marginTop: '20px', fontSize: '18px'}}>Loading INERTIA...</p>
       </div>
     );
   }
@@ -39,7 +39,7 @@ const AppContent: React.FC = () => {
   if (isAuthenticated) {
     return (
       <>
-        <Dashboard />
+        <ModernDashboard />
         <NotificationToast />
       </>
     );

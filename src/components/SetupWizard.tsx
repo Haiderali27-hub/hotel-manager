@@ -2,9 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import React, { useMemo, useState } from 'react';
 import '../styles/LoginPage.css';
 
-type BusinessMode = 'hotel' | 'restaurant' | 'retail';
-
-type Step = 1 | 2 | 3;
+type Step = 1 | 2;
 
 interface Props {
   onComplete: () => void;
@@ -16,21 +14,28 @@ const SetupWizard: React.FC<Props> = ({ onComplete }) => {
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
 
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [securityQuestion, setSecurityQuestion] = useState('What is the name of your first school?');
+  const securityQuestions = useMemo(
+    () => [
+      'What is the name of your first school?',
+      'What was the name of your first pet?',
+      'In what city were you born?',
+      'What is your favorite food?',
+      'What is your favorite color?',
+    ],
+    []
+  );
+
+  const [securityQuestion, setSecurityQuestion] = useState(securityQuestions[0]);
   const [securityAnswer, setSecurityAnswer] = useState('');
 
   const [businessName, setBusinessName] = useState('');
-  const [businessMode, setBusinessMode] = useState<BusinessMode>('hotel');
-  const [currencyCode, setCurrencyCode] = useState('USD');
-  const [taxRate, setTaxRate] = useState('5');
+  const [currencySymbol, setCurrencySymbol] = useState('');
+  const [taxRate, setTaxRate] = useState('0');
 
-  const canContinueStep2 = useMemo(() => {
+  const canContinueAdminStep = useMemo(() => {
     return (
       username.trim().length > 0 &&
       password.length >= 8 &&
@@ -40,27 +45,42 @@ const SetupWizard: React.FC<Props> = ({ onComplete }) => {
     );
   }, [username, password, confirmPassword, securityQuestion, securityAnswer]);
 
-  const canContinueStep3 = useMemo(() => {
+  const canContinueBusinessStep = useMemo(() => {
     const parsedTax = Number(taxRate);
     return (
       businessName.trim().length > 0 &&
-      currencyCode.trim().length === 3 &&
+      currencySymbol.trim().length > 0 &&
       Number.isFinite(parsedTax) &&
       parsedTax >= 0 &&
       parsedTax <= 100
     );
-  }, [businessName, currencyCode, taxRate]);
+  }, [businessName, currencySymbol, taxRate]);
 
   const goNext = () => {
     setError('');
     setSuccess('');
-    setStep((s) => (s === 3 ? 3 : ((s + 1) as Step)));
+    setStep((s) => (s === 2 ? 2 : ((s + 1) as Step)));
   };
 
-  const goBack = () => {
-    setError('');
-    setSuccess('');
-    setStep((s) => (s === 1 ? 1 : ((s - 1) as Step)));
+  const toCurrencyCode = (raw: string): string => {
+    const v = raw.trim();
+    if (!v) return 'USD';
+
+    const upper = v.toUpperCase();
+    if (/^[A-Z]{3}$/.test(upper)) return upper;
+
+    const normalized = v.replace(/\s+/g, '').toLowerCase();
+    if (normalized === '$') return 'USD';
+    if (normalized === '€') return 'EUR';
+    if (normalized === '£') return 'GBP';
+    if (normalized === '₹') return 'INR';
+    if (normalized === 'rs' || normalized === 'lkr') return 'LKR';
+    if (normalized === 'pkr') return 'PKR';
+    if (normalized === 'د.إ' || normalized === 'aed') return 'AED';
+    if (normalized === '﷼' || normalized === 'sar') return 'SAR';
+
+    // Fallback: keep app functional without blocking setup.
+    return 'USD';
   };
 
   const finishSetup = async () => {
@@ -81,10 +101,10 @@ const SetupWizard: React.FC<Props> = ({ onComplete }) => {
       // Best-effort: persist Business Basics so the app can be branded immediately.
       // If any of these fail, we still complete setup (admin already exists) and the user can adjust later.
       try {
+        const currencyCode = toCurrencyCode(currencySymbol);
         await Promise.all([
-          invoke('set_business_mode', { mode: businessMode }),
           invoke('set_business_name', { name: businessName.trim() }),
-          invoke('set_currency_code', { code: currencyCode.trim().toUpperCase() }),
+          invoke('set_currency_code', { code: currencyCode }),
           invoke('set_tax_rate', { rate: Number(taxRate) }),
           invoke('set_tax_enabled', { enabled: true }),
         ]);
@@ -106,243 +126,142 @@ const SetupWizard: React.FC<Props> = ({ onComplete }) => {
     }
   };
 
-  const currencyOptions: Array<{ code: string; label: string }> = [
-    { code: 'USD', label: 'USD ($)' },
-    { code: 'EUR', label: 'EUR (€)' },
-    { code: 'GBP', label: 'GBP (£)' },
-    { code: 'INR', label: 'INR (₹)' },
-    { code: 'LKR', label: 'LKR (Rs)' },
-    { code: 'PKR', label: 'PKR (Rs)' },
-    { code: 'AED', label: 'AED (د.إ)' },
-    { code: 'SAR', label: 'SAR (﷼)' },
-  ];
-
   return (
-    <div className="login-container">
-      <div className="login-background">
-        <div className="login-card">
-          <div className="login-header">
-            <div className="brand-logo">
-              <h1>Business Manager Setup</h1>
-            </div>
-            <p className="login-subtitle">First-time setup (offline)</p>
-          </div>
+    <div className="bc-auth-root">
+      <div className="bc-setup-center">
+        <div className="bc-setup-card bc-card">
+          {step === 1 && (
+            <>
+              <h1 className="bc-setup-title">Welcome to BizCore</h1>
+              <p className="bc-setup-subtitle">Create your owner account to get started.</p>
 
-          <div className="login-form">
-            {step === 1 && (
-              <>
-                <div className="success-message">
-                  <span className="success-icon">👋</span>
-                  Welcome to Business Manager.
-                </div>
-
-                <div className="success-message">
-                  <span className="success-icon">🔐</span>
-                  You’ll create the first admin account for this device.
-                </div>
-
-                <button
-                  type="button"
-                  className="login-button"
+              <div className="bc-field">
+                <label className="bc-label">Admin Username</label>
+                <input
+                  className="bc-input bc-auth-input"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="e.g., owner"
                   disabled={isSubmitting}
-                  onClick={goNext}
+                />
+              </div>
+
+              <div className="bc-field">
+                <label className="bc-label">Password</label>
+                <input
+                  className="bc-input bc-auth-input"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Minimum 8 characters"
+                  disabled={isSubmitting}
+                />
+              </div>
+
+              <div className="bc-field">
+                <label className="bc-label">Confirm Password</label>
+                <input
+                  className="bc-input bc-auth-input"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Re-enter password"
+                  disabled={isSubmitting}
+                />
+              </div>
+
+              <div className="bc-field">
+                <label className="bc-label">Security Question</label>
+                <select
+                  className="bc-input bc-auth-input"
+                  value={securityQuestion}
+                  onChange={(e) => setSecurityQuestion(e.target.value)}
+                  disabled={isSubmitting}
                 >
-                  Get Started
-                </button>
-              </>
-            )}
+                  {securityQuestions.map((q) => (
+                    <option key={q} value={q}>
+                      {q}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            {step === 2 && (
-              <>
-                <div className="form-group">
-                  <label className="form-label">Admin Username</label>
-                  <div className="input-wrapper">
-                    <span className="input-icon">👤</span>
-                    <input
-                      className="form-input"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      placeholder="Choose an admin username"
-                      disabled={isSubmitting}
-                    />
-                  </div>
+              <div className="bc-field">
+                <label className="bc-label">Security Answer</label>
+                <input
+                  className="bc-input bc-auth-input"
+                  value={securityAnswer}
+                  onChange={(e) => setSecurityAnswer(e.target.value)}
+                  placeholder="Answer"
+                  disabled={isSubmitting}
+                />
+              </div>
+
+              <button
+                type="button"
+                className="bc-btn bc-btn-primary bc-auth-primary"
+                disabled={!canContinueAdminStep || isSubmitting}
+                onClick={goNext}
+              >
+                Next Step →
+              </button>
+            </>
+          )}
+
+          {step === 2 && (
+            <>
+              <h1 className="bc-setup-title">Business Profile</h1>
+              <p className="bc-setup-subtitle">Set up your basics. You can change these later.</p>
+
+              <div className="bc-field">
+                <label className="bc-label">Business Name</label>
+                <input
+                  className="bc-input bc-auth-input"
+                  value={businessName}
+                  onChange={(e) => setBusinessName(e.target.value)}
+                  placeholder="My Awesome Shop"
+                  disabled={isSubmitting}
+                />
+              </div>
+
+              <div className="bc-grid-2">
+                <div className="bc-field">
+                  <label className="bc-label">Currency Symbol</label>
+                  <input
+                    className="bc-input bc-auth-input"
+                    value={currencySymbol}
+                    onChange={(e) => setCurrencySymbol(e.target.value)}
+                    placeholder="$"
+                    disabled={isSubmitting}
+                  />
                 </div>
 
-                <div className="form-group">
-                  <label className="form-label">Admin Password</label>
-                  <div className="input-wrapper">
-                    <span className="input-icon">🔒</span>
-                    <input
-                      className="form-input"
-                      type={showPassword ? 'text' : 'password'}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Minimum 8 characters"
-                      disabled={isSubmitting}
-                    />
-                    <button
-                      type="button"
-                      className="password-toggle"
-                      onClick={() => setShowPassword((v) => !v)}
-                      disabled={isSubmitting}
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    >
-                      {showPassword ? '🙈' : '👁️'}
-                    </button>
-                  </div>
+                <div className="bc-field">
+                  <label className="bc-label">Tax Rate (%)</label>
+                  <input
+                    className="bc-input bc-auth-input"
+                    value={taxRate}
+                    onChange={(e) => setTaxRate(e.target.value)}
+                    placeholder="0"
+                    inputMode="decimal"
+                    disabled={isSubmitting}
+                  />
                 </div>
+              </div>
 
-                <div className="form-group">
-                  <label className="form-label">Confirm Password</label>
-                  <div className="input-wrapper">
-                    <span className="input-icon">🔒</span>
-                    <input
-                      className="form-input"
-                      type={showConfirmPassword ? 'text' : 'password'}
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="Re-enter password"
-                      disabled={isSubmitting}
-                    />
-                    <button
-                      type="button"
-                      className="password-toggle"
-                      onClick={() => setShowConfirmPassword((v) => !v)}
-                      disabled={isSubmitting}
-                      aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
-                    >
-                      {showConfirmPassword ? '🙈' : '👁️'}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Security Question</label>
-                  <div className="input-wrapper">
-                    <span className="input-icon">❓</span>
-                    <input
-                      className="form-input"
-                      value={securityQuestion}
-                      onChange={(e) => setSecurityQuestion(e.target.value)}
-                      disabled={isSubmitting}
-                    />
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Security Answer</label>
-                  <div className="input-wrapper">
-                    <span className="input-icon">💭</span>
-                    <input
-                      className="form-input"
-                      value={securityAnswer}
-                      onChange={(e) => setSecurityAnswer(e.target.value)}
-                      placeholder="Answer (kept offline)"
-                      disabled={isSubmitting}
-                    />
-                  </div>
-                </div>
-
-                <button type="button" className="secondary-button" disabled={isSubmitting} onClick={goBack}>
-                  Back
-                </button>
-
-                <button
-                  type="button"
-                  className={`login-button ${(!canContinueStep2 || isSubmitting) ? 'loading' : ''}`}
-                  disabled={!canContinueStep2 || isSubmitting}
-                  onClick={goNext}
-                >
-                  Continue
-                </button>
-              </>
-            )}
-
-            {step === 3 && (
-              <>
-                <div className="form-group">
-                  <label className="form-label">Business Type</label>
-                  <div className="input-wrapper">
-                    <span className="input-icon">🏢</span>
-                    <select
-                      className="form-input"
-                      value={businessMode}
-                      onChange={(e) => setBusinessMode(e.target.value as BusinessMode)}
-                      disabled={isSubmitting}
-                    >
-                      <option value="hotel">Hotel / Lodging</option>
-                      <option value="restaurant">Restaurant</option>
-                      <option value="retail">Retail</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Business Name</label>
-                  <div className="input-wrapper">
-                    <span className="input-icon">🏷️</span>
-                    <input
-                      className="form-input"
-                      value={businessName}
-                      onChange={(e) => setBusinessName(e.target.value)}
-                      placeholder="e.g., My Store"
-                      disabled={isSubmitting}
-                    />
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Currency</label>
-                  <div className="input-wrapper">
-                    <span className="input-icon">💱</span>
-                    <select
-                      className="form-input"
-                      value={currencyCode}
-                      onChange={(e) => setCurrencyCode(e.target.value)}
-                      disabled={isSubmitting}
-                    >
-                      {currencyOptions.map((opt) => (
-                        <option key={opt.code} value={opt.code}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Tax Rate (%)</label>
-                  <div className="input-wrapper">
-                    <span className="input-icon">🧾</span>
-                    <input
-                      className="form-input"
-                      value={taxRate}
-                      onChange={(e) => setTaxRate(e.target.value)}
-                      placeholder="e.g., 5"
-                      inputMode="decimal"
-                      disabled={isSubmitting}
-                    />
-                  </div>
-                </div>
-
-                <button type="button" className="secondary-button" disabled={isSubmitting} onClick={goBack}>
-                  Back
-                </button>
-
-                <button
-                  type="button"
-                  className={`login-button ${(!canContinueStep3 || isSubmitting) ? 'loading' : ''}`}
-                  disabled={!canContinueStep3 || isSubmitting}
-                  onClick={finishSetup}
-                >
-                  {isSubmitting ? 'Saving...' : 'Finish Setup'}
-                </button>
-              </>
-            )}
+              <button
+                type="button"
+                className="bc-btn bc-btn-primary bc-auth-primary"
+                disabled={!canContinueBusinessStep || isSubmitting}
+                onClick={finishSetup}
+              >
+                {isSubmitting ? 'Saving…' : 'Finish Setup'}
+              </button>
+            </>
+          )}
 
             {error && (
-              <div className="error-message">
-                <span className="error-icon">⚠️</span>
+              <div className="bc-alert bc-alert-error">
                 {error}
               </div>
             )}
@@ -350,7 +269,7 @@ const SetupWizard: React.FC<Props> = ({ onComplete }) => {
             {error.toLowerCase().includes('setup is already completed') && (
               <button
                 type="button"
-                className="secondary-button"
+                className="bc-btn bc-btn-outline"
                 disabled={isSubmitting}
                 onClick={onComplete}
               >
@@ -359,12 +278,10 @@ const SetupWizard: React.FC<Props> = ({ onComplete }) => {
             )}
 
             {success && (
-              <div className="success-message">
-                <span className="success-icon">✅</span>
+              <div className="bc-alert bc-alert-success">
                 {success}
               </div>
             )}
-          </div>
         </div>
       </div>
     </div>

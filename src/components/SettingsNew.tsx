@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useCurrency } from '../context/CurrencyContext';
 import { useLabels } from '../context/LabelContext';
 import { useNotification } from '../context/NotificationContext';
-import '../styles/SettingsNew.css';
+import UserManagement from './UserManagement';
 
 interface SecurityQuestion {
   id: string;
@@ -12,10 +12,13 @@ interface SecurityQuestion {
   answer: string;
 }
 
+type SettingsTab = 'general' | 'users' | 'branding' | 'database';
+
 const Settings: React.FC = () => {
   const { showSuccess, showError } = useNotification();
   const { currencyCode, locale, supportedCurrencies, setCurrencyCode, setLocale, formatMoney } = useCurrency();
   const { current: label } = useLabels();
+  const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [pendingLocale, setPendingLocale] = useState(locale);
   const [showResetDialog, setShowResetDialog] = useState(false);
@@ -221,7 +224,7 @@ const Settings: React.FC = () => {
     } catch (error) {
       console.error('Browse backup result:', error);
       // The "error" actually contains helpful information about available files
-      showSuccess('📁 Available Backup Files', `${error}`);
+      showSuccess('Available Backup Files', `${error}`);
     }
   };
 
@@ -350,114 +353,60 @@ const Settings: React.FC = () => {
   };
 
   return (
-    <div className="settings-container">
-      <div className="settings-header">
-        <h1>⚙️ Settings</h1>
-        <p>Manage your application data and settings</p>
-      </div>
-
-      <div className="settings-content">
-        {/* Branding Section */}
-        <div className="settings-section">
-          <h2>🎨 Branding</h2>
-          <p>Customize your business look and feel.</p>
-
-          <div className="backup-info">
-            <div className="info-item">
-              <span className="info-label">Business Logo</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                <button
-                  className="backup-button"
-                  onClick={handleUploadLogo}
-                  type="button"
-                >
-                  Upload Logo
-                </button>
-                {businessLogoDataUrl ? (
-                  <img
-                    src={businessLogoDataUrl}
-                    alt="Logo preview"
-                    style={{ height: 48, maxWidth: 140, objectFit: 'contain' }}
-                  />
-                ) : null}
-                {businessLogoPath ? (
-                  <span className="info-value" style={{ maxWidth: 520, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {businessLogoPath}
-                  </span>
-                ) : (
-                  <span className="info-value">No logo set</span>
-                )}
-              </div>
-            </div>
-
-            <div className="info-item">
-              <span className="info-label">Primary Color</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <input
-                  type="color"
-                  value={primaryColor}
-                  onChange={(e) => handlePrimaryColorChange(e.target.value)}
-                  style={{ width: 44, height: 34, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' }}
-                  aria-label="Primary color"
-                />
-                <span className="info-value">{primaryColor.toUpperCase()}</span>
-              </div>
-            </div>
-
-            <div className="info-item">
-              <span className="info-label">Receipt Header</span>
-              <textarea
-                value={receiptHeader}
-                onChange={(e) => setReceiptHeader(e.target.value)}
-                placeholder="Shown near the top of receipts (optional)"
-                className="restore-path-input"
-                style={{ minHeight: 80, resize: 'vertical' }}
-              />
-              <div style={{ marginTop: 10 }}>
-                <button
-                  className="backup-button"
-                  onClick={saveReceiptHeader}
-                  type="button"
-                  disabled={isSavingReceiptHeader}
-                >
-                  {isSavingReceiptHeader ? 'Saving…' : 'Save Header'}
-                </button>
-              </div>
-            </div>
-
-            <div className="info-item">
-              <span className="info-label">Receipt Footer</span>
-              <textarea
-                value={receiptFooter}
-                onChange={(e) => setReceiptFooter(e.target.value)}
-                placeholder="Shown at the bottom of receipts (optional)"
-                className="restore-path-input"
-                style={{ minHeight: 80, resize: 'vertical' }}
-              />
-              <div style={{ marginTop: 10 }}>
-                <button
-                  className="backup-button"
-                  onClick={saveReceiptFooter}
-                  type="button"
-                  disabled={isSavingReceiptFooter}
-                >
-                  {isSavingReceiptFooter ? 'Saving…' : 'Save Footer'}
-                </button>
-              </div>
+    <div style={{ padding: '24px', height: '100%', overflow: 'auto' }}>
+      <div className="bc-card" style={{ borderRadius: 10, padding: 16, marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div>
+            <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: 'var(--app-text)' }}>Settings</h1>
+            <div style={{ marginTop: 4, fontSize: 14, color: 'var(--app-text-secondary)' }}>
+              Manage your application settings
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Localization Section */}
-        <div className="settings-section">
-          <h2>🌍 Localization</h2>
-          <p>Choose your currency and locale (number/date formatting) for this device.</p>
+      <div className="bc-card" style={{ borderRadius: 10, padding: 10, marginBottom: 12 }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className={activeTab === 'general' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'}
+            onClick={() => setActiveTab('general')}
+          >
+            General
+          </button>
+          <button
+            type="button"
+            className={activeTab === 'users' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'}
+            onClick={() => setActiveTab('users')}
+          >
+            Users
+          </button>
+          <button
+            type="button"
+            className={activeTab === 'branding' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'}
+            onClick={() => setActiveTab('branding')}
+          >
+            Branding
+          </button>
+          <button
+            type="button"
+            className={activeTab === 'database' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'}
+            onClick={() => setActiveTab('database')}
+          >
+            Database
+          </button>
+        </div>
+      </div>
 
-          <div className="backup-info">
-            <div className="info-item">
-              <span className="info-label">Currency</span>
+      {activeTab === 'general' && (
+        <div className="bc-card" style={{ borderRadius: 10, padding: 16 }}>
+          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 12, color: 'var(--app-text)' }}>General</div>
+
+          <div style={{ display: 'grid', gap: 14 }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--app-text-secondary)' }}>Currency</div>
               <select
-                className="verification-input"
+                className="bc-input"
                 value={currencyCode}
                 onChange={async (e) => {
                   try {
@@ -474,15 +423,15 @@ const Settings: React.FC = () => {
                   </option>
                 ))}
               </select>
-              <p style={{ marginTop: '6px', color: 'var(--app-text-muted)' }}>
+              <div style={{ marginTop: 6, color: 'var(--app-text-secondary)', fontSize: 12 }}>
                 Preview: {formatMoney(1234.56)}
-              </p>
+              </div>
             </div>
 
-            <div className="info-item">
-              <span className="info-label">Locale</span>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--app-text-secondary)' }}>Locale</div>
               <input
-                className="verification-input"
+                className="bc-input"
                 value={pendingLocale}
                 onChange={(e) => setPendingLocale(e.target.value)}
                 onBlur={async () => {
@@ -495,187 +444,216 @@ const Settings: React.FC = () => {
                 }}
                 placeholder="en-US"
               />
-              <p style={{ marginTop: '6px', color: 'var(--app-text-muted)' }}>
+              <div style={{ marginTop: 6, color: 'var(--app-text-secondary)', fontSize: 12 }}>
                 Tip: use values like <strong>en-US</strong>, <strong>en-GB</strong>, <strong>fr-FR</strong>, <strong>ar-SA</strong>.
-              </p>
+              </div>
             </div>
           </div>
         </div>
+      )}
 
-        {/* Backup Section */}
-        <div className="settings-section">
-          <h2>📁 Data Backup</h2>
-          <p>Export your data to an external location for safekeeping.</p>
-          
-          <div className="backup-info">
-            <div className="info-item">
-              <span className="info-label">Includes:</span>
-              <ul>
-                <li>{label.client} records and activity history</li>
-                <li>{label.unit} information and availability</li>
-                <li>Sales and catalog items</li>
-                <li>Financial records and expenses</li>
-                <li>User accounts and settings</li>
-              </ul>
+      {activeTab === 'users' && (
+        <div className="bc-card" style={{ borderRadius: 10, padding: 16 }}>
+          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 12, color: 'var(--app-text)' }}>Users</div>
+          <UserManagement embedded />
+        </div>
+      )}
+
+      {activeTab === 'branding' && (
+        <div className="bc-card" style={{ borderRadius: 10, padding: 16 }}>
+          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 12, color: 'var(--app-text)' }}>Branding</div>
+
+          <div style={{ display: 'grid', gap: 14 }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--app-text-secondary)' }}>Business Logo</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <button className="bc-btn bc-btn-primary" onClick={handleUploadLogo} type="button">
+                  Upload Logo
+                </button>
+                {businessLogoDataUrl ? (
+                  <img src={businessLogoDataUrl} alt="Logo preview" style={{ height: 48, maxWidth: 140, objectFit: 'contain' }} />
+                ) : null}
+                <div style={{ color: 'var(--app-text-secondary)', fontSize: 12, maxWidth: 520, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {businessLogoPath || 'No logo set'}
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--app-text-secondary)' }}>Primary Color</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <input
+                  type="color"
+                  value={primaryColor}
+                  onChange={(e) => handlePrimaryColorChange(e.target.value)}
+                  style={{ width: 44, height: 34, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' }}
+                  aria-label="Primary color"
+                />
+                <div style={{ color: 'var(--app-text-secondary)', fontSize: 12 }}>{primaryColor.toUpperCase()}</div>
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--app-text-secondary)' }}>Receipt Header</div>
+              <textarea
+                value={receiptHeader}
+                onChange={(e) => setReceiptHeader(e.target.value)}
+                placeholder="Shown near the top of receipts (optional)"
+                className="bc-input"
+                style={{ minHeight: 90, resize: 'vertical' }}
+              />
+              <div style={{ marginTop: 10 }}>
+                <button className="bc-btn bc-btn-primary" onClick={saveReceiptHeader} type="button" disabled={isSavingReceiptHeader}>
+                  {isSavingReceiptHeader ? 'Saving…' : 'Save Header'}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--app-text-secondary)' }}>Receipt Footer</div>
+              <textarea
+                value={receiptFooter}
+                onChange={(e) => setReceiptFooter(e.target.value)}
+                placeholder="Shown at the bottom of receipts (optional)"
+                className="bc-input"
+                style={{ minHeight: 90, resize: 'vertical' }}
+              />
+              <div style={{ marginTop: 10 }}>
+                <button className="bc-btn bc-btn-primary" onClick={saveReceiptFooter} type="button" disabled={isSavingReceiptFooter}>
+                  {isSavingReceiptFooter ? 'Saving…' : 'Save Footer'}
+                </button>
+              </div>
             </div>
           </div>
-
-          <button
-            className="backup-btn"
-            onClick={handleBackupData}
-            disabled={isBackingUp}
-          >
-            {isBackingUp ? (
-              <>
-                <span className="spinner"></span>
-                Creating Backup...
-              </>
-            ) : (
-              <>
-                💾 Create Backup
-              </>
-            )}
-          </button>
         </div>
+      )}
 
-        {/* Restore Section */}
-        <div className="settings-section">
-          <h2>📥 Restore Database</h2>
-          <p>Restore your data from a previously created backup file.</p>
-          
-          <div className="restore-info">
-            <div className="info-item">
-              <span className="info-label">Restore from:</span>
-              <ul>
-                <li>Database backup files (.db)</li>
-                <li>Automatic backups from resets</li>
-                <li>Manual backup files</li>
-              </ul>
+      {activeTab === 'database' && (
+        <div style={{ display: 'grid', gap: 12 }}>
+          <div className="bc-card" style={{ borderRadius: 10, padding: 16 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 6, color: 'var(--app-text)' }}>Backup</div>
+            <div style={{ color: 'var(--app-text-secondary)', fontSize: 13, marginBottom: 12 }}>
+              Export your data to an external location for safekeeping.
             </div>
-            <div className="info-item">
-              <span className="info-label">⚠️ Important:</span>
-              <p>Current data will be backed up automatically before restore.</p>
+            <div style={{ color: 'var(--app-text-secondary)', fontSize: 12, marginBottom: 12 }}>
+              Includes: {label.client} records, {label.unit} data, sales, catalog items, financial records, users, and settings.
             </div>
+            <button className="bc-btn bc-btn-primary" onClick={handleBackupData} disabled={isBackingUp}>
+              {isBackingUp ? 'Creating Backup…' : 'Create Backup'}
+            </button>
           </div>
 
-          <button
-            className="restore-btn"
-            onClick={handleRestoreDatabase}
-          >
-            📥 Restore from Backup
-          </button>
-        </div>
-
-        {/* Reset Section */}
-        <div className="settings-section danger-section">
-          <h2>🗑️ Reset Application Data</h2>
-          <p className="danger-text">
-            This will permanently delete ALL data including {label.client.toLowerCase()} records, {label.unit.toLowerCase()} records, sales, and settings.
-          </p>
-          
-          <div className="reset-warning">
-            <h3>⚠️ Warning</h3>
-            <p>This action cannot be undone. Make sure you have a backup before proceeding.</p>
-            <ul>
-              <li>All {label.client.toLowerCase()} records will be deleted</li>
-              <li>All {label.unit.toLowerCase()} data will be lost</li>
-              <li>All financial records will be removed</li>
-              <li>Application will return to initial state</li>
-            </ul>
+          <div className="bc-card" style={{ borderRadius: 10, padding: 16 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 6, color: 'var(--app-text)' }}>Restore</div>
+            <div style={{ color: 'var(--app-text-secondary)', fontSize: 13, marginBottom: 12 }}>
+              Restore your data from a previously created backup file. Your current data will be backed up automatically before restore.
+            </div>
+            <button className="bc-btn bc-btn-primary" onClick={handleRestoreDatabase}>
+              Restore from Backup
+            </button>
           </div>
 
-          <button
-            className="reset-btn"
-            onClick={startResetProcess}
-          >
-            🔄 Reset Application Data
-          </button>
+          <div className="bc-card" style={{ borderRadius: 10, padding: 16 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 6, color: 'var(--app-text)' }}>Reset</div>
+            <div style={{ color: 'var(--app-text-secondary)', fontSize: 13, marginBottom: 12 }}>
+              This will permanently delete ALL data including {label.client.toLowerCase()} records, {label.unit.toLowerCase()} records, sales, and settings.
+            </div>
+            <button className="bc-btn bc-btn-primary" onClick={startResetProcess}>
+              Reset Application Data
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Reset Confirmation Dialog */}
       {showResetDialog && (
-        <div className="modal-overlay">
-          <div className="reset-modal">
-            <div className="modal-header">
-              <h3>🛡️ Security Verification</h3>
-              <button className="close-btn" onClick={cancelReset}>×</button>
+        <div className="bc-modal-overlay" role="dialog" aria-modal="true">
+          <div className="bc-modal">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: 16, borderBottom: '1px solid var(--app-border)' }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--app-text)' }}>Security Verification</div>
+              <button className="bc-btn bc-btn-outline" onClick={cancelReset} type="button">
+                Close
+              </button>
             </div>
 
-            <div className="modal-content">
+            <div style={{ padding: 16 }}>
               {resetStep === 1 && (
-                <div className="verification-step">
-                  <h4>Step 1: Safety Verification</h4>
-                  <div className="safety-warning">
-                    <p><strong>⚠️ WARNING:</strong> This action will permanently delete ALL data including:</p>
-                    <ul>
-                      <li>All {label.client.toLowerCase()} records and history</li>
-                      <li>All {label.unit.toLowerCase()} records and assignments</li>
-                      <li>All sales and catalog items</li>
-                      <li>All financial records and expenses</li>
-                      <li>All application settings</li>
-                    </ul>
-                    <p><strong>An automatic backup will be created before reset.</strong></p>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 10, color: 'var(--app-text)' }}>Step 1: Safety Verification</div>
+                  <div className="bc-card" style={{ borderRadius: 8, padding: 12, marginBottom: 12 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--app-text)' }}>
+                      Warning
+                    </div>
+                    <div style={{ color: 'var(--app-text-secondary)', fontSize: 13 }}>
+                      This action will permanently delete ALL data including {label.client.toLowerCase()} records, {label.unit.toLowerCase()} records, sales, financial records, and settings.
+                      <div style={{ marginTop: 8 }}>
+                        An automatic backup will be created before reset.
+                      </div>
+                    </div>
                   </div>
-                  <p>To continue, please type the safety phrase exactly:</p>
-                  <p className="required-phrase"><strong>"I UNDERSTAND THE RISKS"</strong></p>
+                  <div style={{ color: 'var(--app-text-secondary)', fontSize: 13, marginBottom: 8 }}>
+                    To continue, please type the safety phrase exactly:
+                  </div>
+                  <div style={{ color: 'var(--app-text)', fontSize: 13, fontWeight: 800, marginBottom: 8 }}>
+                    "I UNDERSTAND THE RISKS"
+                  </div>
                   <input
                     type="text"
                     value={safetyPhrase}
                     onChange={(e) => setSafetyPhrase(e.target.value)}
                     placeholder="Type the safety phrase exactly"
-                    className="verification-input"
-                    onKeyPress={(e) => e.key === 'Enter' && validateSafetyPhrase()}
+                    className="bc-input"
+                    onKeyDown={(e) => e.key === 'Enter' && validateSafetyPhrase()}
                   />
-                  <div className="step-buttons">
-                    <button onClick={cancelReset} className="cancel-btn">Cancel</button>
-                    <button onClick={validateSafetyPhrase} className="verify-btn">Continue</button>
+                  <div style={{ display: 'flex', gap: 10, marginTop: 12, justifyContent: 'flex-end' }}>
+                    <button onClick={cancelReset} className="bc-btn bc-btn-outline" type="button">Cancel</button>
+                    <button onClick={validateSafetyPhrase} className="bc-btn bc-btn-primary" type="button">Continue</button>
                   </div>
                 </div>
               )}
 
               {resetStep === 2 && securityQuestion && (
-                <div className="verification-step">
-                  <h4>Step 2: Security Question</h4>
-                  <p className="security-question">{securityQuestion.question}</p>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 10, color: 'var(--app-text)' }}>Step 2: Security Question</div>
+                  <div style={{ color: 'var(--app-text-secondary)', fontSize: 13, marginBottom: 10 }}>{securityQuestion.question}</div>
                   <input
                     type="text"
                     value={securityAnswer}
                     onChange={(e) => setSecurityAnswer(e.target.value)}
                     placeholder="Enter your answer"
-                    className="verification-input"
-                    onKeyPress={(e) => e.key === 'Enter' && validateSecurityQuestion()}
+                    className="bc-input"
+                    onKeyDown={(e) => e.key === 'Enter' && validateSecurityQuestion()}
                   />
-                  <div className="step-buttons">
-                    <button onClick={cancelReset} className="cancel-btn">Cancel</button>
-                    <button onClick={validateSecurityQuestion} className="verify-btn">Verify</button>
+                  <div style={{ display: 'flex', gap: 10, marginTop: 12, justifyContent: 'flex-end' }}>
+                    <button onClick={cancelReset} className="bc-btn bc-btn-outline" type="button">Cancel</button>
+                    <button onClick={validateSecurityQuestion} className="bc-btn bc-btn-primary" type="button">Verify</button>
                   </div>
                 </div>
               )}
 
               {resetStep === 3 && (
-                <div className="verification-step">
-                  <h4>Step 3: Final Confirmation</h4>
-                  <div className="final-warning">
-                    <p>⚠️ This is your last chance to cancel!</p>
-                    <p>Type <strong>"DELETE ALL DATA"</strong> to confirm:</p>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 10, color: 'var(--app-text)' }}>Step 3: Final Confirmation</div>
+                  <div style={{ color: 'var(--app-text-secondary)', fontSize: 13, marginBottom: 10 }}>
+                    This is your last chance to cancel. Type <strong>"DELETE ALL DATA"</strong> to confirm.
                   </div>
                   <input
                     type="text"
                     value={finalConfirmation}
                     onChange={(e) => setFinalConfirmation(e.target.value)}
                     placeholder="Type: DELETE ALL DATA"
-                    className="verification-input confirmation-input"
-                    onKeyPress={(e) => e.key === 'Enter' && performReset()}
+                    className="bc-input"
+                    onKeyDown={(e) => e.key === 'Enter' && performReset()}
                   />
-                  <div className="step-buttons">
-                    <button onClick={cancelReset} className="cancel-btn">Cancel</button>
+                  <div style={{ display: 'flex', gap: 10, marginTop: 12, justifyContent: 'flex-end' }}>
+                    <button onClick={cancelReset} className="bc-btn bc-btn-outline" type="button">Cancel</button>
                     <button 
                       onClick={performReset} 
-                      className="delete-btn"
+                      className="bc-btn bc-btn-primary"
                       disabled={finalConfirmation !== 'DELETE ALL DATA'}
+                      type="button"
                     >
-                      🗑️ Delete All Data
+                      Delete All Data
                     </button>
                   </div>
                 </div>
@@ -687,155 +665,111 @@ const Settings: React.FC = () => {
 
       {/* Restore Dialog */}
       {showRestoreDialog && (
-        <div className="modal-overlay">
-          <div className="restore-modal">
-            <div className="modal-header">
-              <h3>📥 Restore Database - Step {restoreStep} of 3</h3>
-              <button className="close-btn" onClick={cancelRestore}>×</button>
+        <div className="bc-modal-overlay" role="dialog" aria-modal="true">
+          <div className="bc-modal">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: 16, borderBottom: '1px solid var(--app-border)' }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--app-text)' }}>Restore Database (Step {restoreStep} of 3)</div>
+              <button className="bc-btn bc-btn-outline" onClick={cancelRestore} type="button">
+                Close
+              </button>
             </div>
 
-            <div className="modal-content">
+            <div style={{ padding: 16 }}>
               {restoreStep === 1 && (
-                <div className="restore-warning-step">
-                  <h4>⚠️ Important Safety Warning</h4>
-                  <div className="critical-warning">
-                    <p><strong>This operation will replace ALL your current data!</strong></p>
-                    <ul>
-                      <li>✅ Your current database will be automatically backed up first</li>
-                      <li>✅ The backup file will be validated before restoration</li>
-                      <li>✅ If anything goes wrong, your original data will be restored</li>
-                      <li>⚠️ Make sure you have the correct backup file</li>
-                      <li>⚠️ Only use backup files created by this application</li>
-                    </ul>
-                  </div>
-                  
-                  <div className="safety-checklist">
-                    <h4>✅ Safety Features Active:</h4>
-                    <ul>
-                      <li>Automatic backup before restore</li>
-                      <li>File integrity validation</li>
-                      <li>Schema compatibility check</li>
-                      <li>Functionality testing</li>
-                      <li>Automatic rollback on failure</li>
-                    </ul>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 10, color: 'var(--app-text)' }}>Important Safety Warning</div>
+                  <div className="bc-card" style={{ borderRadius: 8, padding: 12, marginBottom: 12 }}>
+                    <div style={{ color: 'var(--app-text-secondary)', fontSize: 13 }}>
+                      This operation will replace ALL your current data.
+                      <ul style={{ margin: '10px 0 0 18px', color: 'var(--app-text-secondary)', fontSize: 13 }}>
+                        <li>Your current database will be automatically backed up first</li>
+                        <li>The backup file will be validated before restoration</li>
+                        <li>If anything goes wrong, your original data will be restored</li>
+                        <li>Only use backup files created by this application</li>
+                      </ul>
+                    </div>
                   </div>
 
-                  <div className="step-buttons">
-                    <button onClick={cancelRestore} className="cancel-btn">
-                      Cancel
-                    </button>
-                    <button 
-                      onClick={() => setRestoreStep(2)} 
-                      className="continue-btn"
-                    >
-                      Continue - I Understand the Risks
+                  <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                    <button onClick={cancelRestore} className="bc-btn bc-btn-outline" type="button">Cancel</button>
+                    <button onClick={() => setRestoreStep(2)} className="bc-btn bc-btn-primary" type="button">
+                      Continue
                     </button>
                   </div>
                 </div>
               )}
 
               {restoreStep === 2 && (
-                <div className="file-selection-step">
-                  <h4>📁 Select Backup File</h4>
-                  
-                  <div className="file-info">
-                    <p>Backup files are typically located in:</p>
-                    <ul>
-                      <li>Your Desktop folder</li>
-                      <li>Downloads folder</li>
-                      <li>The app's backup directory</li>
-                    </ul>
-                    <p>Look for files named like: <code>business_backup_YYYYMMDD_HHMMSS.db</code></p>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 10, color: 'var(--app-text)' }}>Select Backup File</div>
+                  <div style={{ color: 'var(--app-text-secondary)', fontSize: 13, marginBottom: 10 }}>
+                    Backup files are typically in your Desktop, Downloads, or the app's backup directory.
                   </div>
 
-                  <div className="restore-path-info">
-                    <label htmlFor="restorePathInput">Backup File Path:</label>
-                    <div className="file-input-group">
+                  <div style={{ marginBottom: 10 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--app-text-secondary)' }}>Backup File Path</div>
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                       <input
                         id="restorePathInput"
                         type="text"
                         value={restoreFilePath}
                         onChange={(e) => setRestoreFilePath(e.target.value)}
-                        placeholder="C:\Users\YourName\Desktop\business_backup_20250905_143022.db"
-                        className="restore-path-input"
+                        placeholder="C:\\Users\\YourName\\Desktop\\business_backup_20250905_143022.db"
+                        className="bc-input"
+                        style={{ flex: '1 1 360px' }}
                       />
-                      <button 
-                        onClick={findLatestBackup}
-                        className="browse-btn"
-                        type="button"
-                      >
-                        🔍 Find Latest
+                      <button onClick={findLatestBackup} className="bc-btn bc-btn-outline" type="button">
+                        Find Latest
                       </button>
-                      <button 
-                        onClick={browseBackupFile}
-                        className="browse-btn"
-                        type="button"
-                      >
-                        📁 Browse
+                      <button onClick={browseBackupFile} className="bc-btn bc-btn-outline" type="button">
+                        Browse
                       </button>
                     </div>
-                    <small>⚠️ File must end with .db extension</small>
+                    <div style={{ marginTop: 6, color: 'var(--app-text-secondary)', fontSize: 12 }}>File must end with .db</div>
                   </div>
 
-                  <div className="step-buttons">
-                    <button onClick={() => setRestoreStep(1)} className="back-btn">
-                      ← Back
+                  <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                    <button onClick={() => setRestoreStep(1)} className="bc-btn bc-btn-outline" type="button">
+                      Back
                     </button>
-                    <button 
+                    <button
                       onClick={() => {
                         if (validateRestoreFile()) {
                           setRestoreStep(3);
                         }
-                      }} 
-                      className="continue-btn"
+                      }}
+                      className="bc-btn bc-btn-primary"
                       disabled={!restoreFilePath.trim()}
+                      type="button"
                     >
-                      Continue →
+                      Continue
                     </button>
                   </div>
                 </div>
               )}
 
               {restoreStep === 3 && (
-                <div className="final-confirmation-step">
-                  <h4>🔍 Final Confirmation</h4>
-                  
-                  <div className="restore-summary">
-                    <h5>Restore Details:</h5>
-                    <p><strong>From:</strong> {restoreFilePath}</p>
-                    <p><strong>Action:</strong> Replace all current data with backup data</p>
-                    <p><strong>Safety:</strong> Current database will be backed up automatically</p>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 10, color: 'var(--app-text)' }}>Final Confirmation</div>
+
+                  <div className="bc-card" style={{ borderRadius: 8, padding: 12, marginBottom: 12 }}>
+                    <div style={{ color: 'var(--app-text-secondary)', fontSize: 13 }}>
+                      <div><strong>From:</strong> {restoreFilePath}</div>
+                      <div><strong>Action:</strong> Replace all current data with backup data</div>
+                      <div><strong>Safety:</strong> Current database will be backed up automatically</div>
+                    </div>
                   </div>
 
-                  <div className="final-warning">
-                    <h5>⚠️ Last Warning:</h5>
-                    <p>This will permanently replace all your current data including:</p>
-                    <ul>
-                      <li>{label.client} records and activity history</li>
-                      <li>{label.unit} information</li>
-                      <li>Sales and catalog items</li>
-                      <li>Financial records and expenses</li>
-                    </ul>
-                    <p><strong>Are you absolutely sure you want to proceed?</strong></p>
+                  <div style={{ color: 'var(--app-text-secondary)', fontSize: 13, marginBottom: 12 }}>
+                    This will replace {label.client} records, {label.unit} data, sales, catalog items, and financial records.
                   </div>
 
-                  <div className="step-buttons">
-                    <button onClick={() => setRestoreStep(2)} className="back-btn">
-                      ← Back
+                  <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                    <button onClick={() => setRestoreStep(2)} className="bc-btn bc-btn-outline" type="button">
+                      Back
                     </button>
-                    <button 
-                      onClick={performRestore}
-                      className="restore-final-btn"
-                      disabled={isRestoring}
-                    >
-                      {isRestoring ? (
-                        <>
-                          <span className="spinner"></span>
-                          Restoring Database...
-                        </>
-                      ) : (
-                        '📥 Yes, Restore Database'
-                      )}
+                    <button onClick={performRestore} className="bc-btn bc-btn-primary" disabled={isRestoring} type="button">
+                      {isRestoring ? 'Restoring Database…' : 'Yes, Restore Database'}
                     </button>
                   </div>
                 </div>

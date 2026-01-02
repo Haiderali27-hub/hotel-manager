@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import React, { useEffect, useState } from 'react';
-import logoImage from '../assets/Logo/logo.png';
+import fullCardImage from '../assets/Logo/fullcard.png';
 import { useAuth } from '../context/AuthContext';
 import '../styles/LoginPage.css';
 import SetupWizard from './SetupWizard';
@@ -42,7 +42,6 @@ const OfflineLoginPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
-  const [showPassword, setShowPassword] = useState(false);
   const [showResetPassword, setShowResetPassword] = useState(false);
   const [securityQuestion, setSecurityQuestion] = useState<string>('');
 
@@ -188,10 +187,6 @@ const OfflineLoginPage: React.FC = () => {
     }
   };
 
-  const togglePasswordVisibility = () => {
-    setShowPassword(!showPassword);
-  };
-
   const handleBackToLogin = () => {
     setShowResetPassword(false);
     setError('');
@@ -220,155 +215,114 @@ const OfflineLoginPage: React.FC = () => {
   }
 
   return (
-    <div className="login-container">
-      <div className="login-background">
-        <div className="login-card">
-          <div className="login-header">
-            <div className="brand-logo">
-              <img src={logoImage} alt="Business Manager" className="logo-image" />
-              <h1>Business Manager</h1>
-            </div>
-            <p className="login-subtitle">
-              {showResetPassword ? 'Reset Your Password' : 'Secure Admin Access'}
-            </p>
+    <div className="bc-auth-root">
+      <div className="bc-login-split">
+        <div className="bc-login-left bc-card">
+          <div className="bc-login-left-inner">
+            <img src={fullCardImage} alt="INERTIA" className="bc-login-fullcard" />
           </div>
+        </div>
 
-          {!showResetPassword ? (
-            // Login Form
-            <form className="login-form" onSubmit={handleSubmit}>
-              <div className="success-message" style={{ marginBottom: '14px' }}>
-                <span className="success-icon">ℹ️</span>
-                {isSetupComplete === false
-                  ? 'First time using this app on this device? Click First-time setup to create the admin account.'
-                  : isSetupComplete === true
-                    ? 'An admin account already exists on this device. Please log in, or use Forgot password if needed.'
-                    : 'Log in with your admin account. If this is the first time and setup is required, use First-time setup.'}
-              </div>
+        <div className="bc-login-right">
+          <div className="bc-login-right-inner">
+            <h2 className="bc-login-title">{showResetPassword ? 'Reset Password' : 'Sign In'}</h2>
 
-              <div className="form-group">
-                <label htmlFor="username" className="form-label">Username</label>
-                <div className="input-wrapper">
-                  <span className="input-icon">👤</span>
+            {!showResetPassword ? (
+              <form className="bc-form" onSubmit={handleSubmit}>
+                <div className="bc-alert bc-alert-info">
+                  {isSetupComplete === false
+                    ? 'First time using this app on this device? Use First-time setup to create the owner account.'
+                    : isSetupComplete === true
+                      ? 'An owner account already exists on this device. Please sign in, or use Forgot password if needed.'
+                      : 'Sign in with your owner account. If setup is required, use First-time setup.'}
+                </div>
+
+                <div className="bc-field">
+                  <label className="bc-label">Username</label>
                   <input
                     type="text"
-                    id="username"
                     name="username"
-                    className="form-input"
-                    placeholder="Enter admin username"
+                    className="bc-input bc-auth-input"
+                    placeholder="e.g., owner"
                     value={formData.username}
                     onChange={handleInputChange}
                     disabled={isLoading}
                     required
                   />
                 </div>
-              </div>
 
-              <div className="form-group">
-                <label htmlFor="password" className="form-label">Password</label>
-                <div className="input-wrapper">
-                  <span className="input-icon">🔒</span>
+                <div className="bc-field">
+                  <label className="bc-label">Password</label>
                   <input
-                    type={showPassword ? 'text' : 'password'}
-                    id="password"
+                    type="password"
                     name="password"
-                    className="form-input"
-                    placeholder="Enter admin password"
+                    className="bc-input bc-auth-input"
+                    placeholder="Enter your password"
                     value={formData.password}
                     onChange={handleInputChange}
                     disabled={isLoading}
                     required
                   />
-                  <button
-                    type="button"
-                    className="password-toggle"
-                    onClick={togglePasswordVisibility}
-                    disabled={isLoading}
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showPassword ? '🙈' : '👁️'}
-                  </button>
                 </div>
-              </div>
 
-              {error && (
-                <div className="error-message">
-                  <span className="error-icon">⚠️</span>
-                  {error}
-                </div>
-              )}
+                {error && <div className="bc-alert bc-alert-error">{error}</div>}
+                {success && <div className="bc-alert bc-alert-success">{success}</div>}
 
-              {success && (
-                <div className="success-message">
-                  <span className="success-icon">✅</span>
-                  {success}
-                </div>
-              )}
+                <button
+                  type="submit"
+                  className="bc-btn bc-btn-primary bc-auth-primary"
+                  disabled={isLoading}
+                >
+                  {isLoading ? 'Authenticating…' : 'Login'}
+                </button>
 
-              <button
-                type="submit"
-                className={`login-button ${isLoading ? 'loading' : ''}`}
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <div className="loading-spinner">
-                    <div className="spinner"></div>
-                    <span>Authenticating...</span>
-                  </div>
-                ) : (
-                  'Login'
-                )}
-              </button>
-
-              <button
-                type="button"
-                className="secondary-button"
-                disabled={isLoading}
-                onClick={() => {
-                  setShowResetPassword(true);
-                  setError('');
-                  setSuccess('');
-                }}
-              >
-                Forgot password?
-              </button>
-
-              {isSetupComplete !== true && (
                 <button
                   type="button"
-                  className="secondary-button"
+                  className="bc-btn bc-btn-outline"
                   disabled={isLoading}
                   onClick={() => {
-                    setShowSetupWizard(true);
+                    setShowResetPassword(true);
                     setError('');
                     setSuccess('');
                   }}
                 >
-                  First-time setup
+                  Forgot password?
                 </button>
-              )}
-            </form>
-          ) : (
-            // Security Question Form
-            <form className="login-form" onSubmit={handleResetPassword}>
-              <div className="success-message" style={{ marginBottom: '14px' }}>
-                <span className="success-icon">ℹ️</span>
-                Use this only if you already created an admin account and forgot the password.
-              </div>
 
-              <div className="security-question">
-                <strong>Security Question:</strong>
-                <p>{securityQuestion || 'Load your security question first.'}</p>
-              </div>
+                {isSetupComplete !== true && (
+                  <button
+                    type="button"
+                    className="bc-btn bc-btn-outline"
+                    disabled={isLoading}
+                    onClick={() => {
+                      setShowSetupWizard(true);
+                      setError('');
+                      setSuccess('');
+                    }}
+                  >
+                    First-time setup
+                  </button>
+                )}
+              </form>
+            ) : (
+              <form className="bc-form" onSubmit={handleResetPassword}>
+                <div className="bc-alert bc-alert-info">
+                  Use this only if you already created an owner account and forgot the password.
+                </div>
 
-              <div className="form-group">
-                <label htmlFor="resetUsername" className="form-label">Username</label>
-                <div className="input-wrapper">
-                  <span className="input-icon">👤</span>
+                <div className="bc-card bc-reset-question">
+                  <div className="bc-reset-question-label">Security Question</div>
+                  <div className="bc-reset-question-text">
+                    {securityQuestion || 'Load your security question first.'}
+                  </div>
+                </div>
+
+                <div className="bc-field">
+                  <label className="bc-label">Username</label>
                   <input
                     type="text"
-                    id="resetUsername"
                     name="username"
-                    className="form-input"
+                    className="bc-input bc-auth-input"
                     placeholder="Enter your username"
                     value={securityData.username}
                     onChange={handleSecurityInputChange}
@@ -376,26 +330,22 @@ const OfflineLoginPage: React.FC = () => {
                     required
                   />
                 </div>
-              </div>
 
-              <button
-                type="button"
-                className={`login-button ${isLoading ? 'loading' : ''}`}
-                disabled={isLoading}
-                onClick={handleFetchSecurityQuestion}
-              >
-                {isLoading ? 'Loading...' : 'Load Security Question'}
-              </button>
+                <button
+                  type="button"
+                  className="bc-btn bc-btn-outline"
+                  disabled={isLoading}
+                  onClick={handleFetchSecurityQuestion}
+                >
+                  {isLoading ? 'Loading…' : 'Load Security Question'}
+                </button>
 
-              <div className="form-group">
-                <label htmlFor="securityAnswer" className="form-label">Your Answer</label>
-                <div className="input-wrapper">
-                  <span className="input-icon">💭</span>
+                <div className="bc-field">
+                  <label className="bc-label">Your Answer</label>
                   <input
                     type="text"
-                    id="securityAnswer"
                     name="securityAnswer"
-                    className="form-input"
+                    className="bc-input bc-auth-input"
                     placeholder="Enter your answer"
                     value={securityData.securityAnswer}
                     onChange={handleSecurityInputChange}
@@ -403,17 +353,13 @@ const OfflineLoginPage: React.FC = () => {
                     required
                   />
                 </div>
-              </div>
 
-              <div className="form-group">
-                <label htmlFor="newPassword" className="form-label">New Password</label>
-                <div className="input-wrapper">
-                  <span className="input-icon">🔒</span>
+                <div className="bc-field">
+                  <label className="bc-label">New Password</label>
                   <input
                     type="password"
-                    id="newPassword"
                     name="newPassword"
-                    className="form-input"
+                    className="bc-input bc-auth-input"
                     placeholder="Minimum 8 characters"
                     value={securityData.newPassword}
                     onChange={handleSecurityInputChange}
@@ -421,17 +367,13 @@ const OfflineLoginPage: React.FC = () => {
                     required
                   />
                 </div>
-              </div>
 
-              <div className="form-group">
-                <label htmlFor="confirmNewPassword" className="form-label">Confirm New Password</label>
-                <div className="input-wrapper">
-                  <span className="input-icon">🔒</span>
+                <div className="bc-field">
+                  <label className="bc-label">Confirm New Password</label>
                   <input
                     type="password"
-                    id="confirmNewPassword"
                     name="confirmNewPassword"
-                    className="form-input"
+                    className="bc-input bc-auth-input"
                     placeholder="Re-enter new password"
                     value={securityData.confirmNewPassword}
                     onChange={handleSecurityInputChange}
@@ -439,55 +381,28 @@ const OfflineLoginPage: React.FC = () => {
                     required
                   />
                 </div>
-              </div>
 
-              {error && (
-                <div className="error-message">
-                  <span className="error-icon">⚠️</span>
-                  {error}
-                </div>
-              )}
+                {error && <div className="bc-alert bc-alert-error">{error}</div>}
+                {success && <div className="bc-alert bc-alert-success">{success}</div>}
 
-              {success && (
-                <div className="success-message">
-                  <span className="success-icon">✅</span>
-                  {success}
-                </div>
-              )}
+                <button
+                  type="submit"
+                  className="bc-btn bc-btn-primary bc-auth-primary"
+                  disabled={isLoading}
+                >
+                  {isLoading ? 'Resetting…' : 'Reset Password'}
+                </button>
 
-              <button
-                type="submit"
-                className={`login-button ${isLoading ? 'loading' : ''}`}
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <div className="loading-spinner">
-                    <div className="spinner"></div>
-                    <span>Resetting...</span>
-                  </div>
-                ) : (
-                  'Reset Password'
-                )}
-              </button>
-
-              <div className="login-links">
                 <button
                   type="button"
-                  className="link-button"
+                  className="bc-btn bc-btn-outline"
                   onClick={handleBackToLogin}
                   disabled={isLoading}
                 >
                   ← Back to Login
                 </button>
-              </div>
-            </form>
-          )}
-
-          <div className="login-footer">
-            <div className="security-note">
-              <span className="security-icon">🔒</span>
-              <span>Offline Secure Authentication</span>
-            </div>
+              </form>
+            )}
           </div>
         </div>
       </div>

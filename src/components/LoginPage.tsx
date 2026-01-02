@@ -45,7 +45,7 @@ export const LoginPage: React.FC = () => {
       if (!result.success) {
         setError(result.message);
       }
-    } catch (error) {
+    } catch {
       setError('An unexpected error occurred. Please try again.');
     } finally {
       setIsLoading(false);
@@ -58,8 +58,8 @@ export const LoginPage: React.FC = () => {
         <div className="login-card">
           <div className="login-header">
             <div className="brand-logo">
-              <img src={logoImage} alt="Business Manager" className="logo-image" />
-              <h1>Business Manager</h1>
+              <img src={logoImage} alt="INERTIA" className="logo-image" />
+              <h1>INERTIA</h1>
             </div>
             <p className="login-subtitle">Admin Access Portal</p>
           </div>

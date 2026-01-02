@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { invoke } from '@tauri-apps/api/core';
 import type { ReactNode } from 'react';
 import React, { createContext, useContext, useEffect, useState } from 'react';
@@ -46,15 +47,15 @@ interface ThemeContextType {
 }
 
 const lightTheme: ThemeColors = {
-  // Background colors - Modern SaaS Light Palette
+  // Background colors - BizCore Phase 4 Light Palette
   primary: '#fdfdfd',
   secondary: '#e8eaec',
   surface: '#e8eaec',
-  card: '#ffffff',
+  card: '#e8eaec',
   
   // Text colors
-  text: '#393741',
-  textSecondary: '#665f5f',
+  text: '#845c58',
+  textSecondary: '#8892a9',
   textMuted: '#8892a9',
   
   // Border colors
@@ -62,11 +63,11 @@ const lightTheme: ThemeColors = {
   borderLight: '#e8eaec',
   
   // Interactive colors
-  accent: '#8892a9',
-  accentHover: '#665f5f',
+  accent: '#845c58',
+  accentHover: '#845c58',
   success: '#845c58',
   error: '#845c58',
-  warning: '#b7bac3',
+  warning: '#8892a9',
   
   // Status colors
   successBg: 'rgba(132, 92, 88, 0.1)',
@@ -75,32 +76,32 @@ const lightTheme: ThemeColors = {
   infoBg: 'rgba(136, 146, 169, 0.1)',
   
   // Special colors
-  shadow: 'rgba(57, 55, 65, 0.08)',
-  overlay: 'rgba(57, 55, 65, 0.5)'
+  shadow: 'rgba(0, 0, 0, 0.18)',
+  overlay: 'rgba(0, 0, 0, 0.55)'
 };
 
 const darkTheme: ThemeColors = {
-  // Background colors - Modern SaaS Dark Palette
+  // Background colors - BizCore Phase 4 Dark Palette
   primary: '#0b0b0b',
   secondary: '#1e1e1f',
   surface: '#1e1e1f',
-  card: '#393741',
+  card: '#1e1e1f',
   
   // Text colors
   text: '#cdd0dc',
   textSecondary: '#958f9e',
-  textMuted: '#665f5f',
+  textMuted: '#958f9e',
   
   // Border colors
   border: '#393741',
   borderLight: '#1e1e1f',
   
   // Interactive colors
-  accent: '#958f9e',
-  accentHover: '#cdd0dc',
+  accent: '#665f5f',
+  accentHover: '#665f5f',
   success: '#665f5f',
-  error: '#958f9e',
-  warning: '#665f5f',
+  error: '#665f5f',
+  warning: '#958f9e',
   
   // Status colors
   successBg: 'rgba(102, 95, 95, 0.15)',
@@ -109,7 +110,7 @@ const darkTheme: ThemeColors = {
   infoBg: 'rgba(205, 208, 220, 0.1)',
   
   // Special colors
-  shadow: 'rgba(0, 0, 0, 0.5)',
+  shadow: 'rgba(0, 0, 0, 0.45)',
   overlay: 'rgba(0, 0, 0, 0.7)'
 };
 
@@ -196,6 +197,7 @@ export const useTheme = (): ThemeContextType => {
 
 // Utility function to get theme-aware gradient colors
 export const getGradientColors = (_theme: ThemeType) => {
+  void _theme;
   return {
     primary: 'linear-gradient(135deg, var(--bm-primary), var(--bm-muted))',
     success: 'linear-gradient(135deg, var(--bm-primary), var(--bm-primary-alt))',

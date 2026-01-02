@@ -13,7 +13,7 @@ use db::initialize_database;
 use offline_auth::{
     login_admin, get_security_question, reset_admin_password,
     validate_admin_session, logout_admin, cleanup_sessions, logout_all_sessions,
-    check_is_setup, register_initial_admin
+    check_is_setup, register_initial_admin, register_user, list_users, delete_user
 };
 use simple_commands::{
     add_room, get_rooms, get_available_rooms_for_guest, update_room, delete_room, cleanup_soft_deleted_rooms,
@@ -77,6 +77,9 @@ pub fn run() {
             logout_all_sessions,
             check_is_setup,
             register_initial_admin,
+            register_user,
+            list_users,
+            delete_user,
             // Room management
             add_room,
             get_rooms,

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import type { MenuItem, Unit } from '../api/client';
 import {
     addMenuItem,
@@ -51,11 +51,28 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
     const [taxEnabled, setTaxEnabled] = useState(true);
     const [savingSettings, setSavingSettings] = useState(false);
 
-    useEffect(() => {
-        loadData();
+    const loadSettings = useCallback(async () => {
+        try {
+            // Try to get tax rate from backend
+            const response = await getTaxRate();
+            setTaxRate(response.toString());
+
+            // Try to get tax enabled setting
+            try {
+                const taxEnabledResponse = await getTaxEnabled();
+                setTaxEnabled(taxEnabledResponse);
+            } catch {
+                setTaxEnabled(true); // Default to enabled
+            }
+        } catch {
+            // If no tax rate is set, use default 5%
+            console.log('Using default tax rate of 5%');
+            setTaxRate('5.0');
+            setTaxEnabled(true);
+        }
     }, []);
 
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         setLoading(true);
         try {
             const [menuData, roomData] = await Promise.all([
@@ -77,28 +94,11 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
         } finally {
             setLoading(false);
         }
-    };
+    }, [loadSettings, showError]);
 
-    const loadSettings = async () => {
-        try {
-            // Try to get tax rate from backend
-            const response = await getTaxRate();
-            setTaxRate(response.toString());
-            
-            // Try to get tax enabled setting
-            try {
-                const taxEnabledResponse = await getTaxEnabled();
-                setTaxEnabled(taxEnabledResponse);
-            } catch (err) {
-                setTaxEnabled(true); // Default to enabled
-            }
-        } catch (err) {
-            // If no tax rate is set, use default 5%
-            console.log('Using default tax rate of 5%');
-            setTaxRate('5.0');
-            setTaxEnabled(true);
-        }
-    };
+    useEffect(() => {
+        void loadData();
+    }, [loadData]);
 
     const handleSaveSettings = async () => {
         const rate = parseFloat(taxRate);

@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 // Extend Window interface for Tauri
 declare global {
   interface Window {
-    __TAURI_INTERNALS__?: any;
+    __TAURI_INTERNALS__?: unknown;
   }
 }
 
@@ -115,6 +115,11 @@ export interface MenuItem {
   price: number;
   category: string;
   is_available: boolean;
+
+  // Phase 4 inventory fields (optional for backward compatibility)
+  track_stock?: number;      // 0 = service, 1 = physical product
+  stock_quantity?: number;   // only meaningful when track_stock = 1
+  low_stock_limit?: number;  // default: 5
 }
 
 export interface NewMenuItem {
@@ -122,6 +127,11 @@ export interface NewMenuItem {
   price: number;
   category: string;
   is_available?: boolean;
+
+  // Phase 4 inventory fields
+  track_stock?: number;
+  stock_quantity?: number;
+  low_stock_limit?: number;
 }
 
 export interface OrderItem {
@@ -287,12 +297,7 @@ export const addRoom = async (room: NewRoom): Promise<number> => {
     dailyRate: room.daily_rate,
   };
   
-  try {
-    const result = await invokeCompat<number>("add_resource", primaryParams, "add_room", fallbackParams);
-    return result as number;
-  } catch (error) {
-    throw error;
-  }
+  return invokeCompat<number>("add_resource", primaryParams, "add_room", fallbackParams);
 };
 
 // De-hotelified wrappers
@@ -367,12 +372,7 @@ export const updateUnit = (unitId: number, updates: Partial<NewUnit>): Promise<b
  * @returns Success status
  */
 export const deleteRoom = async (roomId: number): Promise<boolean> => {
-  try {
-    const result = await invokeCompat<boolean>("delete_resource", { id: roomId }, "delete_room", { id: roomId });
-    return result as boolean;
-  } catch (error) {
-    throw error;
-  }
+  return invokeCompat<boolean>("delete_resource", { id: roomId }, "delete_room", { id: roomId });
 };
 
 // UI-facing generic wrapper (preferred)
@@ -383,12 +383,7 @@ export const deleteUnit = (unitId: number): Promise<boolean> => deleteRoom(unitI
  * @returns Number of rooms cleaned up
  */
 export const cleanupSoftDeletedRooms = async (): Promise<string> => {
-  try {
-    const result = await invoke("cleanup_soft_deleted_rooms");
-    return result as string;
-  } catch (error) {
-    throw error;
-  }
+  return invoke<string>("cleanup_soft_deleted_rooms");
 };
 
 // UI-facing generic wrapper (preferred)
@@ -420,12 +415,7 @@ export const addGuest = async (guest: NewGuest): Promise<number> => {
     dailyRate: guest.daily_rate     // Use camelCase to match expected parameter
   };
   
-  try {
-    const result = await invokeCompat<number>("add_customer", params, "add_guest", params);
-    return result as number;
-  } catch (error) {
-    throw error;
-  }
+  return invokeCompat<number>("add_customer", params, "add_guest", params);
 };
 
 // UI-facing generic wrapper (preferred)
@@ -535,7 +525,10 @@ export const addMenuItem = (item: NewMenuItem): Promise<number> =>
     name: item.name, 
     price: item.price, 
     category: item.category, 
-    isAvailable: item.is_available 
+    is_available: item.is_available,
+    track_stock: item.track_stock,
+    stock_quantity: item.stock_quantity,
+    low_stock_limit: item.low_stock_limit
   });
 
 /**
@@ -550,15 +543,13 @@ export const updateMenuItem = async (itemId: number, updates: Partial<NewMenuIte
     name: updates.name,
     price: updates.price,
     category: updates.category,
-    is_available: updates.is_available  // Use snake_case to match backend
+    is_available: updates.is_available,  // Use snake_case to match backend
+    track_stock: updates.track_stock,
+    stock_quantity: updates.stock_quantity,
+    low_stock_limit: updates.low_stock_limit
   };
   
-  try {
-    const result = await invoke("update_menu_item", params);
-    return result as boolean;
-  } catch (error) {
-    throw error;
-  }
+  return invoke<boolean>("update_menu_item", params);
 };
 
 /**
@@ -567,12 +558,7 @@ export const updateMenuItem = async (itemId: number, updates: Partial<NewMenuIte
  * @returns Success status
  */
 export const deleteMenuItem = async (itemId: number): Promise<boolean> => {
-  try {
-    const result = await invoke("delete_menu_item", { itemId: itemId });
-    return result as boolean;
-  } catch (error) {
-    throw error;
-  }
+  return invoke<boolean>("delete_menu_item", { itemId: itemId });
 };
 
 // Food Order APIs
@@ -599,12 +585,7 @@ export const addFoodOrder = async (order: NewFoodOrder): Promise<number> => {
     items: order.items
   };
   
-  try {
-    const result = await invokeCompat<number>("add_sale", params, "add_food_order", params);
-    return result as number;
-  } catch (error) {
-    throw error;
-  }
+  return invokeCompat<number>("add_sale", params, "add_food_order", params);
 };
 
 // UI-facing generic wrapper (preferred)
@@ -1035,7 +1016,7 @@ export const ErrorCodes = {
  * @param error - Error from invoke call
  * @returns User-friendly error message
  */
-export const handleApiError = (error: any): string => {
+export const handleApiError = (error: unknown): string => {
   if (typeof error === 'string') {
     switch (error) {
       case ErrorCodes.ROOM_NOT_FOUND:
@@ -1053,6 +1034,9 @@ export const handleApiError = (error: any): string => {
       default:
         return error;
     }
+  }
+  if (error instanceof Error) {
+    return error.message || 'An unexpected error occurred. Please try again.';
   }
   return "An unexpected error occurred. Please try again.";
 };

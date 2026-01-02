@@ -429,6 +429,100 @@ impl AuthManager {
         let _ = self.log_security_event(&conn, username, "initial_admin_registered");
         Ok(())
     }
+
+    pub fn register_user(
+        &self,
+        username: &str,
+        password: &str,
+        role: &str,
+        security_question: &str,
+        security_answer: &str,
+    ) -> SqliteResult<()> {
+        let conn = self.get_connection()?;
+
+        let username = username.trim();
+        
+        // Validate role
+        if !["admin", "manager", "staff"].contains(&role) {
+            return Err(rusqlite::Error::InvalidParameterName(
+                format!("Invalid role: {}", role)
+            ));
+        }
+
+        let password_salt = Uuid::new_v4().to_string();
+        let password_hash = self.hash_password_pbkdf2(password, &password_salt);
+
+        let answer_salt = Uuid::new_v4().to_string();
+        let answer_hash = self.hash_password_pbkdf2(security_answer, &answer_salt);
+        let security_answer_hash = format!("{}:{}", answer_hash, answer_salt);
+
+        conn.execute(
+            "INSERT INTO admin_auth (username, password_hash, salt, role, security_question, security_answer_hash, failed_attempts, locked_until)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, NULL)",
+            [
+                username,
+                &password_hash,
+                &password_salt,
+                role,
+                security_question,
+                &security_answer_hash,
+            ],
+        )?;
+
+        let _ = self.log_security_event(&conn, username, "user_registered");
+        Ok(())
+    }
+
+    pub fn list_users(&self) -> SqliteResult<Vec<UserInfo>> {
+        let conn = self.get_connection()?;
+        
+        let mut stmt = conn.prepare(
+            "SELECT id, username, role FROM admin_auth ORDER BY id"
+        )?;
+        
+        let users = stmt.query_map([], |row| {
+            Ok(UserInfo {
+                id: row.get(0)?,
+                username: row.get(1)?,
+                role: row.get(2)?,
+            })
+        })?;
+        
+        users.collect()
+    }
+
+    pub fn delete_user(&self, user_id: i32) -> SqliteResult<()> {
+        let conn = self.get_connection()?;
+        
+        // Prevent deleting if it's the last admin
+        let admin_count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM admin_auth WHERE role = 'admin'",
+            [],
+            |row| row.get(0),
+        )?;
+        
+        let is_admin: bool = conn.query_row(
+            "SELECT role = 'admin' FROM admin_auth WHERE id = ?1",
+            [user_id],
+            |row| row.get(0),
+        ).unwrap_or(false);
+        
+        if is_admin && admin_count <= 1 {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "Cannot delete the last admin user".to_string()
+            ));
+        }
+        
+        conn.execute("DELETE FROM admin_auth WHERE id = ?1", [user_id])?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserInfo {
+    pub id: i32,
+    pub username: String,
+    pub role: String,
 }
 
 // Tauri commands for the frontend
@@ -572,4 +666,54 @@ pub async fn register_initial_admin(request: RegisterInitialAdminRequest) -> Res
             &request.security_answer,
         )
         .map_err(|_| "Failed to create admin account".to_string())
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RegisterUserRequest {
+    pub username: String,
+    pub password: String,
+    pub role: String,
+    pub security_question: String,
+    pub security_answer: String,
+}
+
+#[tauri::command]
+pub async fn register_user(request: RegisterUserRequest) -> Result<(), String> {
+    let auth_manager = AuthManager::new();
+
+    if request.username.trim().is_empty() {
+        return Err("Username is required".to_string());
+    }
+    if request.password.len() < 6 {
+        return Err("Password must be at least 6 characters".to_string());
+    }
+    if !["admin", "manager", "staff"].contains(&request.role.as_str()) {
+        return Err("Invalid role. Must be admin, manager, or staff".to_string());
+    }
+
+    auth_manager
+        .register_user(
+            &request.username,
+            &request.password,
+            &request.role,
+            &request.security_question,
+            &request.security_answer,
+        )
+        .map_err(|e| format!("Failed to create user: {}", e))
+}
+
+#[tauri::command]
+pub async fn list_users() -> Result<Vec<UserInfo>, String> {
+    let auth_manager = AuthManager::new();
+    auth_manager
+        .list_users()
+        .map_err(|e| format!("Failed to list users: {}", e))
+}
+
+#[tauri::command]
+pub async fn delete_user(user_id: i32) -> Result<(), String> {
+    let auth_manager = AuthManager::new();
+    auth_manager
+        .delete_user(user_id)
+        .map_err(|e| format!("Failed to delete user: {}", e))
 }

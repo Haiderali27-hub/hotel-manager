@@ -6,7 +6,7 @@
 }
 
 body {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: var(--font-body);
   line-height: 1.6;
   color: var(--app-text);
   background: var(--app-bg);
@@ -18,19 +18,19 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--bm-primary) 0%, var(--bm-muted) 100%);
+  background: var(--app-bg);
 }
 
 .loading-spinner {
   text-align: center;
-  color: white;
+  color: var(--app-text);
 }
 
 .loading-spinner .spinner {
   width: 40px;
   height: 40px;
-  border: 4px solid rgba(255, 255, 255, 0.3);
-  border-top: 4px solid white;
+  border: 4px solid var(--app-border);
+  border-top: 4px solid var(--app-action);
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin: 0 auto 16px;
@@ -39,7 +39,6 @@ body {
 .loading-spinner p {
   font-size: 1.1rem;
   font-weight: 500;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 @keyframes spin {

@@ -54,6 +54,9 @@ const ModernDashboard: React.FC = () => {
   const [businessName, setBusinessName] = useState('INERTIA');
   const [recentSales, setRecentSales] = useState<SaleSummary[]>([]);
   const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([]);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
+    new Set(['Sales & Customers', 'Inventory & Products', 'Financial', 'Management'])
+  );
 
   useEffect(() => {
     loadDashboardData();
@@ -103,6 +106,43 @@ const ModernDashboard: React.FC = () => {
     return 'Sales';
   })();
 
+  type NavItem = { id: string; label: string; managerOnly?: boolean; adminOnly?: boolean };
+  type NavCategory = { category: string; items: NavItem[] };
+  
+  const navigationCategories: NavCategory[] = [
+    {
+      category: 'Sales & Customers',
+      items: [
+        { id: 'pos', label: posNavLabel },
+        { id: 'accounts', label: 'Accounts', managerOnly: true },
+      ],
+    },
+    {
+      category: 'Inventory & Products',
+      items: [
+        { id: 'products', label: 'Products' },
+        { id: 'purchases', label: 'Purchases (Stock-In)', managerOnly: true },
+        { id: 'stock-adjustments', label: 'Stock Adjustments', managerOnly: true },
+        { id: 'suppliers', label: 'Suppliers', managerOnly: true },
+        { id: 'returns', label: 'Returns & Refunds', managerOnly: true },
+      ],
+    },
+    {
+      category: 'Financial',
+      items: [
+        { id: 'expenses', label: 'Expenses', managerOnly: true },
+        { id: 'sales-history', label: 'History' },
+        { id: 'reports', label: 'Reports', managerOnly: true },
+      ],
+    },
+    {
+      category: 'Management',
+      items: [
+        { id: 'settings', label: 'Settings', adminOnly: true },
+      ],
+    },
+  ];
+
   const navigationItems: Array<{ id: string; label: string; managerOnly?: boolean; adminOnly?: boolean }> = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'pos', label: posNavLabel },
@@ -123,6 +163,31 @@ const ModernDashboard: React.FC = () => {
     if (item.managerOnly) return userRole === 'admin' || userRole === 'manager';
     return true;
   });
+
+  const toggleCategory = (categoryName: string) => {
+    setExpandedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(categoryName)) {
+        next.delete(categoryName);
+      } else {
+        next.add(categoryName);
+      }
+      return next;
+    });
+  };
+
+  const toggleAllCategories = () => {
+    const allCategoryNames = navigationCategories.map(c => c.category);
+    const allExpanded = allCategoryNames.every(name => expandedCategories.has(name));
+    
+    if (allExpanded) {
+      // Collapse all
+      setExpandedCategories(new Set());
+    } else {
+      // Expand all
+      setExpandedCategories(new Set(allCategoryNames));
+    }
+  };
 
   const isDark = theme === 'dark';
   const hoverBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
@@ -357,7 +422,7 @@ const ModernDashboard: React.FC = () => {
       case 'dashboard':
         return renderDashboard();
       case 'pos':
-        return <AddSale onBack={() => setCurrentPage('dashboard')} onSaleAdded={loadDashboardData} />;
+        return <AddSale onBack={() => setCurrentPage('dashboard')} onSaleAdded={loadDashboardData} onNavigateToAccounts={() => setCurrentPage('accounts')} />;
       case 'products':
         return <ProductsPage onBack={() => setCurrentPage('dashboard')} />;
       case 'purchases':
@@ -387,7 +452,7 @@ const ModernDashboard: React.FC = () => {
       case 'accounts':
         return (
           <ProtectedRoute requiredRole="manager">
-            <AccountsPage onBack={() => setCurrentPage('dashboard')} />
+            <AccountsPage onBack={() => setCurrentPage('dashboard')} onNavigateToPOS={() => setCurrentPage('pos')} />
           </ProtectedRoute>
         );
       case 'sales-history':
@@ -483,42 +548,155 @@ const ModernDashboard: React.FC = () => {
 
         {/* Navigation */}
         <nav style={{ flex: 1, overflowY: 'auto' }}>
-          {filteredNav.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setCurrentPage(item.id)}
-              style={{
-                width: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '1rem',
-                padding: '10px 12px',
-                marginBottom: '6px',
-                backgroundColor: currentPage === item.id ? hoverBg : 'transparent',
-                border: 'none',
-                borderRadius: '10px',
-                borderLeft: currentPage === item.id ? `4px solid ${colors.accent}` : '4px solid transparent',
-                color: currentPage === item.id ? colors.text : colors.textSecondary,
-                fontSize: '14px',
-                fontWeight: currentPage === item.id ? '600' : '500',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                textAlign: 'left'
-              }}
-              onMouseEnter={(e) => {
-                if (currentPage !== item.id) {
-                  e.currentTarget.style.backgroundColor = hoverBg;
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (currentPage !== item.id) {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                }
-              }}
-            >
-              <span>{item.label}</span>
-            </button>
-          ))}
+          {/* Toggle All Categories Button */}
+          <button
+            onClick={toggleAllCategories}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '8px 12px',
+              marginBottom: '12px',
+              backgroundColor: 'transparent',
+              border: `1px solid ${colors.border}`,
+              borderRadius: '8px',
+              color: colors.textSecondary,
+              fontSize: '12px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = hoverBg;
+              e.currentTarget.style.borderColor = colors.accent;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+              e.currentTarget.style.borderColor = colors.border;
+            }}
+          >
+            <span>{navigationCategories.every(c => expandedCategories.has(c.category)) ? 'Collapse All' : 'Expand All'}</span>
+            <span style={{ fontSize: '14px' }}>☰</span>
+          </button>
+
+          {/* Dashboard - Always shown first */}
+          <button
+            onClick={() => setCurrentPage('dashboard')}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '1rem',
+              padding: '10px 12px',
+              marginBottom: '16px',
+              backgroundColor: currentPage === 'dashboard' ? hoverBg : 'transparent',
+              border: 'none',
+              borderRadius: '10px',
+              borderLeft: currentPage === 'dashboard' ? `4px solid ${colors.accent}` : '4px solid transparent',
+              color: currentPage === 'dashboard' ? colors.text : colors.textSecondary,
+              fontSize: '14px',
+              fontWeight: currentPage === 'dashboard' ? '600' : '500',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              textAlign: 'left'
+            }}
+            onMouseEnter={(e) => {
+              if (currentPage !== 'dashboard') {
+                e.currentTarget.style.backgroundColor = hoverBg;
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (currentPage !== 'dashboard') {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }
+            }}
+          >
+            <span>Dashboard</span>
+          </button>
+
+          {/* Categorized Navigation */}
+          {navigationCategories.map((category) => {
+            const filteredItems = category.items.filter((item) => {
+              if (item.adminOnly) return userRole === 'admin';
+              if (item.managerOnly) return userRole === 'admin' || userRole === 'manager';
+              return true;
+            });
+            
+            if (filteredItems.length === 0) return null;
+            
+            const isExpanded = expandedCategories.has(category.category);
+            
+            return (
+              <div key={category.category} style={{ marginBottom: '12px' }}>
+                <button
+                  onClick={() => toggleCategory(category.category)}
+                  style={{ 
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '8px 12px', 
+                    fontSize: '12px', 
+                    fontWeight: 900, 
+                    textTransform: 'uppercase', 
+                    color: colors.text, 
+                    letterSpacing: '0.5px',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    borderRadius: '6px',
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = hoverBg;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }}
+                >
+                  <span>{category.category}</span>
+                  <span style={{ fontSize: '16px', transition: 'transform 0.2s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>›</span>
+                </button>
+                {isExpanded && filteredItems.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => setCurrentPage(item.id)}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '1rem',
+                      padding: '10px 12px 10px 20px',
+                      marginBottom: '4px',
+                      backgroundColor: currentPage === item.id ? hoverBg : 'transparent',
+                      border: 'none',
+                      borderRadius: '10px',
+                      borderLeft: currentPage === item.id ? `4px solid ${colors.accent}` : '4px solid transparent',
+                      color: currentPage === item.id ? colors.text : colors.textSecondary,
+                      fontSize: '14px',
+                      fontWeight: currentPage === item.id ? '600' : '500',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      textAlign: 'left'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (currentPage !== item.id) {
+                        e.currentTarget.style.backgroundColor = hoverBg;
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (currentPage !== item.id) {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }
+                    }}
+                  >
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            );
+          })}
         </nav>
 
         {/* User Profile */}

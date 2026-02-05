@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import './App.css';
 
+import { invoke } from '@tauri-apps/api/core';
 import ModernDashboard from './components/ModernDashboard';
 import NotificationToast from './components/NotificationToast';
 import OfflineLoginPage from './components/OfflineLoginPage';
+import SetupWizard from './components/SetupWizard';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CurrencyProvider } from './context/CurrencyContext';
 import { LabelProvider } from './context/LabelContext';
@@ -12,8 +14,30 @@ import { ThemeProvider } from './context/ThemeContext';
 
 const AppContent: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth();
+  const [showSetupWizard, setShowSetupWizard] = useState(false);
+  const [checkingSetup, setCheckingSetup] = useState(true);
 
-  if (isLoading) {
+  useEffect(() => {
+    const checkSetupStatus = async () => {
+      if (isAuthenticated && !isLoading) {
+        try {
+          const setupCompleted = await invoke<string | null>('get_setting', { key: 'setup_completed' });
+          setShowSetupWizard(!setupCompleted || setupCompleted !== 'true');
+        } catch (error) {
+          console.error('Failed to check setup status:', error);
+          setShowSetupWizard(false);
+        } finally {
+          setCheckingSetup(false);
+        }
+      } else {
+        setCheckingSetup(false);
+      }
+    };
+    
+    checkSetupStatus();
+  }, [isAuthenticated, isLoading]);
+
+  if (isLoading || checkingSetup) {
     return (
       <div style={{
         display: 'flex',
@@ -39,6 +63,7 @@ const AppContent: React.FC = () => {
   if (isAuthenticated) {
     return (
       <>
+        {showSetupWizard && <SetupWizard onComplete={() => setShowSetupWizard(false)} />}
         <ModernDashboard />
         <NotificationToast />
       </>

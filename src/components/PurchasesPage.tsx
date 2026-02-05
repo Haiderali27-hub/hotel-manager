@@ -1,20 +1,21 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    addPurchase,
-    deletePurchase,
-    getMenuItems,
-    getPurchaseDetails,
-    getPurchases,
-    getSuppliers,
-    type MenuItem,
-    type PurchaseDetails,
-    type PurchaseItemInput,
-    type PurchaseSummary,
-    type Supplier,
+  addPurchase,
+  deletePurchase,
+  getMenuItems,
+  getPurchaseDetails,
+  getPurchases,
+  getSuppliers,
+  type MenuItem,
+  type PurchaseDetails,
+  type PurchaseItemInput,
+  type PurchaseSummary,
+  type Supplier,
 } from '../api/client';
 import { useCurrency } from '../context/CurrencyContext';
 import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
+import { handleNumberInputFocus } from '../utils/inputHelpers';
 
 interface PurchasesPageProps {
   onBack: () => void;
@@ -474,6 +475,7 @@ const PurchasesPage: React.FC<PurchasesPageProps> = ({ onBack }) => {
                                   prev.map((x) => (x.key === it.key ? { ...x, quantity: parseInt(e.target.value || '0', 10) } : x))
                                 )
                               }
+                              onFocus={handleNumberInputFocus}
                               style={inputStyle}
                             />
                           </td>
@@ -488,6 +490,7 @@ const PurchasesPage: React.FC<PurchasesPageProps> = ({ onBack }) => {
                                   prev.map((x) => (x.key === it.key ? { ...x, unit_cost: parseFloat(e.target.value || '0') } : x))
                                 )
                               }
+                              onFocus={handleNumberInputFocus}
                               style={inputStyle}
                             />
                           </td>
@@ -559,6 +562,7 @@ const PurchasesPage: React.FC<PurchasesPageProps> = ({ onBack }) => {
                           min="0"
                           step="0.01"
                           onChange={(e) => setPaymentAmount(parseFloat(e.target.value || '0'))}
+                          onFocus={handleNumberInputFocus}
                           style={inputStyle}
                         />
                         <div style={{ marginTop: '6px', fontSize: '12px', color: colors.textSecondary }}>
@@ -730,11 +734,11 @@ const PurchasesPage: React.FC<PurchasesPageProps> = ({ onBack }) => {
             if (e.target === e.currentTarget) setDetails(null);
           }}
         >
-          <div className="bc-card" style={{ width: 'min(980px, 96vw)', borderRadius: '12px', padding: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center' }}>
+          <div className="bc-card" style={{ width: 'min(980px, 96vw)', borderRadius: '16px', padding: '32px', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start' }}>
               <div>
-                <div style={{ fontSize: '16px', fontWeight: 900 }}>Purchase #{details.purchase.id}</div>
-                <div style={{ fontSize: '12px', color: colors.textSecondary, marginTop: '4px' }}>
+                <div style={{ fontSize: '24px', fontWeight: 700 }}>Purchase #{details.purchase.id}</div>
+                <div style={{ fontSize: '14px', color: colors.textSecondary, marginTop: '6px' }}>
                   {details.purchase.purchase_date} • {details.purchase.supplier_name || 'No supplier'}
                 </div>
               </div>
@@ -742,13 +746,15 @@ const PurchasesPage: React.FC<PurchasesPageProps> = ({ onBack }) => {
                 type="button"
                 onClick={() => setDetails(null)}
                 style={{
-                  width: '36px',
-                  height: '36px',
+                  width: '40px',
+                  height: '40px',
                   borderRadius: '10px',
                   border: `1px solid ${colors.border}`,
                   background: 'transparent',
                   color: colors.text,
                   cursor: 'pointer',
+                  fontSize: '18px',
+                  fontWeight: 600,
                 }}
                 title="Close"
               >
@@ -756,7 +762,7 @@ const PurchasesPage: React.FC<PurchasesPageProps> = ({ onBack }) => {
               </button>
             </div>
 
-            <div style={{ marginTop: '12px', overflowX: 'auto' }}>
+            <div style={{ marginTop: '20px', overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '720px' }}>
                 <thead>
                   <tr style={{ textAlign: 'left', borderBottom: `1px solid ${colors.border}` }}>

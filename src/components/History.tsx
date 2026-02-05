@@ -1032,24 +1032,30 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
             style={{
               width: 'min(720px, 95vw)',
               background: colors.surface,
-              borderRadius: '12px',
+              borderRadius: '16px',
               border: `1px solid ${colors.border}`,
-              padding: '16px',
+              padding: '32px',
               color: colors.text,
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontSize: '18px', fontWeight: 800 }}>Payments for Order #{paymentsModalSaleId}</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontSize: '24px', fontWeight: 700 }}>Payments for Order #{paymentsModalSaleId}</div>
+                <div style={{ fontSize: '14px', color: colors.textSecondary, marginTop: '4px' }}>View and record payments</div>
+              </div>
               <button
                 onClick={closePaymentsModal}
                 style={{
-                  padding: '0.35rem 0.7rem',
+                  padding: '8px 16px',
                   backgroundColor: 'transparent',
                   color: colors.text,
                   border: `1px solid ${colors.border}`,
-                  borderRadius: '8px',
+                  borderRadius: '10px',
                   cursor: 'pointer',
+                  fontSize: '15px',
+                  fontWeight: 600,
                 }}
               >
                 Close
@@ -1126,24 +1132,24 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
                         }}
                       >
                         <div style={{ fontWeight: 800, marginBottom: '10px' }}>Record a payment</div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                           <div>
-                            <div style={{ fontSize: '12px', opacity: 0.8, marginBottom: '6px' }}>Amount</div>
+                            <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>Amount</div>
                             <input
                               type="number"
                               step={0.01}
                               min={0}
                               value={Number.isFinite(paymentAmount) ? paymentAmount : 0}
                               onChange={(e) => setPaymentAmount(parseFloat(e.target.value || '0'))}
-                              style={{ width: '100%', padding: '10px', borderRadius: '10px', border: `1px solid ${colors.border}` }}
+                              style={{ width: '100%', padding: '12px 16px', borderRadius: '10px', border: `1px solid ${colors.border}`, fontSize: '15px' }}
                             />
                           </div>
                           <div>
-                            <div style={{ fontSize: '12px', opacity: 0.8, marginBottom: '6px' }}>Method</div>
+                            <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>Method</div>
                             <select
                               value={paymentMethod}
                               onChange={(e) => setPaymentMethod(e.target.value as 'cash' | 'card' | 'mobile' | 'bank')}
-                              style={{ width: '100%', padding: '10px', borderRadius: '10px', border: `1px solid ${colors.border}` }}
+                              style={{ width: '100%', padding: '12px 16px', borderRadius: '10px', border: `1px solid ${colors.border}`, fontSize: '15px' }}
                             >
                               <option value="cash">Cash</option>
                               <option value="card">Card</option>
@@ -1153,30 +1159,31 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
                           </div>
                         </div>
 
-                        <div style={{ marginTop: '10px' }}>
-                          <div style={{ fontSize: '12px', opacity: 0.8, marginBottom: '6px' }}>Note (optional)</div>
+                        <div style={{ marginTop: '12px' }}>
+                          <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>Note (optional)</div>
                           <input
                             type="text"
                             value={paymentNote}
                             onChange={(e) => setPaymentNote(e.target.value)}
                             placeholder="e.g. paid after 2 days"
-                            style={{ width: '100%', padding: '10px', borderRadius: '10px', border: `1px solid ${colors.border}` }}
+                            style={{ width: '100%', padding: '12px 16px', borderRadius: '10px', border: `1px solid ${colors.border}`, fontSize: '15px' }}
                           />
                         </div>
 
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
                           <button
                             onClick={submitPayment}
                             disabled={paymentsModalLoading}
                             style={{
-                              padding: '0.6rem 1rem',
+                              padding: '12px 24px',
                               backgroundColor: colors.accent,
                               color: colors.primary,
                               border: 'none',
                               borderRadius: '10px',
                               cursor: paymentsModalLoading ? 'not-allowed' : 'pointer',
                               opacity: paymentsModalLoading ? 0.7 : 1,
-                              fontWeight: 800,
+                              fontWeight: 600,
+                              fontSize: '15px',
                             }}
                           >
                             Save Payment

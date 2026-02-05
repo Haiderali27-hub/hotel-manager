@@ -1,20 +1,21 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    addSupplier,
-    addSupplierPayment,
-    deleteSupplier,
-    getSupplierBalanceSummaries,
-    getSupplierPayments,
-    getSuppliers,
-    updateSupplier,
-    type NewSupplier,
-    type Supplier,
-    type SupplierBalanceSummary,
-    type SupplierPayment,
+  addSupplier,
+  addSupplierPayment,
+  deleteSupplier,
+  getSupplierBalanceSummaries,
+  getSupplierPayments,
+  getSuppliers,
+  updateSupplier,
+  type NewSupplier,
+  type Supplier,
+  type SupplierBalanceSummary,
+  type SupplierPayment,
 } from '../api/client';
 import { useCurrency } from '../context/CurrencyContext';
 import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
+import { handleNumberInputFocus } from '../utils/inputHelpers';
 
 interface SuppliersPageProps {
   onBack: () => void;
@@ -431,11 +432,11 @@ const SuppliersPage: React.FC<SuppliersPageProps> = ({ onBack }) => {
             if (e.target === e.currentTarget) setShowAdd(false);
           }}
         >
-          <div className="bc-card" style={{ width: 'min(820px, 96vw)', borderRadius: '12px', padding: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center' }}>
+          <div className="bc-card" style={{ width: 'min(820px, 96vw)', borderRadius: '16px', padding: '32px', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start' }}>
               <div>
-                <div style={{ fontSize: '16px', fontWeight: 900 }}>Add Supplier</div>
-                <div style={{ fontSize: '12px', color: colors.textSecondary, marginTop: '4px' }}>
+                <div style={{ fontSize: '24px', fontWeight: 700 }}>Add Supplier</div>
+                <div style={{ fontSize: '14px', color: colors.textSecondary, marginTop: '6px' }}>
                   Optional: only if you buy from multiple places
                 </div>
               </div>
@@ -443,13 +444,15 @@ const SuppliersPage: React.FC<SuppliersPageProps> = ({ onBack }) => {
                 type="button"
                 onClick={() => setShowAdd(false)}
                 style={{
-                  width: '36px',
-                  height: '36px',
+                  width: '40px',
+                  height: '40px',
                   borderRadius: '10px',
                   border: `1px solid ${colors.border}`,
                   background: 'transparent',
                   color: colors.text,
                   cursor: 'pointer',
+                  fontSize: '18px',
+                  fontWeight: 600,
                 }}
                 title="Close"
               >
@@ -457,7 +460,7 @@ const SuppliersPage: React.FC<SuppliersPageProps> = ({ onBack }) => {
               </button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px', marginTop: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px', marginTop: '20px' }}>
               <div>
                 <label style={labelStyle}>Name *</label>
                 <input value={addDraft.name} onChange={(e) => setAddDraft((p) => ({ ...p, name: e.target.value }))} style={inputStyle} />
@@ -486,7 +489,7 @@ const SuppliersPage: React.FC<SuppliersPageProps> = ({ onBack }) => {
               />
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '14px' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '20px' }}>
               <button
                 type="button"
                 onClick={() => setShowAdd(false)}
@@ -495,9 +498,10 @@ const SuppliersPage: React.FC<SuppliersPageProps> = ({ onBack }) => {
                   background: 'transparent',
                   color: colors.text,
                   borderRadius: '10px',
-                  padding: '10px 12px',
-                  fontWeight: 800,
+                  padding: '12px 24px',
+                  fontWeight: 600,
                   cursor: 'pointer',
+                  fontSize: '15px',
                 }}
               >
                 Cancel
@@ -510,9 +514,10 @@ const SuppliersPage: React.FC<SuppliersPageProps> = ({ onBack }) => {
                   background: colors.accent,
                   color: colors.primary,
                   borderRadius: '10px',
-                  padding: '10px 12px',
-                  fontWeight: 900,
+                  padding: '12px 24px',
+                  fontWeight: 600,
                   cursor: 'pointer',
+                  fontSize: '15px',
                 }}
               >
                 Save
@@ -540,11 +545,11 @@ const SuppliersPage: React.FC<SuppliersPageProps> = ({ onBack }) => {
             if (e.target === e.currentTarget) setSelected(null);
           }}
         >
-          <div className="bc-card" style={{ width: 'min(980px, 96vw)', borderRadius: '12px', padding: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center' }}>
+          <div className="bc-card" style={{ width: 'min(980px, 96vw)', borderRadius: '16px', padding: '32px', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start' }}>
               <div>
-                <div style={{ fontSize: '16px', fontWeight: 900 }}>{selected.name}</div>
-                <div style={{ fontSize: '12px', color: colors.textSecondary, marginTop: '4px' }}>
+                <div style={{ fontSize: '24px', fontWeight: 700 }}>{selected.name}</div>
+                <div style={{ fontSize: '14px', color: colors.textSecondary, marginTop: '6px' }}>
                   Balance due: {formatMoney(selectedBalance?.balance_due || 0)}
                 </div>
               </div>
@@ -552,13 +557,15 @@ const SuppliersPage: React.FC<SuppliersPageProps> = ({ onBack }) => {
                 type="button"
                 onClick={() => setSelected(null)}
                 style={{
-                  width: '36px',
-                  height: '36px',
+                  width: '40px',
+                  height: '40px',
                   borderRadius: '10px',
                   border: `1px solid ${colors.border}`,
                   background: 'transparent',
                   color: colors.text,
                   cursor: 'pointer',
+                  fontSize: '18px',
+                  fontWeight: 600,
                 }}
                 title="Close"
               >
@@ -566,7 +573,7 @@ const SuppliersPage: React.FC<SuppliersPageProps> = ({ onBack }) => {
               </button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginTop: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '20px' }}>
               <div>
                 <div style={{ fontSize: '13px', fontWeight: 900, marginBottom: '8px' }}>Record Payment</div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
@@ -576,6 +583,7 @@ const SuppliersPage: React.FC<SuppliersPageProps> = ({ onBack }) => {
                       type="number"
                       value={paymentAmount ? String(paymentAmount) : ''}
                       onChange={(e) => setPaymentAmount(parseFloat(e.target.value || '0'))}
+                      onFocus={handleNumberInputFocus}
                       min="0"
                       step="0.01"
                       style={inputStyle}
@@ -595,7 +603,7 @@ const SuppliersPage: React.FC<SuppliersPageProps> = ({ onBack }) => {
                   <label style={labelStyle}>Note</label>
                   <input value={paymentNote} onChange={(e) => setPaymentNote(e.target.value)} style={inputStyle} placeholder="Optional…" />
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
                   <button
                     type="button"
                     onClick={() => void recordPayment()}
@@ -604,8 +612,9 @@ const SuppliersPage: React.FC<SuppliersPageProps> = ({ onBack }) => {
                       background: colors.accent,
                       color: colors.primary,
                       borderRadius: '10px',
-                      padding: '10px 12px',
-                      fontWeight: 900,
+                      padding: '12px 24px',
+                      fontWeight: 600,
+                      fontSize: '15px',
                       cursor: 'pointer',
                     }}
                   >
@@ -639,8 +648,8 @@ const SuppliersPage: React.FC<SuppliersPageProps> = ({ onBack }) => {
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
-              <div style={{ color: colors.textSecondary, fontSize: '12px' }}>Supplier id: {selected.id}</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px' }}>
+              <div style={{ color: colors.textSecondary, fontSize: '14px' }}>Supplier id: {selected.id}</div>
               <button
                 type="button"
                 onClick={() => void removeSupplier(selected)}
@@ -649,9 +658,10 @@ const SuppliersPage: React.FC<SuppliersPageProps> = ({ onBack }) => {
                   background: 'transparent',
                   color: colors.text,
                   borderRadius: '10px',
-                  padding: '10px 12px',
-                  fontWeight: 800,
+                  padding: '12px 24px',
+                  fontWeight: 600,
                   cursor: 'pointer',
+                  fontSize: '15px',
                 }}
               >
                 Delete / Deactivate

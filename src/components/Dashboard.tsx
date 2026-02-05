@@ -181,16 +181,38 @@ const Dashboard: React.FC = () => {
   };
 
   const navigationItems = [
-    { page: 'add-customer', title: 'Add Customer', icon: '➕' },
-    { page: 'add-sale', title: 'Add Sale', icon: '🧾' },
-    { page: 'active-customers', title: 'Active Customers', icon: '👥' },
-    { page: 'add-expense', title: 'Add Expense', icon: '💵' },
-    { page: 'history', title: 'History', icon: '📋' },
-    { page: 'financial-report', title: 'Financial Report', icon: '📊' },
-    { page: 'shifts', title: 'Shift Management', icon: '💼' },
-    { page: 'manage-catalog-resources', title: 'Manage Catalog / Resources', icon: '⚙️' },
-    { page: 'user-management', title: 'User Management', icon: '👥' },
-    { page: 'settings', title: 'Settings', icon: '⚙️' }
+    { 
+      category: 'Sales & Customers',
+      items: [
+        { page: 'add-sale', title: 'POS / Add Sale', icon: '🧾' },
+        { page: 'add-customer', title: 'Add Customer', icon: '➕' },
+        { page: 'active-customers', title: 'Active Customers', icon: '👥' },
+        { page: 'history', title: 'Sales History', icon: '📋' }
+      ]
+    },
+    {
+      category: 'Inventory & Products',
+      items: [
+        { page: 'manage-catalog-resources', title: 'Products & Stock', icon: '📦' },
+        { page: 'purchases', title: 'Purchases (Stock In)', icon: '📥' }
+      ]
+    },
+    {
+      category: 'Financial',
+      items: [
+        { page: 'financial-report', title: 'Financial Report', icon: '📊' },
+        { page: 'add-expense', title: 'Add Expense', icon: '💵' },
+        { page: 'accounts', title: 'Accounts & Payables', icon: '💰' }
+      ]
+    },
+    {
+      category: 'Management',
+      items: [
+        { page: 'shifts', title: 'Shift Management', icon: '💼' },
+        { page: 'user-management', title: 'User Management', icon: '👥' },
+        { page: 'settings', title: 'Settings', icon: '⚙️' }
+      ]
+    }
   ];
 
   const renderDashboardContent = () => {
@@ -367,6 +389,7 @@ const Dashboard: React.FC = () => {
                 padding: '0.5rem 0'
               }}
             >
+              {/* Dashboard - Always at top */}
               <div
                 onClick={() => handleQuickNavigation('dashboard')}
                 style={{
@@ -389,138 +412,57 @@ const Dashboard: React.FC = () => {
               >
                 🏠 Dashboard
               </div>
-              <div
-                onClick={() => handleQuickNavigation('add-customer')}
-                style={{
-                  padding: '0.75rem 1rem',
-                  cursor: 'pointer',
-                  backgroundColor: currentPage === 'add-customer' ? colors.accent : 'transparent',
-                  color: currentPage === 'add-customer' ? (theme === 'dark' ? 'black' : 'white') : colors.text,
-                  transition: 'background-color 0.2s'
-                }}
-                onMouseEnter={(e) => {
-                  if (currentPage !== 'add-customer') {
-                    e.currentTarget.style.backgroundColor = colors.border;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (currentPage !== 'add-customer') {
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                  }
-                }}
-              >
-                👤 Add Customer
-              </div>
-              <div
-                onClick={() => handleQuickNavigation('active-customers')}
-                style={{
-                  padding: '0.75rem 1rem',
-                  cursor: 'pointer',
-                  backgroundColor: currentPage === 'active-customers' ? colors.accent : 'transparent',
-                  color: currentPage === 'active-customers' ? (theme === 'dark' ? 'black' : 'white') : colors.text,
-                  transition: 'background-color 0.2s'
-                }}
-                onMouseEnter={(e) => {
-                  if (currentPage !== 'active-customers') {
-                    e.currentTarget.style.backgroundColor = colors.border;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (currentPage !== 'active-customers') {
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                  }
-                }}
-              >
-                👥 Active Customers
-              </div>
-              <div
-                onClick={() => handleQuickNavigation('add-sale')}
-                style={{
-                  padding: '0.75rem 1rem',
-                  cursor: 'pointer',
-                  backgroundColor: currentPage === 'add-sale' ? colors.accent : 'transparent',
-                  color: currentPage === 'add-sale' ? (theme === 'dark' ? 'black' : 'white') : colors.text,
-                  transition: 'background-color 0.2s'
-                }}
-                onMouseEnter={(e) => {
-                  if (currentPage !== 'add-sale') {
-                    e.currentTarget.style.backgroundColor = colors.border;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (currentPage !== 'add-sale') {
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                  }
-                }}
-              >
-                🧾 Add Sale
-              </div>
-              <div
-                onClick={() => handleQuickNavigation('manage-catalog-resources')}
-                style={{
-                  padding: '0.75rem 1rem',
-                  cursor: 'pointer',
-                  backgroundColor: currentPage === 'manage-catalog-resources' ? colors.accent : 'transparent',
-                  color: currentPage === 'manage-catalog-resources' ? (theme === 'dark' ? 'black' : 'white') : colors.text,
-                  transition: 'background-color 0.2s'
-                }}
-                onMouseEnter={(e) => {
-                  if (currentPage !== 'manage-catalog-resources') {
-                    e.currentTarget.style.backgroundColor = colors.border;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (currentPage !== 'manage-catalog-resources') {
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                  }
-                }}
-              >
-                ⚙️ Manage Catalog/Resources
-              </div>
-              <div
-                onClick={() => handleQuickNavigation('history')}
-                style={{
-                  padding: '0.75rem 1rem',
-                  cursor: 'pointer',
-                  backgroundColor: currentPage === 'history' ? colors.accent : 'transparent',
-                  color: currentPage === 'history' ? (theme === 'dark' ? 'black' : 'white') : colors.text,
-                  transition: 'background-color 0.2s'
-                }}
-                onMouseEnter={(e) => {
-                  if (currentPage !== 'history') {
-                    e.currentTarget.style.backgroundColor = colors.border;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (currentPage !== 'history') {
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                  }
-                }}
-              >
-                📊 History
-              </div>
-              <div
-                onClick={() => handleQuickNavigation('shifts')}
-                style={{
-                  padding: '0.75rem 1rem',
-                  cursor: 'pointer',
-                  backgroundColor: currentPage === 'shifts' ? colors.accent : 'transparent',
-                  color: currentPage === 'shifts' ? (theme === 'dark' ? 'black' : 'white') : colors.text,
-                  transition: 'background-color 0.2s'
-                }}
-                onMouseEnter={(e) => {
-                  if (currentPage !== 'shifts') {
-                    e.currentTarget.style.backgroundColor = colors.border;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (currentPage !== 'shifts') {
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                  }
-                }}
-              >
-                💼 Shift Management
-              </div>
+              
+              <div style={{ height: '1px', backgroundColor: colors.border, margin: '0.5rem 0' }} />
+              
+              {/* Categorized Navigation */}
+              {navigationItems.map((category, categoryIndex) => (
+                <div key={categoryIndex}>
+                  {/* Category Header */}
+                  <div style={{
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    color: colors.textSecondary,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    padding: '0.5rem 1rem 0.25rem 1rem'
+                  }}>
+                    {category.category}
+                  </div>
+                  
+                  {/* Category Items */}
+                  {category.items.map((item, itemIndex) => (
+                    <div
+                      key={itemIndex}
+                      onClick={() => handleQuickNavigation(item.page)}
+                      style={{
+                        padding: '0.75rem 1rem',
+                        cursor: 'pointer',
+                        backgroundColor: currentPage === item.page ? colors.accent : 'transparent',
+                        color: currentPage === item.page ? (theme === 'dark' ? 'black' : 'white') : colors.text,
+                        transition: 'background-color 0.2s'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (currentPage !== item.page) {
+                          e.currentTarget.style.backgroundColor = colors.border;
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (currentPage !== item.page) {
+                          e.currentTarget.style.backgroundColor = 'transparent';
+                        }
+                      }}
+                    >
+                      {item.icon} {item.title}
+                    </div>
+                  ))}
+                  
+                  {/* Separator between categories */}
+                  {categoryIndex < navigationItems.length - 1 && (
+                    <div style={{ height: '1px', backgroundColor: colors.border, margin: '0.5rem 0' }} />
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -625,36 +567,59 @@ const Dashboard: React.FC = () => {
               </button>
             </div>
 
-            {navigationItems.map((item, index) => (
-              <button
-                key={index}
-                onClick={() => handleNavigation(item.page)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '1rem',
-                  padding: '1rem',
-                  backgroundColor: 'transparent',
-                  border: 'none',
-                  color: colors.text,
-                  fontSize: '1rem',
-                  cursor: 'pointer',
-                  borderRadius: '8px',
-                  width: '100%',
-                  textAlign: 'left',
-                  marginBottom: '0.5rem',
-                  transition: 'background-color 0.2s'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = colors.surface;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                }}
-              >
-                <span style={{ fontSize: '1.2rem' }}>{item.icon}</span>
-                <span>{item.title}</span>
-              </button>
+            {navigationItems.map((category, categoryIndex) => (
+              <div key={categoryIndex} style={{ marginBottom: '24px' }}>
+                {/* Category Header */}
+                <div style={{
+                  fontSize: '11px',
+                  fontWeight: '700',
+                  color: colors.textSecondary,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                  marginBottom: '8px',
+                  padding: '0 12px'
+                }}>
+                  {category.category}
+                </div>
+                
+                {/* Category Items */}
+                {category.items.map((item, itemIndex) => (
+                  <button
+                    key={itemIndex}
+                    onClick={() => handleNavigation(item.page)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '12px',
+                      backgroundColor: currentPage === item.page ? colors.accent : 'transparent',
+                      border: 'none',
+                      color: currentPage === item.page ? (theme === 'dark' ? 'black' : 'white') : colors.text,
+                      fontSize: '14px',
+                      fontWeight: currentPage === item.page ? '600' : '500',
+                      cursor: 'pointer',
+                      borderRadius: '8px',
+                      width: '100%',
+                      textAlign: 'left',
+                      marginBottom: '4px',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (currentPage !== item.page) {
+                        e.currentTarget.style.backgroundColor = colors.surface;
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (currentPage !== item.page) {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }
+                    }}
+                  >
+                    <span style={{ fontSize: '18px' }}>{item.icon}</span>
+                    <span>{item.title}</span>
+                  </button>
+                ))}
+              </div>
             ))}
           </div>
         </div>

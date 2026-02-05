@@ -12,6 +12,7 @@ import {
 import { useCurrency } from '../context/CurrencyContext';
 import { useLabels } from '../context/LabelContext';
 import { useTheme } from '../context/ThemeContext';
+import { handleNumberInputFocus } from '../utils/inputHelpers';
 import Checkout from './Checkout';
 
 interface ActiveCustomersProps {
@@ -792,18 +793,22 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
         }}>
           <div style={{
             backgroundColor: colors.surface,
-            padding: '2rem',
-            borderRadius: '12px',
+            padding: '32px',
+            borderRadius: '16px',
             border: `1px solid ${colors.border}`,
-            maxWidth: '500px',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
+            maxWidth: '540px',
             width: '90%'
           }}>
-            <h3 style={{ margin: '0 0 1.5rem 0', color: colors.text }}>
-              Edit {label.client}: {editingGuest.name}
+            <h3 style={{ margin: '0 0 8px 0', color: colors.text, fontSize: '24px', fontWeight: '700' }}>
+              Edit {label.client}
             </h3>
+            <p style={{ margin: '0 0 24px 0', color: colors.textSecondary, fontSize: '14px' }}>
+              Update details for {editingGuest.name}
+            </p>
             
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', color: colors.text }}>
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', color: colors.text, fontSize: '14px', fontWeight: '600' }}>
                 {label.client} Name
               </label>
               <input
@@ -812,19 +817,19 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
                 onChange={(e) => setEditName(e.target.value)}
                 style={{
                   width: '100%',
-                  padding: '0.75rem',
+                  padding: '12px 16px',
                   backgroundColor: colors.surface,
                   border: `1px solid ${colors.border}`,
-                  borderRadius: '8px',
+                  borderRadius: '10px',
                   color: colors.text,
-                  fontSize: '1rem'
+                  fontSize: '15px'
                 }}
                 placeholder={`${label.client.toLowerCase()} name`}
               />
             </div>
 
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', color: colors.text }}>
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', color: colors.text, fontSize: '14px', fontWeight: '600' }}>
                 {label.action} Date
               </label>
               <input
@@ -843,8 +848,8 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
               />
             </div>
 
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', color: colors.text }}>
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', color: colors.text, fontSize: '14px', fontWeight: '600' }}>
                 {label.actionOut} Date
               </label>
               <input
@@ -853,18 +858,18 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
                 onChange={(e) => setEditCheckoutDate(e.target.value)}
                 style={{
                   width: '100%',
-                  padding: '0.75rem',
+                  padding: '12px 16px',
                   backgroundColor: colors.surface,
                   border: `1px solid ${colors.border}`,
-                  borderRadius: '8px',
+                  borderRadius: '10px',
                   color: colors.text,
-                  fontSize: '1rem'
+                  fontSize: '15px'
                 }}
               />
             </div>
 
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', color: colors.text }}>
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', color: colors.text, fontSize: '14px', fontWeight: '600' }}>
                 {label.unit}
               </label>
               <select
@@ -873,12 +878,12 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
                 disabled={isLoadingRooms}
                 style={{
                   width: '100%',
-                  padding: '0.75rem',
+                  padding: '12px 16px',
                   backgroundColor: colors.surface,
                   border: `1px solid ${colors.border}`,
-                  borderRadius: '8px',
+                  borderRadius: '10px',
                   color: colors.text,
-                  fontSize: '1rem',
+                  fontSize: '15px',
                   opacity: isLoadingRooms ? 0.6 : 1
                 }}
               >
@@ -903,38 +908,41 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
               )}
             </div>
 
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', color: colors.text }}>
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', color: colors.text, fontSize: '14px', fontWeight: '600' }}>
                 Daily Rate
               </label>
               <input
                 type="number"
                 value={editDailyRate}
                 onChange={(e) => setEditDailyRate(e.target.value)}
+                onFocus={handleNumberInputFocus}
                 style={{
                   width: '100%',
-                  padding: '0.75rem',
+                  padding: '12px 16px',
                   backgroundColor: colors.surface,
                   border: `1px solid ${colors.border}`,
-                  borderRadius: '8px',
+                  borderRadius: '10px',
                   color: colors.text,
-                  fontSize: '1rem'
+                  fontSize: '15px'
                 }}
                 placeholder="Daily rate"
               />
             </div>
 
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
               <button
                 onClick={resetEditForm}
                 style={{
-                  backgroundColor: colors.textMuted,
-                  color: 'white',
-                  border: 'none',
-                  padding: '0.75rem 1.5rem',
-                  borderRadius: '8px',
+                  flex: '1',
+                  backgroundColor: 'transparent',
+                  color: colors.text,
+                  border: `1px solid ${colors.border}`,
+                  padding: '12px 24px',
+                  borderRadius: '10px',
                   cursor: 'pointer',
-                  fontSize: '1rem'
+                  fontSize: '15px',
+                  fontWeight: '600'
                 }}
               >
                 Cancel
@@ -943,13 +951,15 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
                 onClick={handleUpdateGuest}
                 disabled={isUpdating || isLoadingRooms}
                 style={{
-                  backgroundColor: isUpdating ? colors.textMuted : colors.success,
-                  color: 'white',
+                  flex: '1',
+                  backgroundColor: isUpdating ? colors.textMuted : colors.accent,
+                  color: isUpdating ? colors.surface : 'white',
                   border: 'none',
-                  padding: '0.75rem 1.5rem',
-                  borderRadius: '8px',
+                  padding: '12px 24px',
+                  borderRadius: '10px',
                   cursor: isUpdating || isLoadingRooms ? 'not-allowed' : 'pointer',
-                  fontSize: '1rem',
+                  fontSize: '15px',
+                  fontWeight: '600',
                   opacity: isUpdating || isLoadingRooms ? 0.6 : 1
                 }}
               >

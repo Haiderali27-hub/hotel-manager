@@ -11,6 +11,7 @@ import {
 import { useCurrency } from '../context/CurrencyContext';
 import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
+import { handleNumberInputFocus } from '../utils/inputHelpers';
 
 interface ExpensesPageProps {
   onBack: () => void;
@@ -381,6 +382,7 @@ const ExpensesPage: React.FC<ExpensesPageProps> = ({ onBack, onExpenseChanged })
                   type="number"
                   value={formData.amount}
                   onChange={(e) => handleFormChange('amount', e.target.value)}
+                  onFocus={handleNumberInputFocus}
                   placeholder="0.00"
                   min="0"
                   step="0.01"
@@ -641,23 +643,25 @@ const ExpensesPage: React.FC<ExpensesPageProps> = ({ onBack, onExpenseChanged })
             if (e.target === e.currentTarget) closeEdit();
           }}
         >
-          <div className="bc-card" style={{ width: 'min(720px, 96vw)', borderRadius: '12px', padding: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center' }}>
+          <div className="bc-card" style={{ width: 'min(720px, 96vw)', borderRadius: '16px', padding: '32px', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start' }}>
               <div>
-                <div style={{ fontSize: '16px', fontWeight: 900 }}>Edit Expense</div>
-                <div style={{ fontSize: '12px', color: colors.textSecondary, marginTop: '4px' }}>#{editExpense.id}</div>
+                <div style={{ fontSize: '24px', fontWeight: 700 }}>Edit Expense</div>
+                <div style={{ fontSize: '14px', color: colors.textSecondary, marginTop: '6px' }}>Modify expense details</div>
               </div>
               <button
                 type="button"
                 onClick={closeEdit}
                 style={{
-                  width: '36px',
-                  height: '36px',
+                  width: '40px',
+                  height: '40px',
                   borderRadius: '10px',
                   border: `1px solid ${colors.border}`,
                   background: 'transparent',
                   color: colors.text,
                   cursor: 'pointer',
+                  fontSize: '18px',
+                  fontWeight: 600,
                 }}
                 title="Close"
               >
@@ -670,7 +674,7 @@ const ExpensesPage: React.FC<ExpensesPageProps> = ({ onBack, onExpenseChanged })
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
                 gap: '12px',
-                marginTop: '12px',
+                marginTop: '20px',
               }}
             >
               <div>
@@ -698,6 +702,7 @@ const ExpensesPage: React.FC<ExpensesPageProps> = ({ onBack, onExpenseChanged })
                   min="0"
                   step="0.01"
                   onChange={(e) => setEditDraft((p) => (p ? { ...p, amount: parseFloat(e.target.value) } : p))}
+                  onFocus={handleNumberInputFocus}
                   style={inputStyle}
                 />
               </div>
@@ -713,7 +718,7 @@ const ExpensesPage: React.FC<ExpensesPageProps> = ({ onBack, onExpenseChanged })
               />
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '14px' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '20px' }}>
               <button
                 type="button"
                 onClick={closeEdit}
@@ -722,9 +727,10 @@ const ExpensesPage: React.FC<ExpensesPageProps> = ({ onBack, onExpenseChanged })
                   background: 'transparent',
                   color: colors.text,
                   borderRadius: '10px',
-                  padding: '10px 12px',
-                  fontWeight: 800,
+                  padding: '12px 24px',
+                  fontWeight: 600,
                   cursor: 'pointer',
+                  fontSize: '15px',
                 }}
               >
                 Cancel
@@ -738,9 +744,10 @@ const ExpensesPage: React.FC<ExpensesPageProps> = ({ onBack, onExpenseChanged })
                   background: colors.accent,
                   color: colors.primary,
                   borderRadius: '10px',
-                  padding: '10px 12px',
-                  fontWeight: 900,
+                  padding: '12px 24px',
+                  fontWeight: 600,
                   cursor: editSaving ? 'not-allowed' : 'pointer',
+                  fontSize: '15px',
                 }}
               >
                 {editSaving ? 'Saving…' : 'Save'}

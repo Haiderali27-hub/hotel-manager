@@ -1,22 +1,23 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MenuItem, NewMenuItem } from '../api/client';
 import {
-    addMenuItem,
-    addProductCategory,
-    addProductCategoryWithStyle,
-    deleteMenuItem,
-    deleteProductCategory,
-    getBarcodeEnabled,
-    getMenuItems,
-    getProductCategories,
-    renameProductCategory,
-    updateMenuItem,
-    updateProductCategory,
-    type ProductCategory,
+  addMenuItem,
+  addProductCategory,
+  addProductCategoryWithStyle,
+  deleteMenuItem,
+  deleteProductCategory,
+  getBarcodeEnabled,
+  getMenuItems,
+  getProductCategories,
+  renameProductCategory,
+  updateMenuItem,
+  updateProductCategory,
+  type ProductCategory,
 } from '../api/client';
 import { useCurrency } from '../context/CurrencyContext';
 import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
+import { handleNumberInputFocus } from '../utils/inputHelpers';
 
 interface ProductsPageProps {
   onBack: () => void;
@@ -29,7 +30,6 @@ type ProductDraft = {
   category: string;
   description: string;
   price: string;
-  cost_price: string;
   track_stock: boolean;
   stock_quantity: string;
   low_stock_limit: string;
@@ -42,7 +42,6 @@ const defaultDraft: ProductDraft = {
   category: 'General',
   description: '',
   price: '',
-  cost_price: '',
   track_stock: false,
   stock_quantity: '0',
   low_stock_limit: '5',
@@ -132,7 +131,6 @@ const ProductsPage: React.FC<ProductsPageProps> = ({ onBack }) => {
       category: p.category || 'General',
       description: p.description ?? '',
       price: String(p.price ?? ''),
-      cost_price: String(p.cost_price ?? ''),
       track_stock: (p.track_stock ?? 0) === 1,
       stock_quantity: String(p.stock_quantity ?? 0),
       low_stock_limit: String(p.low_stock_limit ?? 5),
@@ -162,7 +160,6 @@ const ProductsPage: React.FC<ProductsPageProps> = ({ onBack }) => {
     const category = draft.category.trim();
     const description = draft.description.trim();
     const price = parsePositiveFloat(draft.price);
-    const cost_price = parsePositiveFloat(draft.cost_price);
 
     if (!name) {
       showError('Validation', 'Name is required');
@@ -199,7 +196,6 @@ const ProductsPage: React.FC<ProductsPageProps> = ({ onBack }) => {
       category,
       description,
       price,
-      cost_price: Number.isFinite(cost_price) && cost_price >= 0 ? cost_price : undefined,
       is_available: true,
       track_stock,
       stock_quantity,
@@ -576,22 +572,26 @@ const ProductsPage: React.FC<ProductsPageProps> = ({ onBack }) => {
 
       {isModalOpen && (
         <div className="bc-modal-overlay">
-          <div className="bc-modal" style={{ maxWidth: '640px' }}>
-            <div style={{ fontSize: '18px', fontWeight: 900, color: colors.text }}>{title}</div>
+          <div className="bc-modal" style={{ maxWidth: '640px', padding: '32px', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)' }}>
+            <div style={{ fontSize: '24px', fontWeight: 700, color: colors.text, marginBottom: '8px' }}>{title}</div>
+            <div style={{ fontSize: '14px', color: colors.textSecondary, marginBottom: '20px' }}>
+              {editingId ? 'Update product details' : 'Add a new product to your inventory'}
+            </div>
 
-            <div style={{ marginTop: '14px', display: 'grid', gap: '12px' }}>
+            <div style={{ marginTop: '20px', display: 'grid', gap: '14px' }}>
               <div>
-                <div style={{ fontSize: '12px', fontWeight: 700, color: colors.textSecondary, marginBottom: '6px' }}>Name</div>
+                <div style={{ fontSize: '14px', fontWeight: 600, color: colors.text, marginBottom: '8px' }}>Name</div>
                 <input
                   className="bc-input"
                   value={draft.name}
                   onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+                  style={{ padding: '12px 16px', fontSize: '15px', borderRadius: '10px' }}
                 />
               </div>
 
               {barcodeEnabled && (
                 <div>
-                  <div style={{ fontSize: '12px', fontWeight: 700, color: colors.textSecondary, marginBottom: '6px' }}>
+                  <div style={{ fontSize: '14px', fontWeight: 600, color: colors.text, marginBottom: '8px' }}>
                     SKU / Barcode (optional)
                   </div>
                   <input
@@ -602,6 +602,7 @@ const ProductsPage: React.FC<ProductsPageProps> = ({ onBack }) => {
                       setDraft((d) => ({ ...d, barcode: val, sku: val }));
                     }}
                     placeholder="Product code or scan barcode"
+                    style={{ padding: '12px 16px', fontSize: '15px', borderRadius: '10px' }}
                   />
                   <div style={{ fontSize: '11px', color: colors.textSecondary, marginTop: '4px' }}>
                     Use this for internal codes (SKU) or scanned barcodes
@@ -611,19 +612,21 @@ const ProductsPage: React.FC<ProductsPageProps> = ({ onBack }) => {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 180px', gap: '12px' }}>
                 <div>
-                  <div style={{ fontSize: '12px', fontWeight: 700, color: colors.textSecondary, marginBottom: '6px' }}>Category</div>
+                  <div style={{ fontSize: '14px', fontWeight: 600, color: colors.text, marginBottom: '8px' }}>Category</div>
                   {categoriesLoading || categories.length === 0 ? (
                     <input
                       className="bc-input"
                       value={draft.category}
                       onChange={(e) => setDraft((d) => ({ ...d, category: e.target.value }))}
                       placeholder="e.g. Accessories"
+                      style={{ padding: '12px 16px', fontSize: '15px', borderRadius: '10px' }}
                     />
                   ) : (
                     <select
                       className="bc-input"
                       value={draft.category}
                       onChange={(e) => setDraft((d) => ({ ...d, category: e.target.value }))}
+                      style={{ padding: '12px 16px', fontSize: '15px', borderRadius: '10px' }}
                     >
                       {draft.category && !categories.some((c) => c.name === draft.category) && (
                         <option value={draft.category}>{draft.category}</option>
@@ -648,36 +651,27 @@ const ProductsPage: React.FC<ProductsPageProps> = ({ onBack }) => {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <div style={{ fontSize: '12px', fontWeight: 700, color: colors.textSecondary, marginBottom: '6px' }}>Cost (what you paid)</div>
-                  <input
-                    className="bc-input"
-                    value={draft.cost_price}
-                    onChange={(e) => setDraft((d) => ({ ...d, cost_price: e.target.value }))}
-                    inputMode="decimal"
-                    placeholder="Optional"
-                  />
-                </div>
-                <div>
-                  <div style={{ fontSize: '12px', fontWeight: 700, color: colors.textSecondary, marginBottom: '6px' }}>Price (selling price)</div>
-                  <input
-                    className="bc-input"
-                    value={draft.price}
-                    onChange={(e) => setDraft((d) => ({ ...d, price: e.target.value }))}
-                    inputMode="decimal"
-                  />
-                </div>
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: 600, color: colors.text, marginBottom: '8px' }}>Price</div>
+                <input
+                  className="bc-input"
+                  type="number"
+                  value={draft.price}
+                  onChange={(e) => setDraft((d) => ({ ...d, price: e.target.value }))}
+                  onFocus={handleNumberInputFocus}
+                  inputMode="decimal"
+                  style={{ padding: '12px 16px', fontSize: '15px', borderRadius: '10px' }}
+                />
               </div>
 
               <div>
-                <div style={{ fontSize: '12px', fontWeight: 700, color: colors.textSecondary, marginBottom: '6px' }}>Description (optional)</div>
+                <div style={{ fontSize: '14px', fontWeight: 600, color: colors.text, marginBottom: '8px' }}>Description (optional)</div>
                 <textarea
                   className="bc-input"
                   value={draft.description}
                   onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
                   rows={3}
-                  style={{ resize: 'vertical' }}
+                  style={{ resize: 'vertical', padding: '12px 16px', fontSize: '15px', borderRadius: '10px' }}
                   placeholder="e.g. Type-C fast charger 20W"
                 />
               </div>
@@ -701,32 +695,38 @@ const ProductsPage: React.FC<ProductsPageProps> = ({ onBack }) => {
               {draft.track_stock && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
-                    <div style={{ fontSize: '12px', fontWeight: 700, color: colors.textSecondary, marginBottom: '6px' }}>Stock quantity</div>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: colors.text, marginBottom: '8px' }}>Stock quantity</div>
                     <input
                       className="bc-input"
+                      type="number"
                       value={draft.stock_quantity}
                       onChange={(e) => setDraft((d) => ({ ...d, stock_quantity: e.target.value }))}
+                      onFocus={handleNumberInputFocus}
                       inputMode="numeric"
+                      style={{ padding: '12px 16px', fontSize: '15px', borderRadius: '10px' }}
                     />
                   </div>
                   <div>
-                    <div style={{ fontSize: '12px', fontWeight: 700, color: colors.textSecondary, marginBottom: '6px' }}>Low stock limit</div>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: colors.text, marginBottom: '8px' }}>Low stock limit</div>
                     <input
                       className="bc-input"
+                      type="number"
                       value={draft.low_stock_limit}
                       onChange={(e) => setDraft((d) => ({ ...d, low_stock_limit: e.target.value }))}
+                      onFocus={handleNumberInputFocus}
                       inputMode="numeric"
+                      style={{ padding: '12px 16px', fontSize: '15px', borderRadius: '10px' }}
                     />
                   </div>
                 </div>
               )}
             </div>
 
-            <div style={{ display: 'flex', gap: '10px', marginTop: '16px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-              <button type="button" className="bc-btn bc-btn-outline" onClick={closeModal} style={{ width: 'auto' }}>
+            <div style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              <button type="button" className="bc-btn bc-btn-outline" onClick={closeModal} style={{ width: 'auto', padding: '12px 24px', fontSize: '15px', fontWeight: 600, borderRadius: '10px' }}>
                 Cancel
               </button>
-              <button type="button" className="bc-btn bc-btn-primary" onClick={save} style={{ width: 'auto' }}>
+              <button type="button" className="bc-btn bc-btn-primary" onClick={save} style={{ width: 'auto', padding: '12px 24px', fontSize: '15px', fontWeight: 600, borderRadius: '10px' }}>
                 Save
               </button>
             </div>

@@ -1,19 +1,20 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    addSaleReturn,
-    getSaleReturnDetails,
-    getSaleReturnableItems,
-    getSaleReturns,
-    getSales,
-    printSaleReturnReceipt,
-    type ReturnableSaleItem,
-    type SaleReturnDetails,
-    type SaleReturnSummary,
-    type SaleSummary,
+  addSaleReturn,
+  getSaleReturnDetails,
+  getSaleReturnableItems,
+  getSaleReturns,
+  getSales,
+  printSaleReturnReceipt,
+  type ReturnableSaleItem,
+  type SaleReturnDetails,
+  type SaleReturnSummary,
+  type SaleSummary,
 } from '../api/client';
 import { useCurrency } from '../context/CurrencyContext';
 import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
+import { handleNumberInputFocus } from '../utils/inputHelpers';
 
 interface ReturnsPageProps {
   onBack: () => void;
@@ -435,6 +436,7 @@ const ReturnsPage: React.FC<ReturnsPageProps> = ({ onBack }) => {
                               value={qty}
                               disabled={disabled}
                               onChange={(e) => setQty(it.sale_item_id, Number.parseInt(e.target.value || '0', 10), max)}
+                              onFocus={handleNumberInputFocus}
                               style={{
                                 ...inputStyle,
                                 padding: '8px 10px',

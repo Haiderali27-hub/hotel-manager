@@ -24,6 +24,7 @@ import { useTheme } from '../context/ThemeContext';
 interface AddSaleProps {
   onBack: () => void;
   onSaleAdded: () => void;
+  onNavigateToAccounts?: () => void;
 }
 
 interface OrderItemWithDetails extends OrderItem {
@@ -37,7 +38,7 @@ type PosDraft = {
   items: Array<{ menu_item_id: number; quantity: number; unit_price: number; item_name: string }>;
 };
 
-const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded }) => {
+const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded, onNavigateToAccounts }) => {
   const { colors, theme } = useTheme();
   const { showSuccess, showError, showWarning } = useNotification();
   const { formatMoney } = useCurrency();
@@ -675,10 +676,27 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded }) => {
         <button type="button" className="bc-btn bc-btn-outline" onClick={onBack} style={{ width: 'auto' }}>
           Back
         </button>
-        <div>
+        <div style={{ flex: 1 }}>
           <div style={{ fontSize: '28px', fontWeight: 800, color: colors.text }}>{posTitle}</div>
           <div style={{ fontSize: '14px', color: colors.textSecondary }}>Create a new sale</div>
         </div>
+        {onNavigateToAccounts && (
+          <button
+            type="button"
+            className="bc-btn"
+            onClick={onNavigateToAccounts}
+            style={{
+              width: 'auto',
+              backgroundColor: colors.accent,
+              color: colors.secondary,
+              fontSize: '15px',
+              fontWeight: 600,
+              padding: '10px 18px',
+            }}
+          >
+            View Accounts →
+          </button>
+        )}
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -1227,42 +1245,80 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded }) => {
 
       {/* Quick Add Customer Modal */}
       {showQuickAddCustomer && (
-        <div className="bc-modal-overlay">
-          <div className="bc-modal" style={{ maxWidth: '420px' }}>
-            <div style={{ fontSize: '18px', fontWeight: 900, color: colors.text }}>Quick Add {label.client}</div>
+        <div className="bc-modal-overlay" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="bc-modal" style={{ 
+            maxWidth: '500px', 
+            width: '90%',
+            padding: '32px',
+            borderRadius: '16px',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.12)'
+          }}>
+            <div style={{ 
+              fontSize: '24px', 
+              fontWeight: '700', 
+              color: colors.text,
+              marginBottom: '8px'
+            }}>Quick Add {label.client}</div>
             
-            <div style={{ marginTop: '16px', display: 'grid', gap: '12px' }}>
+            <div style={{ 
+              fontSize: '14px', 
+              color: colors.textSecondary,
+              marginBottom: '24px'
+            }}>
+              Add a new customer quickly
+            </div>
+            
+            <div style={{ display: 'grid', gap: '20px' }}>
               <div>
-                <div style={{ fontSize: '12px', fontWeight: 700, color: colors.textSecondary, marginBottom: '6px' }}>
+                <label style={{ 
+                  display: 'block',
+                  fontSize: '14px', 
+                  fontWeight: '600', 
+                  color: colors.text, 
+                  marginBottom: '8px' 
+                }}>
                   Name *
-                </div>
+                </label>
                 <input
                   type="text"
                   value={quickAddName}
                   onChange={(e) => setQuickAddName(e.target.value)}
                   placeholder="Customer name"
                   className="bc-input"
+                  style={{ padding: '12px 16px', fontSize: '15px' }}
                   autoFocus
                 />
               </div>
               
               <div>
-                <div style={{ fontSize: '12px', fontWeight: 700, color: colors.textSecondary, marginBottom: '6px' }}>
+                <label style={{ 
+                  display: 'block',
+                  fontSize: '14px', 
+                  fontWeight: '600', 
+                  color: colors.text, 
+                  marginBottom: '8px' 
+                }}>
                   Phone (Optional)
-                </div>
+                </label>
                 <input
                   type="text"
                   value={quickAddPhone}
                   onChange={(e) => setQuickAddPhone(e.target.value)}
                   placeholder="Phone number"
                   className="bc-input"
+                  style={{ padding: '12px 16px', fontSize: '15px' }}
                 />
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
-              <button type="button" className="bc-btn bc-btn-primary" onClick={handleQuickAddCustomer}>
-                Add {label.client}
+            <div style={{ display: 'flex', gap: '12px', marginTop: '32px' }}>
+              <button 
+                type="button" 
+                className="bc-btn bc-btn-primary" 
+                onClick={handleQuickAddCustomer}
+                style={{ flex: 1, padding: '12px 24px', fontSize: '15px', fontWeight: '600' }}
+              >
+                Add Customer
               </button>
               <button
                 type="button"
@@ -1272,6 +1328,7 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded }) => {
                   setQuickAddName('');
                   setQuickAddPhone('');
                 }}
+                style={{ padding: '12px 24px', fontSize: '15px', fontWeight: '600' }}
               >
                 Cancel
               </button>

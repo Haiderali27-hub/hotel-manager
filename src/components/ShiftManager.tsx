@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useCurrency } from '../context/CurrencyContext';
 import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
+import { handleNumberInputFocus } from '../utils/inputHelpers';
 
 interface ShiftSummary {
   id: number;
@@ -312,17 +313,19 @@ const ShiftManager: React.FC = () => {
           <div
             style={{
               background: colors.surface,
-              borderRadius: '12px',
-              padding: '2rem',
-              maxWidth: '400px',
+              borderRadius: '16px',
+              padding: '32px',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
+              maxWidth: '480px',
               width: '90%',
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 style={{ marginBottom: '1.5rem' }}>Open New Shift</h3>
+            <h3 style={{ marginBottom: '8px', fontSize: '24px', fontWeight: '700' }}>Open New Shift</h3>
+            <p style={{ margin: '0 0 24px 0', color: colors.textSecondary, fontSize: '14px' }}>Enter the starting cash amount</p>
 
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem' }}>
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '600' }}>
                 Starting Cash Amount:
               </label>
               <input
@@ -330,31 +333,33 @@ const ShiftManager: React.FC = () => {
                 step="0.01"
                 value={startCash}
                 onChange={(e) => setStartCash(e.target.value)}
+                onFocus={handleNumberInputFocus}
                 style={{
                   width: '100%',
-                  padding: '0.75rem',
-                  borderRadius: '8px',
+                  padding: '12px 16px',
+                  borderRadius: '10px',
                   border: `1px solid ${colors.border}`,
                   background: colors.surface,
                   color: colors.text,
-                  fontSize: '1rem',
+                  fontSize: '15px',
                 }}
                 autoFocus
               />
             </div>
 
-            <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
+            <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
               <button
                 onClick={() => setShowOpenModal(false)}
                 style={{
                   flex: 1,
-                  padding: '0.75rem',
-                  background: colors.border,
+                  padding: '12px 24px',
+                  background: 'transparent',
                   color: colors.text,
-                  border: 'none',
-                  borderRadius: '8px',
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '10px',
                   cursor: 'pointer',
-                  fontSize: '1rem',
+                  fontSize: '15px',
+                  fontWeight: '600'
                 }}
               >
                 Cancel
@@ -363,13 +368,13 @@ const ShiftManager: React.FC = () => {
                 onClick={handleOpenShift}
                 style={{
                   flex: 1,
-                  padding: '0.75rem',
-                  background: colors.primary,
+                  padding: '12px 24px',
+                  background: colors.accent,
                   color: '#fff',
                   border: 'none',
-                  borderRadius: '8px',
+                  borderRadius: '10px',
                   cursor: 'pointer',
-                  fontSize: '1rem',
+                  fontSize: '15px',
                   fontWeight: '600',
                 }}
               >
@@ -400,14 +405,18 @@ const ShiftManager: React.FC = () => {
           <div
             style={{
               background: colors.surface,
-              borderRadius: '12px',
-              padding: '2rem',
+              borderRadius: '16px',
+              padding: '32px',
               maxWidth: '500px',
               width: '90%',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 style={{ marginBottom: '1.5rem' }}>Close Shift & Generate Z-Report</h3>
+            <h3 style={{ margin: '0 0 8px 0', fontSize: '24px', fontWeight: 700 }}>Close Shift & Generate Z-Report</h3>
+            <div style={{ fontSize: '14px', color: colors.textSecondary, marginBottom: '20px' }}>
+              Review the shift summary and confirm closing
+            </div>
 
             <div
               style={{
@@ -454,8 +463,8 @@ const ShiftManager: React.FC = () => {
               </div>
             </div>
 
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', fontSize: '14px' }}>
                 Actual Cash in Drawer:
               </label>
               <input
@@ -463,21 +472,22 @@ const ShiftManager: React.FC = () => {
                 step="0.01"
                 value={endCashActual}
                 onChange={(e) => setEndCashActual(e.target.value)}
+                onFocus={handleNumberInputFocus}
                 style={{
                   width: '100%',
-                  padding: '0.75rem',
-                  borderRadius: '8px',
+                  padding: '12px 16px',
+                  borderRadius: '10px',
                   border: `1px solid ${colors.border}`,
                   background: colors.surface,
                   color: colors.text,
-                  fontSize: '1rem',
+                  fontSize: '15px',
                 }}
                 autoFocus
               />
             </div>
 
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem' }}>
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '600' }}>
                 Notes (optional):
               </label>
               <textarea
@@ -486,30 +496,31 @@ const ShiftManager: React.FC = () => {
                 placeholder="Any discrepancies or notes about this shift..."
                 style={{
                   width: '100%',
-                  padding: '0.75rem',
-                  borderRadius: '8px',
+                  padding: '12px 16px',
+                  borderRadius: '10px',
                   border: `1px solid ${colors.border}`,
                   background: colors.surface,
                   color: colors.text,
-                  fontSize: '1rem',
+                  fontSize: '15px',
                   minHeight: '80px',
                   resize: 'vertical',
                 }}
               />
             </div>
 
-            <div style={{ display: 'flex', gap: '1rem' }}>
+            <div style={{ display: 'flex', gap: '12px' }}>
               <button
                 onClick={() => setShowCloseModal(false)}
                 style={{
                   flex: 1,
-                  padding: '0.75rem',
-                  background: colors.border,
+                  padding: '12px 16px',
+                  background: 'transparent',
                   color: colors.text,
-                  border: 'none',
-                  borderRadius: '8px',
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '10px',
                   cursor: 'pointer',
-                  fontSize: '1rem',
+                  fontSize: '15px',
+                  fontWeight: 600,
                 }}
               >
                 Cancel
@@ -518,7 +529,7 @@ const ShiftManager: React.FC = () => {
                 onClick={handleCloseShift}
                 style={{
                   flex: 1,
-                  padding: '0.75rem',
+                  padding: '12px 16px',
                   background: '#dc3545',
                   color: '#fff',
                   border: 'none',

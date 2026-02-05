@@ -4,6 +4,7 @@ import { useCurrency } from '../context/CurrencyContext';
 import { useLabels } from '../context/LabelContext';
 import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
+import { handleNumberInputFocus } from '../utils/inputHelpers';
 
 interface AddCustomerProps {
   onBack: () => void;
@@ -432,6 +433,7 @@ const AddCustomer: React.FC<AddCustomerProps> = ({ onBack, onCustomerAdded, refr
             name="daily_rate"
             value={formData.daily_rate}
             onChange={handleInputChange}
+            onFocus={handleNumberInputFocus}
             min="0"
             step="0.01"
             readOnly={!isWalkIn && formData.room_id > 0}

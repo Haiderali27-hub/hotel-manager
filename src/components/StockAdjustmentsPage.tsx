@@ -14,6 +14,7 @@ import {
 } from '../api/client';
 import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
+import { handleNumberInputFocus } from '../utils/inputHelpers';
 
 interface StockAdjustmentsPageProps {
   onBack: () => void;
@@ -308,6 +309,7 @@ const StockAdjustmentsPage: React.FC<StockAdjustmentsPageProps> = ({ onBack }) =
                           className="bc-input"
                           value={l.quantity}
                           onChange={(e) => setLines((prev) => prev.map((x, i) => (i === idx ? { ...x, quantity: e.target.value } : x)))}
+                          onFocus={handleNumberInputFocus}
                           inputMode="numeric"
                         />
                       </div>

@@ -304,8 +304,34 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
         ));
     }
     
-    let payment_status = if is_paid { "✓ PAID" } else { "⚠ UNPAID" };
-    let payment_color = if is_paid { "#28a745" } else { "#dc3545" };
+    // Get payment summary for the sale
+    let mut stmt_payments = conn.prepare(
+        "SELECT COALESCE(SUM(amount), 0) as amount_paid 
+         FROM sale_payments 
+         WHERE sale_id = ?"
+    ).map_err(|e| format!("Failed to prepare payment query: {}", e))?;
+    
+    let amount_paid: f64 = stmt_payments.query_row([order_id], |row| {
+        row.get(0)
+    }).unwrap_or(0.0);
+    
+    let balance_due = total_amount - amount_paid;
+    let is_fully_paid = balance_due <= 0.01; // Account for floating point precision
+    
+    let payment_status = if is_fully_paid { 
+        "✓ PAID IN FULL" 
+    } else if amount_paid > 0.0 {
+        "⚠ PARTIALLY PAID"
+    } else { 
+        "⚠ UNPAID" 
+    };
+    let payment_color = if is_fully_paid { 
+        "#28a745" 
+    } else if amount_paid > 0.0 {
+        "#ff9800"
+    } else { 
+        "#dc3545" 
+    };
     
     // Determine customer display information
     let customer_display = match customer_type.as_str() {
@@ -324,6 +350,8 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
     };
 
     let total_amount_fmt = format_money(total_amount, &currency_code, 2);
+    let amount_paid_fmt = format_money(amount_paid, &currency_code, 2);
+    let balance_due_fmt = format_money(balance_due, &currency_code, 2);
 
     let html = format!(r#"<!DOCTYPE html>
 <html lang="en">
@@ -492,6 +520,7 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
                 <td colspan="3"><strong>Grand Total</strong></td>
                 <td class="text-right"><strong>{}</strong></td>
             </tr>
+            {}
         </tfoot>
     </table>
 
@@ -515,6 +544,20 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
         payment_status,
         items_html,
         total_amount_fmt,
+        // Add payment breakdown if partially paid or unpaid
+        if !is_fully_paid {
+            format!(r#"
+            <tr style="background-color: #fff3cd; border-top: 2px solid #856404;">
+                <td colspan="3" style="padding: 8px;"><strong>Amount Paid</strong></td>
+                <td class="text-right" style="padding: 8px;"><strong>{}</strong></td>
+            </tr>
+            <tr style="background-color: #f8d7da; border-bottom: 2px solid #721c24;">
+                <td colspan="3" style="padding: 8px;"><strong>Balance Due</strong></td>
+                <td class="text-right" style="padding: 8px; color: #721c24;"><strong>{}</strong></td>
+            </tr>"#, amount_paid_fmt, balance_due_fmt)
+        } else {
+            String::new()
+        },
         receipt_footer_html,
         chrono::Local::now().format("%B %d, %Y at %I:%M %p")
     );

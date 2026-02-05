@@ -14,16 +14,18 @@ import {
 import { useCurrency } from '../context/CurrencyContext';
 import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
+import { handleNumberInputFocus } from '../utils/inputHelpers';
 
 interface AccountsPageProps {
   onBack: () => void;
+  onNavigateToPOS?: () => void;
 }
 
 type AccountsTab = 'customers' | 'suppliers';
 
 type PaymentMethod = 'cash' | 'card' | 'mobile' | 'bank';
 
-const AccountsPage: React.FC<AccountsPageProps> = ({ onBack }) => {
+const AccountsPage: React.FC<AccountsPageProps> = ({ onBack, onNavigateToPOS }) => {
   const { colors } = useTheme();
   const { formatMoney } = useCurrency();
   const { showError, showSuccess } = useNotification();
@@ -287,9 +289,26 @@ const AccountsPage: React.FC<AccountsPageProps> = ({ onBack }) => {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           {tabBtn('customers', 'Customers')}
           {tabBtn('suppliers', 'Suppliers')}
+          {onNavigateToPOS && (
+            <button
+              type="button"
+              className="bc-btn"
+              onClick={onNavigateToPOS}
+              style={{
+                backgroundColor: colors.accent,
+                color: colors.secondary,
+                fontSize: '15px',
+                fontWeight: 600,
+                padding: '10px 18px',
+                marginLeft: '8px',
+              }}
+            >
+              ← Back to POS
+            </button>
+          )}
         </div>
       </div>
 
@@ -444,25 +463,27 @@ const AccountsPage: React.FC<AccountsPageProps> = ({ onBack }) => {
             if (e.target === e.currentTarget) setSelectedCustomer(null);
           }}
         >
-          <div className="bc-card" style={{ width: 'min(1020px, 96vw)', borderRadius: '12px', padding: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center' }}>
+          <div className="bc-card" style={{ width: 'min(1020px, 96vw)', borderRadius: '16px', padding: '32px', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start' }}>
               <div>
-                <div style={{ fontSize: '16px', fontWeight: 900 }}>{selectedCustomer.customer_name}</div>
-                <div style={{ fontSize: '12px', color: colors.textSecondary, marginTop: '4px' }}>
-                  Balance: <span style={{ color: colors.text, fontWeight: 900 }}>{formatMoney(selectedCustomer.balance_due || 0)}</span>
+                <div style={{ fontSize: '24px', fontWeight: 700 }}>{selectedCustomer.customer_name}</div>
+                <div style={{ fontSize: '14px', color: colors.textSecondary, marginTop: '6px' }}>
+                  Balance: <span style={{ color: colors.text, fontWeight: 700 }}>{formatMoney(selectedCustomer.balance_due || 0)}</span>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedCustomer(null)}
                 style={{
-                  width: '36px',
-                  height: '36px',
+                  width: '40px',
+                  height: '40px',
                   borderRadius: '10px',
                   border: `1px solid ${colors.border}`,
                   background: 'transparent',
                   color: colors.text,
                   cursor: 'pointer',
+                  fontSize: '18px',
+                  fontWeight: 600,
                 }}
                 title="Close"
               >
@@ -470,7 +491,7 @@ const AccountsPage: React.FC<AccountsPageProps> = ({ onBack }) => {
               </button>
             </div>
 
-            <div style={{ marginTop: '12px' }}>
+            <div style={{ marginTop: '20px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
                 <div>
                   <label style={labelStyle}>Select sale</label>
@@ -493,6 +514,7 @@ const AccountsPage: React.FC<AccountsPageProps> = ({ onBack }) => {
                     step="0.01"
                     value={paymentAmount ? String(paymentAmount) : ''}
                     onChange={(e) => setPaymentAmount(parseFloat(e.target.value || '0'))}
+                    onFocus={handleNumberInputFocus}
                     style={inputStyle}
                   />
                 </div>
@@ -511,7 +533,7 @@ const AccountsPage: React.FC<AccountsPageProps> = ({ onBack }) => {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
                 <button
                   type="button"
                   onClick={() => void submitCustomerPayment()}
@@ -521,9 +543,10 @@ const AccountsPage: React.FC<AccountsPageProps> = ({ onBack }) => {
                     background: colors.accent,
                     color: colors.primary,
                     borderRadius: '10px',
-                    padding: '10px 12px',
-                    fontWeight: 900,
+                    padding: '12px 24px',
+                    fontWeight: 600,
                     cursor: paymentSaving ? 'not-allowed' : 'pointer',
+                    fontSize: '15px',
                   }}
                 >
                   {paymentSaving ? 'Saving…' : 'Record Payment'}
@@ -592,25 +615,27 @@ const AccountsPage: React.FC<AccountsPageProps> = ({ onBack }) => {
             if (e.target === e.currentTarget) setSelectedSupplier(null);
           }}
         >
-          <div className="bc-card" style={{ width: 'min(1020px, 96vw)', borderRadius: '12px', padding: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center' }}>
+          <div className="bc-card" style={{ width: 'min(1020px, 96vw)', borderRadius: '16px', padding: '32px', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start' }}>
               <div>
-                <div style={{ fontSize: '16px', fontWeight: 900 }}>{selectedSupplier.supplier_name}</div>
-                <div style={{ fontSize: '12px', color: colors.textSecondary, marginTop: '4px' }}>
-                  Balance: <span style={{ color: colors.text, fontWeight: 900 }}>{formatMoney(selectedSupplier.balance_due || 0)}</span>
+                <div style={{ fontSize: '24px', fontWeight: 700 }}>{selectedSupplier.supplier_name}</div>
+                <div style={{ fontSize: '14px', color: colors.textSecondary, marginTop: '6px' }}>
+                  Balance: <span style={{ color: colors.text, fontWeight: 700 }}>{formatMoney(selectedSupplier.balance_due || 0)}</span>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedSupplier(null)}
                 style={{
-                  width: '36px',
-                  height: '36px',
+                  width: '40px',
+                  height: '40px',
                   borderRadius: '10px',
                   border: `1px solid ${colors.border}`,
                   background: 'transparent',
                   color: colors.text,
                   cursor: 'pointer',
+                  fontSize: '18px',
+                  fontWeight: 600,
                 }}
                 title="Close"
               >
@@ -618,7 +643,7 @@ const AccountsPage: React.FC<AccountsPageProps> = ({ onBack }) => {
               </button>
             </div>
 
-            <div style={{ marginTop: '12px' }}>
+            <div style={{ marginTop: '20px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
                 <div>
                   <label style={labelStyle}>Amount</label>
@@ -628,6 +653,7 @@ const AccountsPage: React.FC<AccountsPageProps> = ({ onBack }) => {
                     step="0.01"
                     value={supplierPayAmount ? String(supplierPayAmount) : ''}
                     onChange={(e) => setSupplierPayAmount(parseFloat(e.target.value || '0'))}
+                    onFocus={handleNumberInputFocus}
                     style={inputStyle}
                   />
                 </div>
@@ -654,8 +680,9 @@ const AccountsPage: React.FC<AccountsPageProps> = ({ onBack }) => {
                       background: colors.accent,
                       color: colors.primary,
                       borderRadius: '10px',
-                      padding: '10px 12px',
-                      fontWeight: 900,
+                      padding: '12px 24px',
+                      fontWeight: 600,
+                      fontSize: '15px',
                       cursor: supplierPaySaving ? 'not-allowed' : 'pointer',
                       width: '100%',
                       maxWidth: '220px',

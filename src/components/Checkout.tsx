@@ -21,6 +21,7 @@ import { useCurrency } from '../context/CurrencyContext';
 import { useLabels } from '../context/LabelContext';
 import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
+import { handleNumberInputFocus } from '../utils/inputHelpers';
 import { generateReceiptLink, openWhatsApp, type CartItem } from '../utils/whatsapp';
 
 interface CheckoutProps {
@@ -562,13 +563,17 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onCheckoutComplete }
                 }}>
                     <div style={{
                         backgroundColor: colors.primary,
-                        padding: '2rem',
-                        borderRadius: '8px',
+                        padding: '32px',
+                        borderRadius: '16px',
                         border: `2px solid ${colors.border}`,
                         maxWidth: '400px',
-                        width: '90%'
+                        width: '90%',
+                        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)'
                     }}>
-                        <h2 style={{ marginTop: 0, color: colors.text }}>Redeem Loyalty Points</h2>
+                        <h2 style={{ margin: '0 0 8px 0', color: colors.text, fontSize: '24px', fontWeight: 700 }}>Redeem Loyalty Points</h2>
+                        <div style={{ fontSize: '14px', color: colors.textSecondary, marginBottom: '20px' }}>
+                            Convert points to discount
+                        </div>
                         
                         <div style={{ marginBottom: '1rem', color: colors.text }}>
                             <p>
@@ -579,11 +584,12 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onCheckoutComplete }
                             </p>
                         </div>
 
-                        <div style={{ marginBottom: '1.5rem' }}>
+                        <div style={{ marginBottom: '20px' }}>
                             <label style={{ 
                                 display: 'block', 
-                                marginBottom: '0.5rem',
-                                fontWeight: 'bold',
+                                marginBottom: '8px',
+                                fontWeight: 600,
+                                fontSize: '14px',
                                 color: colors.text
                             }}>
                                 Points to Redeem:
@@ -594,14 +600,15 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onCheckoutComplete }
                                 max={loyaltyPoints}
                                 value={pointsToRedeem}
                                 onChange={(e) => setPointsToRedeem(Math.min(loyaltyPoints, Math.max(0, parseInt(e.target.value) || 0)))}
+                                onFocus={handleNumberInputFocus}
                                 style={{
                                     width: '100%',
-                                    padding: '0.5rem',
+                                    padding: '12px 16px',
                                     border: `1px solid ${colors.border}`,
-                                    borderRadius: '4px',
+                                    borderRadius: '10px',
                                     backgroundColor: colors.surface,
                                     color: colors.text,
-                                    fontSize: '1rem'
+                                    fontSize: '15px'
                                 }}
                             />
                             {pointsToRedeem > 0 && (
@@ -618,7 +625,7 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onCheckoutComplete }
                             )}
                         </div>
 
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', gap: '12px' }}>
                             <button
                                 onClick={() => {
                                     setShowRedeemModal(false);
@@ -626,14 +633,14 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onCheckoutComplete }
                                 }}
                                 style={{
                                     flex: 1,
-                                    backgroundColor: colors.surface,
+                                    backgroundColor: 'transparent',
                                     color: colors.text,
                                     border: `1px solid ${colors.border}`,
-                                    padding: '0.75rem',
-                                    borderRadius: '4px',
+                                    padding: '12px 16px',
+                                    borderRadius: '10px',
                                     cursor: 'pointer',
-                                    fontSize: '1rem',
-                                    fontWeight: 'bold'
+                                    fontSize: '15px',
+                                    fontWeight: 600
                                 }}
                             >
                                 Cancel
@@ -646,11 +653,11 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onCheckoutComplete }
                                     backgroundColor: pointsToRedeem > 0 ? '#F59E0B' : '#D1D5DB',
                                     color: 'white',
                                     border: 'none',
-                                    padding: '0.75rem',
-                                    borderRadius: '4px',
+                                    padding: '12px 16px',
+                                    borderRadius: '10px',
                                     cursor: pointsToRedeem > 0 ? 'pointer' : 'not-allowed',
-                                    fontSize: '1rem',
-                                    fontWeight: 'bold'
+                                    fontSize: '15px',
+                                    fontWeight: 600
                                 }}
                             >
                                 Apply Discount
@@ -770,6 +777,7 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onCheckoutComplete }
                                             min="1"
                                             value={quantity}
                                             onChange={(e) => setQuantity(Number(e.target.value))}
+                                            onFocus={handleNumberInputFocus}
                                             style={{
                                                 width: '80px',
                                                 padding: '0.5rem',
@@ -919,6 +927,7 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onCheckoutComplete }
                                 max={discount.type === 'percentage' ? '100' : undefined}
                                 value={discount.amount}
                                 onChange={(e) => setDiscount(prev => ({ ...prev, amount: Number(e.target.value) }))}
+                                onFocus={handleNumberInputFocus}
                                 placeholder={discount.type === 'percentage' ? '0-100' : 'Amount'}
                                 style={{
                                     padding: '0.5rem',

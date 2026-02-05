@@ -3,6 +3,7 @@ import { addExpense, type NewExpense } from '../api/client';
 import { useCurrency } from '../context/CurrencyContext';
 import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
+import { handleNumberInputFocus } from '../utils/inputHelpers';
 
 interface AddExpenseProps {
   onBack: () => void;
@@ -258,6 +259,7 @@ const AddExpense: React.FC<AddExpenseProps> = ({ onBack, onExpenseAdded }) => {
                 type="number"
                 value={formData.amount}
                 onChange={(e) => handleInputChange('amount', e.target.value)}
+                onFocus={handleNumberInputFocus}
                 placeholder="0.00"
                 min="0"
                 step="0.01"

@@ -44,6 +44,9 @@ const OfflineLoginPage: React.FC = () => {
   const [success, setSuccess] = useState<string>('');
   const [showResetPassword, setShowResetPassword] = useState(false);
   const [securityQuestion, setSecurityQuestion] = useState<string>('');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -253,16 +256,37 @@ const OfflineLoginPage: React.FC = () => {
 
                 <div className="bc-field">
                   <label className="bc-label">Password</label>
-                  <input
-                    type="password"
-                    name="password"
-                    className="bc-input bc-auth-input"
-                    placeholder="Enter your password"
-                    value={formData.password}
-                    onChange={handleInputChange}
-                    disabled={isLoading}
-                    required
-                  />
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showLoginPassword ? 'text' : 'password'}
+                      name="password"
+                      className="bc-input bc-auth-input"
+                      placeholder="Enter your password"
+                      value={formData.password}
+                      onChange={handleInputChange}
+                      disabled={isLoading}
+                      required
+                      style={{ paddingRight: '40px' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowLoginPassword(!showLoginPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: '10px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '18px',
+                        padding: '4px 8px'
+                      }}
+                      tabIndex={-1}
+                    >
+                      {showLoginPassword ? '🙈' : '👁️'}
+                    </button>
+                  </div>
                 </div>
 
                 {error && <div className="bc-alert bc-alert-error">{error}</div>}
@@ -356,30 +380,72 @@ const OfflineLoginPage: React.FC = () => {
 
                 <div className="bc-field">
                   <label className="bc-label">New Password</label>
-                  <input
-                    type="password"
-                    name="newPassword"
-                    className="bc-input bc-auth-input"
-                    placeholder="Minimum 8 characters"
-                    value={securityData.newPassword}
-                    onChange={handleSecurityInputChange}
-                    disabled={isLoading}
-                    required
-                  />
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      name="newPassword"
+                      className="bc-input bc-auth-input"
+                      placeholder="Minimum 8 characters"
+                      value={securityData.newPassword}
+                      onChange={handleSecurityInputChange}
+                      disabled={isLoading}
+                      required
+                      style={{ paddingRight: '40px' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: '10px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '18px',
+                        padding: '4px 8px'
+                      }}
+                      tabIndex={-1}
+                    >
+                      {showNewPassword ? '🙈' : '👁️'}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="bc-field">
                   <label className="bc-label">Confirm New Password</label>
-                  <input
-                    type="password"
-                    name="confirmNewPassword"
-                    className="bc-input bc-auth-input"
-                    placeholder="Re-enter new password"
-                    value={securityData.confirmNewPassword}
-                    onChange={handleSecurityInputChange}
-                    disabled={isLoading}
-                    required
-                  />
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      name="confirmNewPassword"
+                      className="bc-input bc-auth-input"
+                      placeholder="Re-enter new password"
+                      value={securityData.confirmNewPassword}
+                      onChange={handleSecurityInputChange}
+                      disabled={isLoading}
+                      required
+                      style={{ paddingRight: '40px' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: '10px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '18px',
+                        padding: '4px 8px'
+                      }}
+                      tabIndex={-1}
+                    >
+                      {showConfirmPassword ? '🙈' : '👁️'}
+                    </button>
+                  </div>
                 </div>
 
                 {error && <div className="bc-alert bc-alert-error">{error}</div>}

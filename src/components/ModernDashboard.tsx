@@ -2,12 +2,20 @@ import { invoke } from '@tauri-apps/api/core';
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useCurrency } from '../context/CurrencyContext';
+import { useLabels } from '../context/LabelContext';
 import { useTheme } from '../context/ThemeContext';
+import AccountsPage from './AccountsPage';
 import AddSale from './AddSale';
+import ExpensesPage from './ExpensesPage';
 import FinancialReport from './FinancialReport';
 import ProductsPage from './ProductsPage';
 import { ProtectedRoute } from './ProtectedRoute';
+import PurchasesPage from './PurchasesPage';
+import ReturnsPage from './ReturnsPage';
+import SalesHistoryPage from './SalesHistoryPage';
 import Settings from './SettingsNew';
+import StockAdjustmentsPage from './StockAdjustmentsPage';
+import SuppliersPage from './SuppliersPage';
 
 interface SaleSummary {
   id: number;
@@ -31,7 +39,18 @@ const ModernDashboard: React.FC = () => {
   const { logout, userRole, adminId } = useAuth();
   const { colors, theme } = useTheme();
   const { formatMoney } = useCurrency();
+  const { mode, flags } = useLabels();
   const [currentPage, setCurrentPage] = useState('dashboard');
+  const [sidebarVisible, setSidebarVisible] = useState(() => {
+    try {
+      const raw = localStorage.getItem('bm-sidebar-visible');
+      if (raw === '0') return false;
+      if (raw === '1') return true;
+    } catch {
+      // Ignore storage errors.
+    }
+    return true;
+  });
   const [businessName, setBusinessName] = useState('INERTIA');
   const [recentSales, setRecentSales] = useState<SaleSummary[]>([]);
   const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([]);
@@ -41,13 +60,27 @@ const ModernDashboard: React.FC = () => {
     loadBusinessName();
   }, []);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem('bm-sidebar-visible', sidebarVisible ? '1' : '0');
+    } catch {
+      // Ignore storage errors.
+    }
+  }, [sidebarVisible]);
+
   const loadDashboardData = async () => {
     try {
       // Used for "Recent Activity" and today's revenue/order counts.
       const sales = await invoke<SaleSummary[]>('get_sales');
       setRecentSales(sales);
 
-      const lowStock = await invoke<LowStockItem[]>('get_low_stock_items');
+      const rows: any[] = await invoke('get_low_stock_items');
+      const lowStock: LowStockItem[] = rows.map((raw) => ({
+        id: raw.id,
+        name: raw.name,
+        stock_quantity: raw.stock_quantity ?? raw.stockQuantity ?? 0,
+        low_stock_limit: raw.low_stock_limit ?? raw.lowStockLimit ?? 0,
+      }));
       setLowStockItems(lowStock);
     } catch (err) {
       console.error('Failed to load stats:', err);
@@ -63,10 +96,24 @@ const ModernDashboard: React.FC = () => {
     }
   };
 
+  const posNavLabel = (() => {
+    if (flags.retailQuickScan) return 'POS';
+    if (flags.restaurantKitchen) return 'Orders';
+    if (mode === 'salon') return 'Services';
+    return 'Sales';
+  })();
+
   const navigationItems: Array<{ id: string; label: string; managerOnly?: boolean; adminOnly?: boolean }> = [
     { id: 'dashboard', label: 'Dashboard' },
-    { id: 'pos', label: 'POS / Sales' },
+    { id: 'pos', label: posNavLabel },
     { id: 'products', label: 'Products' },
+    { id: 'purchases', label: 'Purchases (Stock-In)', managerOnly: true },
+    { id: 'stock-adjustments', label: 'Stock Adjustments', managerOnly: true },
+    { id: 'returns', label: 'Returns & Refunds', managerOnly: true },
+    { id: 'suppliers', label: 'Suppliers', managerOnly: true },
+    { id: 'accounts', label: 'Accounts', managerOnly: true },
+    { id: 'sales-history', label: 'Sales History' },
+    { id: 'expenses', label: 'Expenses', managerOnly: true },
     { id: 'reports', label: 'Reports', managerOnly: true },
     { id: 'settings', label: 'Settings', adminOnly: true },
   ];
@@ -95,6 +142,70 @@ const ModernDashboard: React.FC = () => {
   const totalOrdersToday = todaySales.length;
   const lowStockCount = lowStockItems.length;
 
+  const startOfDay = (d: Date) => {
+    const x = new Date(d);
+    x.setHours(0, 0, 0, 0);
+    return x;
+  };
+
+  const last7Days = (() => {
+    const today = startOfDay(new Date());
+    const days: Array<{ key: string; label: string; date: Date; revenue: number; orders: number }> = [];
+    for (let i = 6; i >= 0; i -= 1) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      days.push({
+        key,
+        label: d.toLocaleDateString(undefined, { weekday: 'short' }),
+        date: d,
+        revenue: 0,
+        orders: 0,
+      });
+    }
+
+    const byKey = new Map(days.map((x) => [x.key, x] as const));
+    for (const s of recentSales) {
+      const dt = new Date(s.created_at);
+      if (Number.isNaN(dt.getTime())) continue;
+      const k = startOfDay(dt).toISOString().slice(0, 10);
+      const bucket = byKey.get(k);
+      if (!bucket) continue;
+      bucket.revenue += s.total_amount || 0;
+      bucket.orders += 1;
+    }
+    return days;
+  })();
+
+  const maxRevenue7 = Math.max(1, ...last7Days.map((d) => d.revenue));
+  const maxOrders7 = Math.max(1, ...last7Days.map((d) => d.orders));
+
+  const unpaidCount = recentSales.filter((s) => !s.paid).length;
+  const paidCount = recentSales.filter((s) => s.paid).length;
+
+  const prepareDuplicateSale = async (saleId: number) => {
+    try {
+      const details = await invoke<any>('get_sale_details', { orderId: saleId });
+      const items = (details?.items ?? []) as Array<{ menu_item_id?: number; quantity: number; unit_price: number; item_name: string }>;
+      const draft = {
+        sourceSaleId: saleId,
+        createdAt: new Date().toISOString(),
+        items: items
+          .filter((it) => typeof it.menu_item_id === 'number' && it.menu_item_id)
+          .map((it) => ({
+            menu_item_id: it.menu_item_id as number,
+            quantity: it.quantity,
+            unit_price: it.unit_price,
+            item_name: it.item_name,
+          })),
+      };
+      localStorage.setItem('bm_pos_draft', JSON.stringify(draft));
+      setCurrentPage('pos');
+    } catch (e) {
+      console.error('Failed to prepare duplicate sale:', e);
+    }
+  };
+
   const renderDashboard = () => (
     <div style={{ padding: '24px' }}>
       <div style={{ marginBottom: '18px' }}>
@@ -117,6 +228,66 @@ const ModernDashboard: React.FC = () => {
         <SpecStatCard title="Gross Revenue" value={formatMoney(grossRevenueToday)} helper="Today" />
         <SpecStatCard title="Total Orders" value={String(totalOrdersToday)} helper="Today" />
         <SpecStatCard title="Low Stock Alerts" value={String(lowStockCount)} helper="Needs attention" />
+      </div>
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+          gap: '16px',
+          marginBottom: '18px',
+        }}
+      >
+        <div className="bc-card" style={{ borderRadius: '10px', padding: '16px' }}>
+          <div style={{ fontSize: '14px', fontWeight: 800, color: colors.text, marginBottom: '10px' }}>Revenue (7 days)</div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '120px' }}>
+            {last7Days.map((d) => (
+              <div key={d.key} style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
+                <div
+                  title={formatMoney(d.revenue)}
+                  style={{
+                    height: `${Math.round((d.revenue / maxRevenue7) * 100)}%`,
+                    minHeight: d.revenue > 0 ? '6px' : '2px',
+                    background: colors.accent,
+                    borderRadius: '10px',
+                    opacity: 0.85,
+                  }}
+                />
+                <div style={{ marginTop: '6px', fontSize: '11px', color: colors.textSecondary }}>{d.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="bc-card" style={{ borderRadius: '10px', padding: '16px' }}>
+          <div style={{ fontSize: '14px', fontWeight: 800, color: colors.text, marginBottom: '10px' }}>Orders (7 days)</div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '120px' }}>
+            {last7Days.map((d) => (
+              <div key={d.key} style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
+                <div
+                  title={`${d.orders} orders`}
+                  style={{
+                    height: `${Math.round((d.orders / maxOrders7) * 100)}%`,
+                    minHeight: d.orders > 0 ? '6px' : '2px',
+                    background: colors.textSecondary,
+                    borderRadius: '10px',
+                    opacity: 0.7,
+                  }}
+                />
+                <div style={{ marginTop: '6px', fontSize: '11px', color: colors.textSecondary }}>{d.label}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ marginTop: '10px', display: 'flex', gap: '12px', fontSize: '12px', color: colors.textSecondary }}>
+            <div>
+              Paid: <strong style={{ color: colors.text }}>{paidCount}</strong>
+            </div>
+            <div>
+              Unpaid: <strong style={{ color: unpaidCount > 0 ? colors.error : colors.text }}>{unpaidCount}</strong>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="bc-card" style={{ borderRadius: '10px', padding: '16px' }}>
@@ -189,6 +360,49 @@ const ModernDashboard: React.FC = () => {
         return <AddSale onBack={() => setCurrentPage('dashboard')} onSaleAdded={loadDashboardData} />;
       case 'products':
         return <ProductsPage onBack={() => setCurrentPage('dashboard')} />;
+      case 'purchases':
+        return (
+          <ProtectedRoute requiredRole="manager">
+            <PurchasesPage onBack={() => setCurrentPage('dashboard')} />
+          </ProtectedRoute>
+        );
+      case 'stock-adjustments':
+        return (
+          <ProtectedRoute requiredRole="manager">
+            <StockAdjustmentsPage onBack={() => setCurrentPage('dashboard')} />
+          </ProtectedRoute>
+        );
+      case 'returns':
+        return (
+          <ProtectedRoute requiredRole="manager">
+            <ReturnsPage onBack={() => setCurrentPage('dashboard')} />
+          </ProtectedRoute>
+        );
+      case 'suppliers':
+        return (
+          <ProtectedRoute requiredRole="manager">
+            <SuppliersPage onBack={() => setCurrentPage('dashboard')} />
+          </ProtectedRoute>
+        );
+      case 'accounts':
+        return (
+          <ProtectedRoute requiredRole="manager">
+            <AccountsPage onBack={() => setCurrentPage('dashboard')} />
+          </ProtectedRoute>
+        );
+      case 'sales-history':
+        return (
+          <SalesHistoryPage
+            onBack={() => setCurrentPage('dashboard')}
+            onDuplicateSale={(saleId) => void prepareDuplicateSale(saleId)}
+          />
+        );
+      case 'expenses':
+        return (
+          <ProtectedRoute requiredRole="manager">
+            <ExpensesPage onBack={() => setCurrentPage('dashboard')} onExpenseChanged={loadDashboardData} />
+          </ProtectedRoute>
+        );
       case 'reports':
         return (
           <ProtectedRoute requiredRole="manager">
@@ -215,12 +429,14 @@ const ModernDashboard: React.FC = () => {
     }}>
       {/* Modern Sidebar */}
       <div style={{
-        width: '250px',
+        width: sidebarVisible ? '250px' : '0px',
         backgroundColor: colors.surface,
-        borderRight: `1px solid ${colors.border}`,
+        borderRight: sidebarVisible ? `1px solid ${colors.border}` : 'none',
         display: 'flex',
         flexDirection: 'column',
-        padding: '18px 14px'
+        padding: sidebarVisible ? '18px 14px' : '0px',
+        overflow: 'hidden',
+        transition: 'width 0.22s ease, padding 0.22s ease'
       }}>
         {/* Logo/Brand */}
         <div style={{
@@ -228,17 +444,40 @@ const ModernDashboard: React.FC = () => {
           paddingBottom: '1.5rem',
           borderBottom: `1px solid ${colors.border}`
         }}>
-          <h1 style={{
-            fontSize: '1.5rem',
-            fontWeight: '700',
-            margin: 0,
-            marginBottom: '0.25rem',
-            color: colors.text
-          }}>
-            {businessName}
-          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+            <h1 style={{
+              fontSize: '1.5rem',
+              fontWeight: '700',
+              margin: 0,
+              marginBottom: '0.25rem',
+              color: colors.text,
+              minWidth: 0
+            }}>
+              {businessName}
+            </h1>
+
+            <button
+              type="button"
+              onClick={() => setSidebarVisible(false)}
+              title="Hide sidebar"
+              style={{
+                width: '34px',
+                height: '34px',
+                borderRadius: '10px',
+                border: `1px solid ${colors.border}`,
+                background: 'transparent',
+                color: colors.textSecondary,
+                cursor: 'pointer'
+              }}
+            >
+              ‹
+            </button>
+          </div>
           <div style={{ fontSize: '12px', color: colors.textSecondary }}>
             Offline
+          </div>
+          <div style={{ marginTop: '6px', fontSize: '12px', color: colors.textSecondary }}>
+            Mode: {mode.charAt(0).toUpperCase() + mode.slice(1)}
           </div>
         </div>
 
@@ -357,8 +596,32 @@ const ModernDashboard: React.FC = () => {
       <div style={{
         flex: 1,
         overflow: 'auto',
-        backgroundColor: colors.primary
+        backgroundColor: colors.primary,
+        position: 'relative'
       }}>
+        {!sidebarVisible && (
+          <button
+            type="button"
+            onClick={() => setSidebarVisible(true)}
+            title="Show sidebar"
+            style={{
+              position: 'absolute',
+              top: '12px',
+              left: '12px',
+              zIndex: 50,
+              width: '44px',
+              height: '44px',
+              borderRadius: '12px',
+              border: `1px solid ${colors.border}`,
+              background: colors.surface,
+              color: colors.text,
+              boxShadow: `0 6px 20px ${colors.shadow}`,
+              cursor: 'pointer'
+            }}
+          >
+            ☰
+          </button>
+        )}
         {renderContent()}
       </div>
     </div>

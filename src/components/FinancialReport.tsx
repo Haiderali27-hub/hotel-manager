@@ -507,7 +507,15 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ onBack }) => {
       {/* Controls */}
       <div style={cardStyle}>
         <h3 style={{ marginTop: 0, marginBottom: '1rem' }}>Select Period</h3>
-        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'end',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '1rem',
+          }}
+        >
           <div>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>Month</label>
             <select
@@ -536,7 +544,7 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ onBack }) => {
             </select>
           </div>
 
-          <div style={{ alignSelf: 'end' }}>
+          <div style={{ alignSelf: 'end', marginLeft: 'auto' }}>
             <button
               onClick={generateReport}
               disabled={loading}

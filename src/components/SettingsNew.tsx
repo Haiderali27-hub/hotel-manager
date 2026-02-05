@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import React, { useEffect, useState } from 'react';
 import { useCurrency } from '../context/CurrencyContext';
-import { useLabels } from '../context/LabelContext';
+import { labels, useLabels, type BusinessMode } from '../context/LabelContext';
 import { useNotification } from '../context/NotificationContext';
 import UserManagement from './UserManagement';
 
@@ -17,8 +17,10 @@ type SettingsTab = 'general' | 'users' | 'branding' | 'database';
 const Settings: React.FC = () => {
   const { showSuccess, showError } = useNotification();
   const { currencyCode, locale, supportedCurrencies, setCurrencyCode, setLocale, formatMoney } = useCurrency();
-  const { current: label } = useLabels();
+  const { current: label, mode: businessMode, setMode: setBusinessMode } = useLabels();
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+  const [barcodeEnabled, setBarcodeEnabled] = useState(false);
+  const [businessModeLocked, setBusinessModeLocked] = useState<boolean>(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [pendingLocale, setPendingLocale] = useState(locale);
   const [showResetDialog, setShowResetDialog] = useState(false);
@@ -34,7 +36,6 @@ const Settings: React.FC = () => {
 
   const [businessLogoPath, setBusinessLogoPath] = useState<string>('');
   const [businessLogoDataUrl, setBusinessLogoDataUrl] = useState<string>('');
-  const [primaryColor, setPrimaryColorState] = useState<string>('#2b576d');
   const [receiptHeader, setReceiptHeader] = useState<string>('');
   const [receiptFooter, setReceiptFooter] = useState<string>('');
   const [isSavingReceiptHeader, setIsSavingReceiptHeader] = useState(false);
@@ -45,22 +46,29 @@ const Settings: React.FC = () => {
   }, [locale]);
 
   useEffect(() => {
+    (async () => {
+      try {
+        const status = await invoke<{ mode: string; locked: boolean }>('get_business_mode_status');
+        setBusinessModeLocked(Boolean(status?.locked));
+      } catch {
+        // If command not available (older backend / web mode), default to unlocked.
+        setBusinessModeLocked(false);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
     const loadBranding = async () => {
       try {
-        const [logoPath, logoDataUrl, savedPrimary, savedHeader, savedFooter] = await Promise.all([
+        const [logoPath, logoDataUrl, savedHeader, savedFooter] = await Promise.all([
           invoke<string | null>('get_business_logo_path'),
           invoke<string | null>('get_business_logo_data_url'),
-          invoke<string | null>('get_primary_color'),
           invoke<string | null>('get_receipt_header'),
           invoke<string | null>('get_receipt_footer')
         ]);
 
         if (logoPath) setBusinessLogoPath(logoPath);
         if (logoDataUrl) setBusinessLogoDataUrl(logoDataUrl);
-        if (savedPrimary) {
-          const normalized = savedPrimary.startsWith('#') ? savedPrimary : `#${savedPrimary}`;
-          setPrimaryColorState(normalized);
-        }
         setReceiptHeader(savedHeader ?? '');
         setReceiptFooter(savedFooter ?? '');
       } catch (error) {
@@ -70,6 +78,19 @@ const Settings: React.FC = () => {
     };
 
     loadBranding();
+  }, []);
+
+  useEffect(() => {
+    const loadBarcodeSetting = async () => {
+      try {
+        const enabled = await invoke<boolean>('get_barcode_enabled');
+        setBarcodeEnabled(!!enabled);
+      } catch {
+        // Optional feature; default off.
+        setBarcodeEnabled(false);
+      }
+    };
+    loadBarcodeSetting();
   }, []);
 
   const handleUploadLogo = async () => {
@@ -126,21 +147,6 @@ const Settings: React.FC = () => {
       showError('Save Failed', `${error}`);
     } finally {
       setIsSavingReceiptFooter(false);
-    }
-  };
-
-  const handlePrimaryColorChange = async (hex: string) => {
-    setPrimaryColorState(hex);
-    try {
-      await invoke('set_primary_color', { color: hex });
-      // Apply immediately for this session.
-      document.documentElement.style.setProperty('--primary-color', hex);
-      document.documentElement.style.setProperty('--bm-primary', hex);
-      document.documentElement.style.setProperty('--bm-primary-alt', hex);
-      showSuccess('Color Updated', 'Primary color saved successfully');
-    } catch (error) {
-      console.error('Failed to save primary color:', error);
-      showError('Color Save Failed', `${error}`);
     }
   };
 
@@ -448,6 +454,75 @@ const Settings: React.FC = () => {
                 Tip: use values like <strong>en-US</strong>, <strong>en-GB</strong>, <strong>fr-FR</strong>, <strong>ar-SA</strong>.
               </div>
             </div>
+
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--app-text-secondary)' }}>Business Type</div>
+              <select
+                className="bc-input"
+                value={businessMode}
+                onChange={async (e) => {
+                  const newMode = e.target.value as BusinessMode;
+                  if (businessModeLocked) {
+                    showError(
+                      'Business Type Locked',
+                      'Business type is locked after first-time setup to avoid conflicts. Use Reset Application Data to change it.'
+                    );
+                    return;
+                  }
+
+                  try {
+                    await invoke('set_business_mode', { mode: newMode });
+                    setBusinessMode(newMode);
+                    setBusinessModeLocked(true);
+                    showSuccess('Business Type Set', `Set to ${newMode}. This is now locked to prevent conflicts.`);
+                  } catch (error) {
+                    showError('Business Type Update Failed', String(error));
+                  }
+                }}
+                disabled={businessModeLocked}
+              >
+                {Object.entries(labels).map(([mode, modeLabels]) => (
+                  <option key={mode} value={mode}>
+                    {mode.charAt(0).toUpperCase() + mode.slice(1)} ({modeLabels.unit}, {modeLabels.client})
+                  </option>
+                ))}
+              </select>
+              <div style={{ marginTop: 6, color: 'var(--app-text-secondary)', fontSize: 12 }}>
+                This changes terminology throughout the app: {label.unit}, {label.client}, {label.action}, {label.actionOut}
+              </div>
+              {businessModeLocked ? (
+                <div style={{ marginTop: 6, color: 'var(--app-text-secondary)', fontSize: 12 }}>
+                  Business type is locked to prevent UI/data conflicts. To change it, use <strong>Reset Application Data</strong>.
+                </div>
+              ) : null}
+            </div>
+
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--app-text-secondary)' }}>Retail Options</div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={barcodeEnabled}
+                  onChange={async (e) => {
+                    const next = e.target.checked;
+                    setBarcodeEnabled(next);
+                    try {
+                      await invoke<string>('set_barcode_enabled', { enabled: next });
+                      showSuccess('Saved', next ? 'Barcode/SKU enabled' : 'Barcode/SKU disabled');
+                    } catch (error) {
+                      setBarcodeEnabled(!next);
+                      showError('Save Failed', String(error));
+                    }
+                  }}
+                />
+                <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--app-text)' }}>
+                  Enable barcode/SKU fields and scanner search
+                </span>
+              </label>
+              <div style={{ marginTop: 6, color: 'var(--app-text-secondary)', fontSize: 12 }}>
+                Turn this off if your shop does not use barcodes. Product SKU/barcode fields will be hidden and POS will stop matching on barcode.
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -477,19 +552,8 @@ const Settings: React.FC = () => {
                   {businessLogoPath || 'No logo set'}
                 </div>
               </div>
-            </div>
-
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--app-text-secondary)' }}>Primary Color</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                <input
-                  type="color"
-                  value={primaryColor}
-                  onChange={(e) => handlePrimaryColorChange(e.target.value)}
-                  style={{ width: 44, height: 34, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' }}
-                  aria-label="Primary color"
-                />
-                <div style={{ color: 'var(--app-text-secondary)', fontSize: 12 }}>{primaryColor.toUpperCase()}</div>
+              <div style={{ marginTop: 8, color: 'var(--app-text-secondary)', fontSize: 12 }}>
+                This logo will appear on receipts and can be used in your business materials. It does not replace the Inertia branding.
               </div>
             </div>
 

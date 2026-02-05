@@ -1,16 +1,19 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  exportHistoryCsvWithDialog,
-  getCustomers,
-  getExpenses,
-  getExpensesByDateRange,
-  getSales,
-  getUnits,
-  type Customer,
-  type ExpenseRecord,
-  type ExportFilters,
-  type SaleSummary,
-  type Unit
+    addSalePayment,
+    exportHistoryCsvWithDialog,
+    getCustomers,
+    getExpenses,
+    getExpensesByDateRange,
+    getSalePaymentSummary,
+    getSales,
+    getUnits,
+    type Customer,
+    type ExpenseRecord,
+    type ExportFilters,
+    type SalePaymentSummary,
+    type SaleSummary,
+    type Unit
 } from '../api/client';
 import { useCurrency } from '../context/CurrencyContext';
 import { useLabels } from '../context/LabelContext';
@@ -28,6 +31,9 @@ interface FilterState {
   customerName: string;
   category: string;
   searchTerm: string;
+  month: string; // format: 'YYYY-MM'
+  year: string; // format: 'YYYY'
+  paymentStatus: string; // 'all' | 'paid' | 'unpaid' | 'partial'
 }
 
 // Helper function to safely format dates
@@ -62,9 +68,17 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // Payments UI state (supports pay-later / partial payments)
+  const [salePaymentSummaries, setSalePaymentSummaries] = useState<Record<number, SalePaymentSummary>>({});
+  const [paymentsModalSaleId, setPaymentsModalSaleId] = useState<number | null>(null);
+  const [paymentsModalLoading, setPaymentsModalLoading] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState<number>(0);
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'mobile' | 'bank'>('cash');
+  const [paymentNote, setPaymentNote] = useState('');
+
   // Helper function to get room number by room ID
   const getUnitNumber = (unitId: number | null | undefined): string => {
-    if (!unitId) return 'Walk-in';
+    if (!unitId) return `Walk-in ${label.client}`;
     const unit = units.find(r => r.id === unitId);
     return unit ? unit.number : `${label.unit} #${unitId}`;
   };
@@ -76,8 +90,14 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
     unitNumber: '',
     customerName: '',
     category: '',
-    searchTerm: ''
+    searchTerm: '',
+    month: '',
+    year: '',
+    paymentStatus: 'all',
   });
+
+  // Sales-only quick filter
+  const [showUnpaidOnly, setShowUnpaidOnly] = useState(false);
   
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -190,8 +210,12 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
       unitNumber: '',
       customerName: '',
       category: '',
-      searchTerm: ''
+      searchTerm: '',
+      month: '',
+      year: '',
+      paymentStatus: 'all',
     });
+    setShowUnpaidOnly(false);
     setCurrentPage(1);
     loadData(); // Reload all data
   };
@@ -245,10 +269,51 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
         break;
       case 'food-orders':
         data = sales.filter(order => {
+          // Legacy unpaid filter (kept for compatibility)
+          if (showUnpaidOnly) {
+            const summary = salePaymentSummaries[order.id];
+            const hasBalance = summary ? summary.balance_due > 0 : !order.paid;
+            if (!hasBalance) return false;
+          }
+
+          // New payment status filter (takes precedence)
+          if (filters.paymentStatus && filters.paymentStatus !== 'all') {
+            const summary = salePaymentSummaries[order.id];
+            const totalAmount = summary?.total_amount ?? order.total_amount;
+            const amountPaid = summary?.amount_paid ?? 0;
+            const balanceDue = summary?.balance_due ?? totalAmount;
+            
+            if (filters.paymentStatus === 'paid' && balanceDue > 0.01) return false;
+            if (filters.paymentStatus === 'unpaid' && amountPaid > 0.01) return false;
+            if (filters.paymentStatus === 'partial' && (amountPaid < 0.01 || balanceDue < 0.01)) return false;
+          }
+
+          // Month filter (YYYY-MM format)
+          if (filters.month) {
+            const orderDate = formatDate(order.order_date);
+            const orderYearMonth = orderDate.substring(0, 7); // Extract YYYY-MM
+            if (orderYearMonth !== filters.month) return false;
+          }
+
+          // Year filter
+          if (filters.year) {
+            const orderDate = formatDate(order.order_date);
+            const orderYear = orderDate.substring(0, 4); // Extract YYYY
+            if (orderYear !== filters.year) return false;
+          }
+
+          // Customer name filter
+          if (filters.customerName) {
+            const customerName = order.guest_name || '';
+            if (!customerName.toLowerCase().includes(filters.customerName.toLowerCase())) return false;
+          }
+
+          // Search filter
           const matchesSearch = !filters.searchTerm || 
             order.id.toString().includes(filters.searchTerm) ||
             (order.guest_name && order.guest_name.toLowerCase().includes(filters.searchTerm.toLowerCase())) ||
             (order.items && order.items.toLowerCase().includes(filters.searchTerm.toLowerCase()));
+          
           return matchesSearch;
         });
         break;
@@ -286,6 +351,107 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
   const totalPages = Math.ceil(filteredData.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedData = filteredData.slice(startIndex, startIndex + itemsPerPage);
+
+  // Preload payment summaries for visible sales rows (only 10 per page)
+  useEffect(() => {
+    if (activeTab !== 'food-orders') return;
+    const rows = paginatedData as SaleSummary[];
+    if (!rows || rows.length === 0) return;
+
+    const missingIds = rows
+      .map((s) => s.id)
+      .filter((id) => typeof id === 'number' && !salePaymentSummaries[id]);
+
+    if (missingIds.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const results = await Promise.all(
+          missingIds.map(async (saleId) => ({ saleId, summary: await getSalePaymentSummary(saleId) }))
+        );
+        if (cancelled) return;
+        setSalePaymentSummaries((prev) => {
+          const next = { ...prev };
+          for (const r of results) next[r.saleId] = r.summary;
+          return next;
+        });
+      } catch (err) {
+        console.warn('Failed to preload payment summaries:', err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, paginatedData]);
+
+  const openPaymentsModal = async (saleId: number) => {
+    setPaymentsModalSaleId(saleId);
+    setPaymentsModalLoading(true);
+    setPaymentMethod('cash');
+    setPaymentNote('');
+
+    try {
+      const summary = await getSalePaymentSummary(saleId);
+      setSalePaymentSummaries((prev) => ({ ...prev, [saleId]: summary }));
+      setPaymentAmount(summary.balance_due);
+    } catch (err) {
+      console.error('Failed to load sale payment summary:', err);
+      showError('Payments', 'Failed to load payment details');
+      setPaymentsModalSaleId(null);
+    } finally {
+      setPaymentsModalLoading(false);
+    }
+  };
+
+  const closePaymentsModal = () => {
+    setPaymentsModalSaleId(null);
+    setPaymentsModalLoading(false);
+    setPaymentAmount(0);
+    setPaymentMethod('cash');
+    setPaymentNote('');
+  };
+
+  const submitPayment = async () => {
+    if (!paymentsModalSaleId) return;
+    const summary = salePaymentSummaries[paymentsModalSaleId];
+    if (!summary) return;
+
+    if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+      showWarning('Payment', 'Enter a payment amount greater than 0');
+      return;
+    }
+    if (paymentAmount > summary.balance_due + 1e-9) {
+      showWarning('Payment', 'Payment cannot exceed the balance due');
+      return;
+    }
+
+    setPaymentsModalLoading(true);
+    try {
+      const updated = await addSalePayment(
+        paymentsModalSaleId,
+        paymentAmount,
+        paymentMethod,
+        paymentNote.trim() ? paymentNote.trim() : undefined
+      );
+      setSalePaymentSummaries((prev) => ({ ...prev, [paymentsModalSaleId]: updated }));
+
+      // Refresh sales list so the Paid/Unpaid badge updates correctly
+      const refreshed = await getSales();
+      setSales(refreshed);
+
+      showSuccess('Payment Saved', `New balance: ${formatMoney(updated.balance_due)}`);
+      setPaymentAmount(updated.balance_due);
+      setPaymentNote('');
+    } catch (err) {
+      console.error('Failed to add payment:', err);
+      showError('Payment Failed', err instanceof Error ? err.message : 'Failed to save payment');
+    } finally {
+      setPaymentsModalLoading(false);
+    }
+  };
 
   const tabStyle = (isActive: boolean): React.CSSProperties => ({
     padding: '0.75rem 1.5rem',
@@ -383,8 +549,10 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
           <th style={thStyle}>{label.client}</th>
           <th style={thStyle}>Date</th>
           <th style={thStyle}>Amount</th>
+          <th style={thStyle}>Balance</th>
           <th style={thStyle}>Status</th>
           <th style={thStyle}>Customer Type</th>
+          <th style={thStyle}>Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -394,6 +562,13 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
             <td style={tdStyle}>{sale.guest_name || `Walk-in ${label.client}`}</td>
             <td style={tdStyle}>{formatDate(sale.created_at)}</td>
             <td style={tdStyle}>{formatMoney(sale.total_amount)}</td>
+            <td style={tdStyle}>
+              {sale.paid
+                ? formatMoney(0)
+                : salePaymentSummaries[sale.id]
+                  ? formatMoney(salePaymentSummaries[sale.id].balance_due)
+                  : '—'}
+            </td>
             <td style={tdStyle}>
               <span style={{
                 backgroundColor: sale.paid ? colors.success : colors.error,
@@ -406,6 +581,23 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
               </span>
             </td>
             <td style={tdStyle}>{sale.guest_name ? `${label.unit} ${label.client}` : `Walk-in ${label.client}`}</td>
+            <td style={tdStyle}>
+              <button
+                onClick={() => openPaymentsModal(sale.id)}
+                style={{
+                  padding: '0.4rem 0.75rem',
+                  backgroundColor: colors.accent,
+                  color: colors.primary,
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                }}
+              >
+                {sale.paid ? 'View Payments' : 'Record Payment'}
+              </button>
+            </td>
           </tr>
         ))}
       </tbody>
@@ -657,6 +849,86 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
               style={filterStyle}
             />
           </div>
+
+          {/* Sales quick filter */}
+          {activeTab === 'food-orders' && (
+            <>
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>Month</label>
+                <input
+                  type="month"
+                  value={filters.month}
+                  onChange={(e) => handleFilterChange('month', e.target.value)}
+                  style={filterStyle}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>Year</label>
+                <select
+                  value={filters.year}
+                  onChange={(e) => handleFilterChange('year', e.target.value)}
+                  style={filterStyle}
+                >
+                  <option value="">All Years</option>
+                  {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i).map(year => (
+                    <option key={year} value={year}>{year}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>Payment Status</label>
+                <select
+                  value={filters.paymentStatus}
+                  onChange={(e) => handleFilterChange('paymentStatus', e.target.value)}
+                  style={filterStyle}
+                >
+                  <option value="all">All Orders</option>
+                  <option value="paid">Fully Paid</option>
+                  <option value="unpaid">Unpaid</option>
+                  <option value="partial">Partially Paid</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>{label.client} Name</label>
+                <input
+                  type="text"
+                  value={filters.customerName}
+                  onChange={(e) => handleFilterChange('customerName', e.target.value)}
+                  placeholder={`Filter by ${label.client.toLowerCase()} name...`}
+                  style={filterStyle}
+                />
+              </div>
+            </>
+          )}
+
+          {/* Legacy sales toggle (kept for compatibility) */}
+          {activeTab === 'food-orders' && false && (
+            <div>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>Sales Filter</label>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowUnpaidOnly((prev) => !prev);
+                  setCurrentPage(1);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '0.55rem 0.75rem',
+                  backgroundColor: showUnpaidOnly ? colors.success : colors.border,
+                  color: showUnpaidOnly ? 'white' : colors.text,
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                }}
+              >
+                {showUnpaidOnly ? 'Showing: Unpaid Only' : 'Showing: All Sales'}
+              </button>
+              <div style={{ marginTop: '6px', fontSize: '0.8rem', color: colors.textSecondary }}>
+                Unpaid includes partial payments (balance &gt; 0).
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Filter Actions */}
@@ -739,6 +1011,185 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
           
           {paginatedData.length > 0 && renderPagination()}
         </>
+      )}
+
+      {/* Payments Modal */}
+      {paymentsModalSaleId !== null && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.55)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '16px',
+          }}
+          onClick={closePaymentsModal}
+        >
+          <div
+            style={{
+              width: 'min(720px, 95vw)',
+              background: colors.surface,
+              borderRadius: '12px',
+              border: `1px solid ${colors.border}`,
+              padding: '16px',
+              color: colors.text,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontSize: '18px', fontWeight: 800 }}>Payments for Order #{paymentsModalSaleId}</div>
+              <button
+                onClick={closePaymentsModal}
+                style={{
+                  padding: '0.35rem 0.7rem',
+                  backgroundColor: 'transparent',
+                  color: colors.text,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                }}
+              >
+                Close
+              </button>
+            </div>
+
+            {paymentsModalLoading ? (
+              <div style={{ marginTop: '12px', opacity: 0.8 }}>Loading…</div>
+            ) : (
+              (() => {
+                const summary = paymentsModalSaleId ? salePaymentSummaries[paymentsModalSaleId] : undefined;
+                if (!summary) {
+                  return <div style={{ marginTop: '12px', opacity: 0.8 }}>No payment data.</div>;
+                }
+
+                return (
+                  <>
+                    <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '12px' }}>
+                      <div style={{ opacity: 0.85 }}>
+                        Total: <strong style={{ color: colors.text }}>{formatMoney(summary.total_amount)}</strong>
+                      </div>
+                      <div style={{ opacity: 0.85 }}>
+                        Paid: <strong style={{ color: colors.text }}>{formatMoney(summary.amount_paid)}</strong>
+                      </div>
+                      <div style={{ opacity: 0.85 }}>
+                        Balance: <strong style={{ color: colors.text }}>{formatMoney(summary.balance_due)}</strong>
+                      </div>
+                      <div style={{ opacity: 0.85 }}>
+                        Status:{' '}
+                        <strong style={{ color: summary.paid ? colors.success : colors.error }}>
+                          {summary.paid ? 'PAID' : 'UNPAID'}
+                        </strong>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: '14px' }}>
+                      <div style={{ fontWeight: 700, marginBottom: '8px' }}>Payments</div>
+                      {summary.payments.length === 0 ? (
+                        <div style={{ opacity: 0.8 }}>No payments yet.</div>
+                      ) : (
+                        <div style={{ maxHeight: '220px', overflow: 'auto', border: `1px solid ${colors.border}`, borderRadius: '10px' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                              <tr>
+                                <th style={{ ...thStyle, position: 'sticky', top: 0 }}>Date</th>
+                                <th style={{ ...thStyle, position: 'sticky', top: 0 }}>Method</th>
+                                <th style={{ ...thStyle, position: 'sticky', top: 0 }}>Amount</th>
+                                <th style={{ ...thStyle, position: 'sticky', top: 0 }}>Note</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {summary.payments.map((p) => (
+                                <tr key={p.id}>
+                                  <td style={tdStyle}>{formatDate(p.created_at)}</td>
+                                  <td style={tdStyle}>{p.method}</td>
+                                  <td style={tdStyle}>{formatMoney(p.amount)}</td>
+                                  <td style={tdStyle}>{p.note || ''}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+
+                    {summary.balance_due > 0 && (
+                      <div
+                        style={{
+                          marginTop: '14px',
+                          padding: '12px',
+                          borderRadius: '12px',
+                          border: `1px solid ${colors.border}`,
+                          backgroundColor: colors.primary,
+                        }}
+                      >
+                        <div style={{ fontWeight: 800, marginBottom: '10px' }}>Record a payment</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                          <div>
+                            <div style={{ fontSize: '12px', opacity: 0.8, marginBottom: '6px' }}>Amount</div>
+                            <input
+                              type="number"
+                              step={0.01}
+                              min={0}
+                              value={Number.isFinite(paymentAmount) ? paymentAmount : 0}
+                              onChange={(e) => setPaymentAmount(parseFloat(e.target.value || '0'))}
+                              style={{ width: '100%', padding: '10px', borderRadius: '10px', border: `1px solid ${colors.border}` }}
+                            />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '12px', opacity: 0.8, marginBottom: '6px' }}>Method</div>
+                            <select
+                              value={paymentMethod}
+                              onChange={(e) => setPaymentMethod(e.target.value as 'cash' | 'card' | 'mobile' | 'bank')}
+                              style={{ width: '100%', padding: '10px', borderRadius: '10px', border: `1px solid ${colors.border}` }}
+                            >
+                              <option value="cash">Cash</option>
+                              <option value="card">Card</option>
+                              <option value="mobile">Mobile money</option>
+                              <option value="bank">Bank transfer</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div style={{ marginTop: '10px' }}>
+                          <div style={{ fontSize: '12px', opacity: 0.8, marginBottom: '6px' }}>Note (optional)</div>
+                          <input
+                            type="text"
+                            value={paymentNote}
+                            onChange={(e) => setPaymentNote(e.target.value)}
+                            placeholder="e.g. paid after 2 days"
+                            style={{ width: '100%', padding: '10px', borderRadius: '10px', border: `1px solid ${colors.border}` }}
+                          />
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
+                          <button
+                            onClick={submitPayment}
+                            disabled={paymentsModalLoading}
+                            style={{
+                              padding: '0.6rem 1rem',
+                              backgroundColor: colors.accent,
+                              color: colors.primary,
+                              border: 'none',
+                              borderRadius: '10px',
+                              cursor: paymentsModalLoading ? 'not-allowed' : 'pointer',
+                              opacity: paymentsModalLoading ? 0.7 : 1,
+                              fontWeight: 800,
+                            }}
+                          >
+                            Save Payment
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

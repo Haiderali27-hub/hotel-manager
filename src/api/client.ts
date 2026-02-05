@@ -26,6 +26,39 @@ async function invokeCompat<T>(
     return await invoke<T>(fallback, fallbackArgs ?? primaryArgs);
   }
 }
+
+// ============================================================================
+// Store Profiles (Multi-store)
+// ============================================================================
+
+export interface StoreProfile {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
+export interface StoreProfilesStatus {
+  active_profile_id: string;
+  profiles: StoreProfile[];
+}
+
+export const listStoreProfiles = (): Promise<StoreProfilesStatus> =>
+  invoke("list_store_profiles");
+
+export const getActiveStoreProfile = (): Promise<StoreProfile> =>
+  invoke("get_active_store_profile");
+
+export const createStoreProfile = (name: string): Promise<StoreProfilesStatus> =>
+  invoke("create_store_profile", { name });
+
+export const setActiveStoreProfile = (profileId: string): Promise<StoreProfilesStatus> =>
+  invoke("set_active_store_profile", { profileId });
+
+export const deleteStoreProfile = (profileId: string): Promise<StoreProfilesStatus> =>
+  invoke("delete_store_profile", { profileId });
+
+export const updateActiveStoreName = (name: string): Promise<StoreProfile> =>
+  invoke("update_active_store_name", { name });
 // ============================================================================
 // TYPE DEFINITIONS - IPC Contract
 // ============================================================================
@@ -37,6 +70,23 @@ async function invokeCompat<T>(
  */
 export const printOrderReceipt = (orderId: number): Promise<string> => 
   invoke("print_order_receipt", { orderId });
+
+export interface KitchenTicketItem {
+  name: string;
+  quantity: number;
+  notes?: string;
+}
+
+export interface KitchenTicket {
+  created_at: string;
+  items: KitchenTicketItem[];
+}
+
+/**
+ * Build HTML for a kitchen ticket (KOT) to print from the POS.
+ */
+export const buildKitchenTicketHtml = (ticket: KitchenTicket): Promise<string> =>
+  invoke("build_kitchen_ticket_html", { ticket });
 
 // ============================================================================
 
@@ -112,8 +162,11 @@ export type NewCustomer = NewGuest;
 export interface MenuItem {
   id: number;
   name: string;
+  sku?: string;
+  barcode?: string;
   price: number;
   category: string;
+  description?: string;
   is_available: boolean;
 
   // Phase 4 inventory fields (optional for backward compatibility)
@@ -124,14 +177,25 @@ export interface MenuItem {
 
 export interface NewMenuItem {
   name: string;
+  sku?: string;
+  barcode?: string;
   price: number;
   category: string;
+  description?: string;
   is_available?: boolean;
 
   // Phase 4 inventory fields
   track_stock?: number;
   stock_quantity?: number;
   low_stock_limit?: number;
+}
+
+export interface ProductCategory {
+  id: number;
+  name: string;
+  color?: string;
+  emoji?: string;
+  created_at: string;
 }
 
 export interface OrderItem {
@@ -192,6 +256,27 @@ export interface FoodOrderDetails {
 
 export type SaleDetails = FoodOrderDetails;
 
+// ===== PAYMENTS (Partial / Pay-Later) =====
+
+export interface SalePayment {
+  id: number;
+  sale_id: number;
+  amount: number;
+  method: string;
+  note?: string;
+  created_at: string;
+}
+
+export interface SalePaymentSummary {
+  sale_id: number;
+  total_amount: number;
+  amount_paid: number;
+  balance_due: number;
+  paid: boolean;
+  paid_at?: string;
+  payments: SalePayment[];
+}
+
 export interface NewFoodOrder {
   guest_id: number | null;  // Allow null for walk-in customers
   items: OrderItem[];
@@ -221,6 +306,95 @@ export interface NewExpense {
   category: string;
   description: string;
   amount: number;
+}
+
+// ===== SUPPLIERS & PURCHASES (Stock-In) =====
+
+export interface Supplier {
+  id: number;
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
+  notes?: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface NewSupplier {
+  name: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  notes?: string;
+}
+
+export interface PurchaseItemInput {
+  menu_item_id?: number | null;
+  item_name: string;
+  quantity: number;
+  unit_cost: number;
+}
+
+export interface PurchaseItemRow {
+  id: number;
+  purchase_id: number;
+  menu_item_id?: number | null;
+  item_name: string;
+  quantity: number;
+  unit_cost: number;
+  line_total: number;
+}
+
+export interface PurchaseSummary {
+  id: number;
+  purchase_date: string;
+  supplier_id?: number | null;
+  supplier_name?: string | null;
+  reference?: string | null;
+  notes?: string | null;
+  total_amount: number;
+  created_at: string;
+}
+
+export interface PurchaseDetails {
+  purchase: PurchaseSummary;
+  items: PurchaseItemRow[];
+}
+
+export interface SupplierPayment {
+  id: number;
+  supplier_id: number;
+  purchase_id?: number | null;
+  amount: number;
+  method: string;
+  note?: string | null;
+  created_at: string;
+}
+
+export interface SupplierBalanceSummary {
+  supplier_id: number;
+  supplier_name: string;
+  total_purchases: number;
+  amount_paid: number;
+  balance_due: number;
+}
+
+export interface CustomerBalanceSummary {
+  customer_id: number;
+  customer_name: string;
+  total_sales: number;
+  amount_paid: number;
+  balance_due: number;
+}
+
+export interface CustomerSaleBalanceRow {
+  sale_id: number;
+  created_at: string;
+  total_amount: number;
+  amount_paid: number;
+  balance_due: number;
+  paid: boolean;
 }
 
 // Dashboard & Analytics
@@ -505,7 +679,23 @@ export const updateCustomer = (customerId: number, updates: Partial<NewCustomer>
  * @returns Array of all menu items
  */
 export const getMenuItems = (): Promise<MenuItem[]> => 
-  invoke("get_menu_items");
+  invoke<unknown[]>("get_menu_items").then((rows) =>
+    rows.map((raw: any) => {
+      // Tauri commonly serializes struct fields / command params as camelCase.
+      // Normalize to the app's snake_case `MenuItem` shape.
+      const normalized: MenuItem = {
+        ...raw,
+        sku: raw.sku ?? raw.SKU ?? undefined,
+        barcode: raw.barcode ?? raw.barCode ?? raw.Barcode ?? undefined,
+        is_available: raw.is_available ?? raw.isAvailable ?? false,
+        track_stock: raw.track_stock ?? raw.trackStock,
+        stock_quantity: raw.stock_quantity ?? raw.stockQuantity,
+        low_stock_limit: raw.low_stock_limit ?? raw.lowStockLimit,
+        description: raw.description ?? ''
+      };
+      return normalized;
+    })
+  );
 
 /**
  * Add a new menu item
@@ -523,12 +713,15 @@ export const getMenuItems = (): Promise<MenuItem[]> =>
 export const addMenuItem = (item: NewMenuItem): Promise<number> => 
   invoke("add_menu_item", { 
     name: item.name, 
+    sku: item.sku,
+    barcode: item.barcode,
     price: item.price, 
     category: item.category, 
-    is_available: item.is_available,
-    track_stock: item.track_stock,
-    stock_quantity: item.stock_quantity,
-    low_stock_limit: item.low_stock_limit
+    description: item.description,
+    isAvailable: item.is_available,
+    trackStock: item.track_stock,
+    stockQuantity: item.stock_quantity,
+    lowStockLimit: item.low_stock_limit
   });
 
 /**
@@ -539,18 +732,130 @@ export const addMenuItem = (item: NewMenuItem): Promise<number> =>
  */
 export const updateMenuItem = async (itemId: number, updates: Partial<NewMenuItem>): Promise<boolean> => {
   const params = { 
-    itemId: itemId,  // Try camelCase since error mentions 'itemId'
+    itemId: itemId,
     name: updates.name,
+    sku: updates.sku,
+    barcode: updates.barcode,
     price: updates.price,
     category: updates.category,
-    is_available: updates.is_available,  // Use snake_case to match backend
-    track_stock: updates.track_stock,
-    stock_quantity: updates.stock_quantity,
-    low_stock_limit: updates.low_stock_limit
+    description: updates.description,
+    isAvailable: updates.is_available,
+    trackStock: updates.track_stock,
+    stockQuantity: updates.stock_quantity,
+    lowStockLimit: updates.low_stock_limit
   };
   
   return invoke<boolean>("update_menu_item", params);
 };
+
+// ===== STOCK ADJUSTMENTS (Retail inventory audit) =====
+
+export interface StockAdjustmentItemInput {
+  menu_item_id: number;
+  mode: 'set' | 'add' | 'remove';
+  quantity: number;
+  note?: string;
+}
+
+export interface StockAdjustmentSummary {
+  id: number;
+  adjustment_date: string;
+  reason?: string | null;
+  notes?: string | null;
+  item_count: number;
+  created_at: string;
+}
+
+export interface StockAdjustmentItemRow {
+  id: number;
+  adjustment_id: number;
+  menu_item_id: number;
+  item_name: string;
+  previous_stock: number;
+  quantity_change: number;
+  new_stock: number;
+  note?: string | null;
+}
+
+export interface StockAdjustmentDetails {
+  adjustment: StockAdjustmentSummary;
+  items: StockAdjustmentItemRow[];
+}
+
+export const addStockAdjustment = (args: {
+  adjustment_date: string;
+  reason?: string;
+  notes?: string;
+  items: StockAdjustmentItemInput[];
+}): Promise<number> =>
+  invoke<number>('add_stock_adjustment', {
+    adjustmentDate: args.adjustment_date,
+    reason: args.reason,
+    notes: args.notes,
+    items: args.items.map((it) => ({
+      menuItemId: it.menu_item_id,
+      mode: it.mode,
+      quantity: it.quantity,
+      note: it.note,
+    })),
+  });
+
+export const getStockAdjustments = (): Promise<StockAdjustmentSummary[]> =>
+  invoke<any[]>('get_stock_adjustments').then((rows) =>
+    rows.map((raw) => ({
+      id: raw.id,
+      adjustment_date: raw.adjustment_date ?? raw.adjustmentDate,
+      reason: raw.reason ?? null,
+      notes: raw.notes ?? null,
+      item_count: raw.item_count ?? raw.itemCount ?? 0,
+      created_at: raw.created_at ?? raw.createdAt,
+    }))
+  );
+
+export const getStockAdjustmentDetails = (adjustmentId: number): Promise<StockAdjustmentDetails> =>
+  invoke<any>('get_stock_adjustment_details', { adjustmentId }).then((raw) => {
+    const a = raw.adjustment ?? raw.stockAdjustment ?? raw;
+    const items = (raw.items ?? []) as any[];
+    return {
+      adjustment: {
+        id: a.id,
+        adjustment_date: a.adjustment_date ?? a.adjustmentDate,
+        reason: a.reason ?? null,
+        notes: a.notes ?? null,
+        item_count: a.item_count ?? a.itemCount ?? 0,
+        created_at: a.created_at ?? a.createdAt,
+      },
+      items: items.map((it) => ({
+        id: it.id,
+        adjustment_id: it.adjustment_id ?? it.adjustmentId,
+        menu_item_id: it.menu_item_id ?? it.menuItemId,
+        item_name: it.item_name ?? it.itemName,
+        previous_stock: it.previous_stock ?? it.previousStock,
+        quantity_change: it.quantity_change ?? it.quantityChange,
+        new_stock: it.new_stock ?? it.newStock,
+        note: it.note ?? null,
+      })),
+    };
+  });
+
+// Product categories (for retail inventory)
+export const getProductCategories = (): Promise<ProductCategory[]> =>
+  invoke<ProductCategory[]>("get_product_categories");
+
+export const addProductCategory = (name: string): Promise<number> =>
+  invoke<number>("add_product_category", { name });
+
+export const renameProductCategory = (categoryId: number, name: string): Promise<boolean> =>
+  invoke<boolean>("rename_product_category", { categoryId, name });
+
+export const updateProductCategory = (categoryId: number, updates: { name?: string; color?: string; emoji?: string }): Promise<boolean> =>
+  invoke<boolean>("update_product_category", { categoryId, ...updates });
+
+export const addProductCategoryWithStyle = (args: { name: string; color?: string; emoji?: string }): Promise<number> =>
+  invoke<number>("add_product_category", args);
+
+export const deleteProductCategory = (categoryId: number): Promise<boolean> =>
+  invoke<boolean>("delete_product_category", { categoryId });
 
 /**
  * Delete a menu item
@@ -560,6 +865,91 @@ export const updateMenuItem = async (itemId: number, updates: Partial<NewMenuIte
 export const deleteMenuItem = async (itemId: number): Promise<boolean> => {
   return invoke<boolean>("delete_menu_item", { itemId: itemId });
 };
+
+// ===== OPTIONAL BARCODE / SKU FEATURES =====
+
+export const getBarcodeEnabled = (): Promise<boolean> =>
+  invoke<boolean>('get_barcode_enabled');
+
+export const setBarcodeEnabled = (enabled: boolean): Promise<string> =>
+  invoke<string>('set_barcode_enabled', { enabled });
+
+// ===== RETURNS / REFUNDS =====
+
+export interface ReturnableSaleItem {
+  sale_item_id: number;
+  menu_item_id: number | null;
+  item_name: string;
+  unit_price: number;
+  sold_qty: number;
+  returned_qty: number;
+  remaining_qty: number;
+}
+
+export interface SaleReturnItemInput {
+  sale_item_id: number;
+  quantity: number;
+  note?: string | null;
+}
+
+export interface SaleReturnSummary {
+  id: number;
+  sale_id: number;
+  return_date: string;
+  refund_method: string | null;
+  refund_amount: number;
+  item_count: number;
+  created_at: string;
+}
+
+export interface SaleReturnItemRow {
+  id: number;
+  return_id: number;
+  sale_item_id: number;
+  menu_item_id: number | null;
+  item_name: string;
+  unit_price: number;
+  quantity: number;
+  line_total: number;
+  note: string | null;
+}
+
+export interface SaleReturnDetails {
+  ret: SaleReturnSummary;
+  items: SaleReturnItemRow[];
+}
+
+export const getSaleReturnableItems = (orderId: number): Promise<ReturnableSaleItem[]> =>
+  invoke<ReturnableSaleItem[]>('get_sale_returnable_items', { orderId });
+
+export const addSaleReturn = (args: {
+  saleId: number;
+  returnDate: string;
+  refundMethod?: string | null;
+  refundAmount?: number | null;
+  note?: string | null;
+  items: SaleReturnItemInput[];
+}): Promise<number> =>
+  invoke<number>('add_sale_return', {
+    saleId: args.saleId,
+    returnDate: args.returnDate,
+    refundMethod: args.refundMethod ?? null,
+    refundAmount: args.refundAmount ?? null,
+    note: args.note ?? null,
+    items: args.items,
+  });
+
+export const getSaleReturns = (limit?: number): Promise<SaleReturnSummary[]> =>
+  invoke<SaleReturnSummary[]>('get_sale_returns', { limit: limit ?? null });
+
+export const getSaleReturnDetails = (returnId: number): Promise<SaleReturnDetails> =>
+  invoke<SaleReturnDetails>('get_sale_return_details', { returnId });
+
+export const buildSaleReturnReceiptHtml = (returnId: number): Promise<string> =>
+  invoke<string>('build_sale_return_receipt_html', { returnId });
+
+export const printSaleReturnReceipt = (returnId: number): Promise<string> =>
+  invoke<string>('print_sale_return_receipt', { returnId });
 
 // Food Order APIs
 /**
@@ -662,6 +1052,28 @@ export const getOrderDetails = (orderId: number): Promise<FoodOrderDetails> =>
 // UI-facing generic wrapper (preferred)
 export const getSaleDetails = (saleId: number): Promise<SaleDetails> => getOrderDetails(saleId);
 
+/**
+ * Add a payment to a sale (supports partial payments / pay-later).
+ */
+export const addSalePayment = (
+  saleId: number,
+  amount: number,
+  method: string,
+  note?: string
+): Promise<SalePaymentSummary> =>
+  invoke<SalePaymentSummary>("add_sale_payment", {
+    saleId,
+    amount,
+    method,
+    note,
+  });
+
+/**
+ * Get payment summary for a sale (total, paid, balance, payments list).
+ */
+export const getSalePaymentSummary = (saleId: number): Promise<SalePaymentSummary> =>
+  invoke<SalePaymentSummary>("get_sale_payment_summary", { saleId });
+
 // Expense Management APIs
 /**
  * Add a new business expense
@@ -712,6 +1124,69 @@ export const updateExpense = (expenseId: number, updates: Partial<NewExpense>): 
  */
 export const deleteExpense = (expenseId: number): Promise<boolean> => 
   invoke("delete_expense", { expenseId });
+
+// ===== SUPPLIERS & PURCHASES (Stock-In) APIs =====
+
+export const addSupplier = (supplier: NewSupplier): Promise<number> =>
+  invoke('add_supplier', { ...supplier });
+
+export const getSuppliers = (includeInactive?: boolean): Promise<Supplier[]> =>
+  invoke('get_suppliers', { includeInactive });
+
+export const updateSupplier = (
+  supplierId: number,
+  updates: Partial<NewSupplier> & { is_active?: boolean }
+): Promise<string> => invoke('update_supplier', { supplierId, ...updates });
+
+export const deleteSupplier = (supplierId: number): Promise<string> =>
+  invoke('delete_supplier', { supplierId });
+
+export type PurchasePaymentMode = 'pay_now' | 'pay_later' | 'pay_partial';
+
+export const addPurchase = (args: {
+  supplierId?: number | null;
+  purchaseDate: string;
+  reference?: string;
+  notes?: string;
+  items: PurchaseItemInput[];
+  paymentMode?: PurchasePaymentMode;
+  paymentAmount?: number;
+  paymentMethod?: 'cash' | 'card' | 'mobile' | 'bank';
+  paymentNote?: string;
+  updateStock?: boolean;
+}): Promise<number> =>
+  invoke('add_purchase', { ...args });
+
+export const getPurchases = (): Promise<PurchaseSummary[]> =>
+  invoke('get_purchases');
+
+export const getPurchaseDetails = (purchaseId: number): Promise<PurchaseDetails> =>
+  invoke('get_purchase_details', { purchaseId });
+
+export const deletePurchase = (purchaseId: number, rollbackStock?: boolean): Promise<string> =>
+  invoke('delete_purchase', { purchaseId, rollbackStock });
+
+export const addSupplierPayment = (args: {
+  supplierId: number;
+  purchaseId?: number | null;
+  amount: number;
+  method: 'cash' | 'card' | 'mobile' | 'bank';
+  note?: string;
+}): Promise<SupplierBalanceSummary> => invoke('add_supplier_payment', { ...args });
+
+export const getSupplierPayments = (supplierId: number): Promise<SupplierPayment[]> =>
+  invoke('get_supplier_payments', { supplierId });
+
+export const getSupplierBalanceSummaries = (includeInactive?: boolean): Promise<SupplierBalanceSummary[]> =>
+  invoke('get_supplier_balance_summaries', { includeInactive });
+
+// ===== ACCOUNTS APIs =====
+
+export const getCustomerBalanceSummaries = (): Promise<CustomerBalanceSummary[]> =>
+  invoke('get_customer_balance_summaries');
+
+export const getCustomerSaleBalances = (customerId: number): Promise<CustomerSaleBalanceRow[]> =>
+  invoke('get_customer_sale_balances', { customerId });
 
 // Dashboard & Analytics APIs
 /**
@@ -1074,3 +1549,73 @@ export const setTaxEnabled = (enabled: boolean): Promise<string> =>
  */
 export const getTaxEnabled = (): Promise<boolean> => 
   invoke("get_tax_enabled");
+
+// ============================================================================
+// LOYALTY SYSTEM (Phase 5)
+// ============================================================================
+
+export interface PointTransaction {
+  id: number;
+  customer_id: number;
+  order_id?: number;
+  points_change: number;
+  reason: string;
+  created_at: string;
+}
+
+export interface LoyaltyConfig {
+  points_per_dollar: number;
+  dollars_per_point: number;
+}
+
+/**
+ * Get loyalty points configuration
+ * @returns Tuple of [points_per_dollar, dollars_per_point]
+ */
+export const getLoyaltyConfig = (): Promise<[number, number]> => 
+  invoke("get_loyalty_config");
+
+/**
+ * Set loyalty points configuration
+ * @param pointsPerDollar - How many points earned per dollar spent (e.g., 0.1 = 1 point per $10)
+ * @param dollarsPerPoint - Dollar value of each point (e.g., 0.1 = 1 point = $0.10)
+ * @returns Success message
+ */
+export const setLoyaltyConfig = (pointsPerDollar: number, dollarsPerPoint: number): Promise<string> => 
+  invoke("set_loyalty_config", { pointsPerDollar, dollarsPerPoint });
+
+/**
+ * Award loyalty points to a customer for a completed sale
+ * @param customerId - ID of the customer
+ * @param orderId - ID of the order/sale
+ * @param orderTotal - Total amount of the order
+ * @returns Number of points awarded
+ */
+export const awardLoyaltyPoints = (customerId: number, orderId: number, orderTotal: number): Promise<number> => 
+  invoke("award_loyalty_points", { customerId, orderId, orderTotal });
+
+/**
+ * Get a customer's current loyalty points balance
+ * @param customerId - ID of the customer
+ * @returns Current points balance
+ */
+export const getCustomerLoyaltyPoints = (customerId: number): Promise<number> => 
+  invoke("get_customer_loyalty_points", { customerId });
+
+/**
+ * Redeem loyalty points for a discount
+ * @param customerId - ID of the customer
+ * @param pointsToRedeem - Number of points to redeem
+ * @returns Discount amount in dollars
+ */
+export const redeemLoyaltyPoints = (customerId: number, pointsToRedeem: number): Promise<number> => 
+  invoke("redeem_loyalty_points", { customerId, pointsToRedeem });
+
+/**
+ * Get point transaction history for a customer
+ * @param customerId - ID of the customer
+ * @param limit - Maximum number of transactions to return (default: 50)
+ * @returns Array of point transactions
+ */
+export const getPointTransactions = (customerId: number, limit?: number): Promise<PointTransaction[]> => 
+  invoke("get_point_transactions", { customerId, limit });

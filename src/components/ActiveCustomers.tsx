@@ -374,7 +374,7 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
                   color: colors.accent,
                   borderBottom: `2px solid ${colors.accent}`
                 }}>
-                  {label.unit} {label.client}s ({roomGuests.length})
+                  {label.unit}-based {label.client}s ({roomGuests.length})
                 </div>
                 {roomGuests.map((guest) => (
                   <React.Fragment key={guest.guest_id}>
@@ -607,7 +607,7 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
                           backgroundColor: `${colors.accent}20`,
                           borderRadius: '4px'
                         }}>
-                          Walk-in
+                          No {label.unit}
                         </span>
                       </div>
                       <div style={{ fontSize: '0.875rem', color: colors.textSecondary }}>
@@ -680,7 +680,7 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
                         borderBottom: `1px solid ${colors.border}`
                       }}>
                         <h4 style={{ margin: '0 0 1rem 0', color: colors.accent }}>
-                          Sales for {guest.name} (Walk-in {label.client})
+                          Sales for {guest.name}
                         </h4>
                         {guest.foodOrders && guest.foodOrders.length > 0 ? (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>

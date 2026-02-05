@@ -4,11 +4,14 @@ import {
     buildFinalInvoiceHtmlWithDiscount,
     checkoutGuestWithDiscount,
     deleteSale,
+    getCustomerLoyaltyPoints,
+    getLoyaltyConfig,
     getMenuItems,
     getSaleDetails,
     getSalesByCustomer,
     getTaxEnabled,
     getTaxRate,
+    redeemLoyaltyPoints,
     toggleSalePayment,
     type ActiveCustomerRow,
     type MenuItem,
@@ -18,6 +21,7 @@ import { useCurrency } from '../context/CurrencyContext';
 import { useLabels } from '../context/LabelContext';
 import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
+import { generateReceiptLink, openWhatsApp, type CartItem } from '../utils/whatsapp';
 
 interface CheckoutProps {
     guest: ActiveCustomerRow;
@@ -73,6 +77,13 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onCheckoutComplete }
     const [selectedMenuItemId, setSelectedMenuItemId] = useState(0);
     const [quantity, setQuantity] = useState(1);
     const [checkingOut, setCheckingOut] = useState(false);
+    
+    // Phase 5: Loyalty points states
+    const [loyaltyPoints, setLoyaltyPoints] = useState(0);
+    const [showRedeemModal, setShowRedeemModal] = useState(false);
+    const [pointsToRedeem, setPointsToRedeem] = useState(0);
+    const [loyaltyDiscount, setLoyaltyDiscount] = useState(0);
+    const [loyaltyConfig, setLoyaltyConfig] = useState<[number, number]>([0.1, 0.1]);
 
     const loadCheckoutData = useCallback(async () => {
         setLoading(true);
@@ -82,18 +93,23 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onCheckoutComplete }
                 getMenuItems()
             ]);
             
-                        // Load tax settings
+                        // Load tax settings and loyalty points
             try {
-                const [taxEnabledResult, taxRateResult] = await Promise.all([
+                const [taxEnabledResult, taxRateResult, points, config] = await Promise.all([
                     getTaxEnabled(),
-                    getTaxRate()
+                    getTaxRate(),
+                    getCustomerLoyaltyPoints(guest.guest_id),
+                    getLoyaltyConfig()
                 ]);
                 setTaxEnabled(taxEnabledResult);
                 setTaxRate(taxRateResult);
+                setLoyaltyPoints(points);
+                setLoyaltyConfig(config);
             } catch (err) {
                 console.error('Failed to load tax settings:', err);
                 setTaxEnabled(false);
                 setTaxRate(0);
+                setLoyaltyPoints(0);
             }
             
             // Load detailed order information for each order
@@ -172,8 +188,8 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onCheckoutComplete }
             }
         }
         
-        // Calculate total after discount but before tax
-        const afterDiscount = Math.max(0, subtotal - discountAmount);
+        // Calculate total after discount but before tax (including loyalty discount)
+        const afterDiscount = Math.max(0, subtotal - discountAmount - loyaltyDiscount);
         
         // Calculate tax amount and final total
         let finalTotal = afterDiscount;
@@ -182,7 +198,7 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onCheckoutComplete }
         }
         
         setGrandTotal(finalTotal);
-    }, [discount.amount, discount.type, foodOrders, roomCharges, taxEnabled, taxRate]);
+    }, [discount.amount, discount.type, foodOrders, roomCharges, taxEnabled, taxRate, loyaltyDiscount]);
 
     // Load data on mount / when guest changes
     useEffect(() => {
@@ -335,6 +351,93 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onCheckoutComplete }
         return Math.ceil((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
     };
 
+    // Phase 5: Loyalty Points Handler
+    const handleRedeemPoints = async () => {
+        if (pointsToRedeem <= 0) {
+            showWarning('Invalid Points', 'Please enter a valid number of points to redeem');
+            return;
+        }
+
+        if (pointsToRedeem > loyaltyPoints) {
+            showError('Insufficient Points', `Customer only has ${loyaltyPoints} points available`);
+            return;
+        }
+
+        try {
+            const discountAmount = await redeemLoyaltyPoints(guest.guest_id, pointsToRedeem);
+            
+            setLoyaltyDiscount(discountAmount);
+            setLoyaltyPoints(prev => prev - pointsToRedeem);
+            setShowRedeemModal(false);
+            setPointsToRedeem(0);
+            
+            showSuccess(
+                'Points Redeemed', 
+                `${pointsToRedeem} points redeemed for ${formatMoney(discountAmount)} discount`
+            );
+        } catch (err) {
+            console.error('Failed to redeem points:', err);
+            showError('Redemption Failed', err instanceof Error ? err.message : 'Failed to redeem points');
+        }
+    };
+
+    // Phase 5: WhatsApp Receipt Handler
+    const handleSendWhatsAppReceipt = () => {
+        if (!guest.name) {
+            showWarning('Missing Information', 'Customer name is required');
+            return;
+        }
+
+        // Prompt for phone number if not available
+        const phone = prompt('Enter customer phone number (with country code):');
+        if (!phone) {
+            return;
+        }
+
+        try {
+            // Build cart items from unpaid orders
+            const cartItems: CartItem[] = [];
+            foodOrders.forEach(order => {
+                if (order.items && order.items.length > 0) {
+                    order.items.forEach(item => {
+                        cartItems.push({
+                            name: item.item_name,
+                            quantity: item.quantity,
+                            price: item.unit_price
+                        });
+                    });
+                }
+            });
+
+            // Add room charges as an item
+            if (roomCharges > 0) {
+                const stayDays = calculateStayDays();
+                cartItems.push({
+                    name: `${label.unit} Charges (${stayDays} days)`,
+                    quantity: 1,
+                    price: roomCharges
+                });
+            }
+
+            // Generate WhatsApp link
+            const waLink = generateReceiptLink(
+                phone,
+                guest.name,
+                cartItems,
+                grandTotal,
+                'Inertia Offline', // You can get this from settings later
+                currencyCode
+            );
+
+            // Open WhatsApp
+            openWhatsApp(waLink);
+            showSuccess('WhatsApp Opened', 'Receipt message prepared in WhatsApp');
+        } catch (err) {
+            console.error('Failed to generate WhatsApp link:', err);
+            showError('WhatsApp Error', err instanceof Error ? err.message : 'Failed to generate WhatsApp message');
+        }
+    };
+
     if (loading) {
         return (
             <div style={{
@@ -390,9 +493,172 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onCheckoutComplete }
                     borderRadius: '4px',
                     border: `1px solid ${colors.border}`
                 }}>
-                    {guest.room_number ? `${label.unit} ${guest.room_number}` : `Walk-in ${label.client}`}
+                    {guest.room_number ? `${label.unit} ${guest.room_number}` : `Walk-in`}
                 </div>
             </div>
+
+            {/* Phase 5: Loyalty Points Display */}
+            {loyaltyPoints > 0 && (
+                <div style={{
+                    backgroundColor: '#FEF3C7',
+                    border: '2px solid #F59E0B',
+                    borderRadius: '8px',
+                    padding: '1rem',
+                    marginBottom: '1.5rem',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ fontSize: '1.5rem' }}>💎</span>
+                        <div>
+                            <div style={{ 
+                                fontWeight: 'bold', 
+                                fontSize: '1.1rem',
+                                color: '#92400E'
+                            }}>
+                                {loyaltyPoints} Loyalty Points
+                            </div>
+                            <div style={{ 
+                                fontSize: '0.85rem',
+                                color: '#78350F'
+                            }}>
+                                Value: {formatMoney(loyaltyPoints * loyaltyConfig[1])}
+                            </div>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => setShowRedeemModal(true)}
+                        disabled={loyaltyDiscount > 0}
+                        style={{
+                            backgroundColor: loyaltyDiscount > 0 ? '#D1D5DB' : '#F59E0B',
+                            color: loyaltyDiscount > 0 ? '#6B7280' : 'white',
+                            border: 'none',
+                            padding: '0.5rem 1rem',
+                            borderRadius: '4px',
+                            cursor: loyaltyDiscount > 0 ? 'not-allowed' : 'pointer',
+                            fontSize: '0.9rem',
+                            fontWeight: 'bold'
+                        }}
+                    >
+                        {loyaltyDiscount > 0 ? '✓ Redeemed' : 'Redeem Points'}
+                    </button>
+                </div>
+            )}
+
+            {/* Phase 5: Redeem Points Modal */}
+            {showRedeemModal && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    zIndex: 1000
+                }}>
+                    <div style={{
+                        backgroundColor: colors.primary,
+                        padding: '2rem',
+                        borderRadius: '8px',
+                        border: `2px solid ${colors.border}`,
+                        maxWidth: '400px',
+                        width: '90%'
+                    }}>
+                        <h2 style={{ marginTop: 0, color: colors.text }}>Redeem Loyalty Points</h2>
+                        
+                        <div style={{ marginBottom: '1rem', color: colors.text }}>
+                            <p>
+                                <strong>{guest.name}</strong> has <strong style={{ color: '#F59E0B' }}>{loyaltyPoints} points</strong>
+                            </p>
+                            <p style={{ fontSize: '0.9rem', color: colors.textSecondary }}>
+                                Estimated value: {formatMoney(loyaltyPoints * loyaltyConfig[1])}
+                            </p>
+                        </div>
+
+                        <div style={{ marginBottom: '1.5rem' }}>
+                            <label style={{ 
+                                display: 'block', 
+                                marginBottom: '0.5rem',
+                                fontWeight: 'bold',
+                                color: colors.text
+                            }}>
+                                Points to Redeem:
+                            </label>
+                            <input
+                                type="number"
+                                min="0"
+                                max={loyaltyPoints}
+                                value={pointsToRedeem}
+                                onChange={(e) => setPointsToRedeem(Math.min(loyaltyPoints, Math.max(0, parseInt(e.target.value) || 0)))}
+                                style={{
+                                    width: '100%',
+                                    padding: '0.5rem',
+                                    border: `1px solid ${colors.border}`,
+                                    borderRadius: '4px',
+                                    backgroundColor: colors.surface,
+                                    color: colors.text,
+                                    fontSize: '1rem'
+                                }}
+                            />
+                            {pointsToRedeem > 0 && (
+                                <div style={{ 
+                                    marginTop: '0.5rem',
+                                    padding: '0.5rem',
+                                    backgroundColor: '#D1FAE5',
+                                    borderRadius: '4px',
+                                    color: '#065F46',
+                                    fontSize: '0.9rem'
+                                }}>
+                                    Discount: <strong>{formatMoney(pointsToRedeem * loyaltyConfig[1])}</strong>
+                                </div>
+                            )}
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <button
+                                onClick={() => {
+                                    setShowRedeemModal(false);
+                                    setPointsToRedeem(0);
+                                }}
+                                style={{
+                                    flex: 1,
+                                    backgroundColor: colors.surface,
+                                    color: colors.text,
+                                    border: `1px solid ${colors.border}`,
+                                    padding: '0.75rem',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontSize: '1rem',
+                                    fontWeight: 'bold'
+                                }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleRedeemPoints}
+                                disabled={pointsToRedeem <= 0}
+                                style={{
+                                    flex: 1,
+                                    backgroundColor: pointsToRedeem > 0 ? '#F59E0B' : '#D1D5DB',
+                                    color: 'white',
+                                    border: 'none',
+                                    padding: '0.75rem',
+                                    borderRadius: '4px',
+                                    cursor: pointsToRedeem > 0 ? 'pointer' : 'not-allowed',
+                                    fontSize: '1rem',
+                                    fontWeight: 'bold'
+                                }}
+                            >
+                                Apply Discount
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {error && (
                 <div style={{
@@ -742,6 +1008,22 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onCheckoutComplete }
                             </div>
                         )}
                         
+                        {/* Phase 5: Loyalty Discount Display */}
+                        {loyaltyDiscount > 0 && (
+                            <div style={{ 
+                                display: 'flex', 
+                                justifyContent: 'space-between', 
+                                marginBottom: '0.5rem',
+                                paddingBottom: '0.5rem',
+                                borderBottom: `1px solid ${colors.border}`,
+                                color: '#F59E0B',
+                                fontWeight: 'bold'
+                            }}>
+                                <span>💎 Loyalty Discount:</span>
+                                <span>-{formatMoney(loyaltyDiscount)}</span>
+                            </div>
+                        )}
+                        
                         {taxEnabled && taxRate > 0 && (
                             <div style={{ 
                                 display: 'flex', 
@@ -777,6 +1059,28 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onCheckoutComplete }
                     </div>
                     
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '2rem' }}>
+                        {/* Phase 5: WhatsApp Send Receipt Button */}
+                        <button
+                            onClick={handleSendWhatsAppReceipt}
+                            style={{
+                                backgroundColor: '#25D366',
+                                color: 'white',
+                                border: 'none',
+                                padding: '0.75rem',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontSize: '1rem',
+                                fontWeight: 'bold',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '0.5rem'
+                            }}
+                        >
+                            <span style={{ fontSize: '1.2rem' }}>📱</span>
+                            Send Receipt via WhatsApp
+                        </button>
+                        
                         <button
                             onClick={handlePrintInvoice}
                             style={{

@@ -1,5 +1,6 @@
 use base64::{Engine, prelude::BASE64_STANDARD};
 use rusqlite::OptionalExtension;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 // Include the JPG logo as a compile-time embedded resource for final invoices
@@ -529,6 +530,377 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
     }
     
     Ok(html)
+}
+
+// ===== RETURNS / REFUNDS RECEIPTS =====
+
+/// Generate HTML receipt for a sale return
+#[tauri::command]
+pub fn build_sale_return_receipt_html(return_id: i64) -> Result<String, String> {
+    let conn = crate::db::get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+
+    let currency_code = get_setting_or(&conn, "currency_code", "USD")?
+        .trim()
+        .to_uppercase();
+
+    let business_name = get_setting_or(&conn, "business_name", "Business Manager")?;
+    let business_address = get_setting_or(&conn, "business_address", "")?;
+    let receipt_header = get_setting_or(&conn, "receipt_header", "")?;
+    let receipt_footer = get_setting_or(&conn, "receipt_footer", "")?;
+
+    // Logo: use saved business logo if available, otherwise fall back to embedded logo.
+    let logo_src = match get_business_logo_data_url(&conn)? {
+        Some(src) => src,
+        None => {
+            let embedded = get_logo_base64();
+            if embedded.is_empty() {
+                "".to_string()
+            } else {
+                format!("data:image/jpeg;base64,{}", embedded)
+            }
+        }
+    };
+
+    let logo_html = if logo_src.is_empty() {
+        "".to_string()
+    } else {
+        format!(r#"<img src=\"{}\" alt=\"Logo\" class=\"logo\">"#, logo_src)
+    };
+
+    // Return header
+    let (sale_id, return_date, refund_method, refund_amount, note, created_at): (
+        i64,
+        String,
+        Option<String>,
+        f64,
+        Option<String>,
+        String,
+    ) = conn
+        .query_row(
+            "SELECT sale_id, return_date, refund_method, refund_amount, note, created_at
+             FROM sale_returns
+             WHERE id = ?1",
+            [return_id],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                ))
+            },
+        )
+        .map_err(|e| format!("Return not found: {}", e))?;
+
+    // Return items
+    let mut stmt = conn
+        .prepare(
+            "SELECT item_name, unit_price, quantity, line_total
+             FROM sale_return_items
+             WHERE return_id = ?1
+             ORDER BY id",
+        )
+        .map_err(|e| format!("Failed to prepare return items query: {}", e))?;
+
+    let mut rows = stmt
+        .query([return_id])
+        .map_err(|e| format!("Failed to query return items: {}", e))?;
+
+    let mut items_html = String::new();
+    let mut computed_total = 0.0;
+    while let Some(r) = rows
+        .next()
+        .map_err(|e| format!("Failed to read return items: {}", e))?
+    {
+        let item_name: String = r.get(0).map_err(|e| e.to_string())?;
+        let unit_price: f64 = r.get(1).map_err(|e| e.to_string())?;
+        let qty: i32 = r.get(2).map_err(|e| e.to_string())?;
+        let line_total: f64 = r.get(3).map_err(|e| e.to_string())?;
+        computed_total += line_total;
+
+        items_html.push_str(&format!(
+            r#"<tr>
+                <td class=\"name\">{}</td>
+                <td class=\"qty\">{}</td>
+                <td class=\"money\">{}</td>
+                <td class=\"money\">{}</td>
+            </tr>"#,
+            html_escape(&item_name),
+            qty,
+            html_escape(&format_money(unit_price, &currency_code, 2)),
+            html_escape(&format_money(line_total, &currency_code, 2)),
+        ));
+    }
+
+    let header_html = if receipt_header.trim().is_empty() {
+        "".to_string()
+    } else {
+        format!(r#"<div class=\"header-note\">{}</div>"#, escape_multiline(&receipt_header))
+    };
+
+    let footer_html = if receipt_footer.trim().is_empty() {
+        "".to_string()
+    } else {
+        format!(r#"<div class=\"footer-note\">{}</div>"#, escape_multiline(&receipt_footer))
+    };
+
+    let note_html = match note {
+        Some(n) if !n.trim().is_empty() => {
+            format!(r#"<div class=\"note\"><strong>Note:</strong> {}</div>"#, escape_multiline(&n))
+        }
+        _ => "".to_string(),
+    };
+
+    let refund_method_display = refund_method.unwrap_or_else(|| "".to_string());
+
+    let html = format!(
+        r#"<!doctype html>
+<html>
+<head>
+  <meta charset=\"utf-8\" />
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+  <title>Return Receipt #{return_id}</title>
+  <style>
+    body {{ font-family: Arial, sans-serif; color: #111; margin: 0; padding: 16px; }}
+    .wrap {{ max-width: 380px; margin: 0 auto; }}
+    .logo {{ max-width: 140px; max-height: 60px; display: block; margin: 0 auto 8px; }}
+    h1 {{ font-size: 18px; margin: 6px 0 2px; text-align: center; }}
+    .sub {{ text-align: center; font-size: 12px; color: #444; }}
+    .hr {{ border-top: 1px dashed #999; margin: 12px 0; }}
+    .meta {{ font-size: 12px; line-height: 1.4; }}
+    table {{ width: 100%; border-collapse: collapse; font-size: 12px; }}
+    th {{ text-align: left; padding: 6px 0; border-bottom: 1px dashed #999; }}
+    td {{ padding: 6px 0; vertical-align: top; }}
+    .qty {{ text-align: right; width: 44px; padding-left: 8px; }}
+    .money {{ text-align: right; width: 90px; padding-left: 8px; }}
+    .totals {{ font-size: 12px; margin-top: 10px; }}
+    .totals .row {{ display: flex; justify-content: space-between; margin: 4px 0; }}
+    .strong {{ font-weight: 700; }}
+    .header-note, .footer-note, .note {{ font-size: 12px; margin-top: 10px; color: #333; }}
+  </style>
+</head>
+<body>
+  <div class=\"wrap\">
+    {logo_html}
+    <h1>{business_name}</h1>
+    <div class=\"sub\">{business_address}</div>
+    {header_html}
+    <div class=\"hr\"></div>
+    <div class=\"meta\">
+      <div><strong>Return:</strong> #{return_id}</div>
+      <div><strong>Sale:</strong> #{sale_id}</div>
+      <div><strong>Return date:</strong> {return_date}</div>
+      <div><strong>Created:</strong> {created_at}</div>
+      <div><strong>Refund method:</strong> {refund_method}</div>
+    </div>
+    <div class=\"hr\"></div>
+    <table>
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th class=\"qty\">Qty</th>
+          <th class=\"money\">Unit</th>
+          <th class=\"money\">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {items_html}
+      </tbody>
+    </table>
+    <div class=\"hr\"></div>
+    <div class=\"totals\">
+      <div class=\"row\"><span>Return total</span><span class=\"strong\">{computed_total}</span></div>
+      <div class=\"row\"><span>Refunded</span><span class=\"strong\">{refund_amount}</span></div>
+    </div>
+    {note_html}
+    <div class=\"hr\"></div>
+    {footer_html}
+    <div class=\"sub\" style=\"margin-top:10px\">Thank you</div>
+  </div>
+</body>
+</html>"#,
+        return_id = return_id,
+        business_name = html_escape(&business_name),
+        business_address = escape_multiline(&business_address),
+        header_html = header_html,
+        footer_html = footer_html,
+        logo_html = logo_html,
+        sale_id = sale_id,
+        return_date = html_escape(&return_date),
+        created_at = html_escape(&created_at),
+        refund_method = html_escape(&refund_method_display),
+        items_html = items_html,
+        computed_total = html_escape(&format_money(computed_total, &currency_code, 2)),
+        refund_amount = html_escape(&format_money(refund_amount, &currency_code, 2)),
+        note_html = note_html,
+    );
+
+    Ok(html)
+}
+
+/// Print a sale return receipt (opens in browser with auto-print)
+#[tauri::command]
+pub fn print_sale_return_receipt(return_id: i64) -> Result<String, String> {
+    let mut html = build_sale_return_receipt_html(return_id)?;
+
+    let auto_print_script = String::from(
+        r#"
+    <script>
+        window.addEventListener('load', function() {
+            setTimeout(function() {
+                window.print();
+            }, 500);
+        });
+    </script>
+"#,
+    );
+
+    html = html.replace("</head>", &(auto_print_script + "</head>"));
+
+    let temp_dir = std::env::temp_dir();
+    let file_path = temp_dir.join(format!("return_receipt_{}.html", return_id));
+
+    std::fs::write(&file_path, html)
+        .map_err(|e| format!("Failed to write return receipt file: {}", e))?;
+
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", &file_path.to_string_lossy()])
+            .spawn()
+            .map_err(|e| format!("Failed to open return receipt: {}", e))?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&file_path)
+            .spawn()
+            .map_err(|e| format!("Failed to open return receipt: {}", e))?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&file_path)
+            .spawn()
+            .map_err(|e| format!("Failed to open return receipt: {}", e))?;
+    }
+
+    Ok("Return receipt opened in browser - print dialog will appear automatically".to_string())
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KitchenTicketItem {
+        pub name: String,
+        pub quantity: i64,
+        pub notes: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KitchenTicket {
+        pub created_at: String,
+        pub items: Vec<KitchenTicketItem>,
+}
+
+/// Generate HTML for a kitchen ticket (KOT) to print from the POS before checkout.
+#[tauri::command]
+pub fn build_kitchen_ticket_html(ticket: KitchenTicket) -> Result<String, String> {
+        let conn = crate::db::get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+
+        let business_name = get_setting_or(&conn, "business_name", "Business Manager")?;
+        let business_address = get_setting_or(&conn, "business_address", "")?;
+
+        if ticket.items.is_empty() {
+                return Err("No items to print".to_string());
+        }
+
+        let item_count = ticket.items.len();
+        let mut lines = String::new();
+        for item in ticket.items {
+                let name = html_escape(&item.name);
+                let qty = item.quantity.max(0);
+                let notes_html = match item.notes {
+                        Some(n) if !n.trim().is_empty() => {
+                                format!("<div class=\"notes\">{}</div>", escape_multiline(&n.trim()))
+                        }
+                        _ => "".to_string(),
+                };
+
+                lines.push_str(&format!(
+                r#"<div class=\"row\"><div class=\"qty\">{}</div><div class=\"name\">{}{}{}</div></div>"#,
+                        qty,
+                        name,
+                        if notes_html.is_empty() { "" } else { "" },
+                        notes_html
+                ));
+        }
+
+        Ok(format!(
+                r#"<!doctype html>
+<html>
+    <head>
+        <meta charset=\"utf-8\" />
+        <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+        <title>Kitchen Ticket</title>
+        <style>
+            :root {{ --paper: 280px; }}
+            body {{
+                font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+                margin: 0;
+                padding: 12px;
+                color: #111;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }}
+            .paper {{ width: var(--paper); max-width: 100%; margin: 0 auto; }}
+            .top {{ text-align: center; }}
+            .title {{ font-size: 18px; font-weight: 900; letter-spacing: 1px; }}
+            .biz {{ margin-top: 6px; font-size: 12px; font-weight: 800; }}
+            .addr {{ margin-top: 2px; font-size: 10px; color: #333; white-space: pre-wrap; }}
+            .meta {{ margin-top: 8px; font-size: 11px; color: #111; display: grid; gap: 4px; }}
+            .sep {{ border-top: 1px dashed #444; margin: 10px 0; }}
+            .row {{ display: grid; grid-template-columns: 52px 1fr; gap: 10px; padding: 8px 0; border-bottom: 1px dashed #ddd; }}
+            .qty {{ font-weight: 900; font-size: 18px; text-align: right; }}
+            .name {{ font-weight: 900; font-size: 13px; }}
+            .notes {{ margin-top: 4px; font-weight: 700; font-size: 11px; color: #333; }}
+            .foot {{ margin-top: 10px; font-size: 10px; color: #333; text-align: center; }}
+            @media print {{
+                body {{ padding: 0; }}
+                .paper {{ width: var(--paper); }}
+            }}
+        </style>
+        <script>
+            window.addEventListener('load', function() {{
+                setTimeout(function() {{ window.print(); }}, 250);
+            }});
+        </script>
+    </head>
+    <body>
+        <div class=\"paper\">
+            <div class=\"top\">
+                <div class=\"title\">KOT</div>
+                <div class=\"biz\">{}</div>
+                <div class=\"addr\">{}</div>
+            </div>
+            <div class=\"meta\">
+                <div>TIME: {}</div>
+                <div>ITEMS: {}</div>
+            </div>
+            <div class=\"sep\"></div>
+            <div>{}</div>
+            <div class=\"foot\">--- END ---</div>
+        </div>
+    </body>
+</html>"#,
+                html_escape(&business_name),
+                html_escape(&business_address),
+                html_escape(&ticket.created_at),
+                item_count,
+                lines
+        ))
 }
 
 /// Generate HTML invoice for a guest's final bill

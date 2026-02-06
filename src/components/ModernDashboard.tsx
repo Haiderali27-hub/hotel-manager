@@ -143,27 +143,6 @@ const ModernDashboard: React.FC = () => {
     },
   ];
 
-  const navigationItems: Array<{ id: string; label: string; managerOnly?: boolean; adminOnly?: boolean }> = [
-    { id: 'dashboard', label: 'Dashboard' },
-    { id: 'pos', label: posNavLabel },
-    { id: 'products', label: 'Products' },
-    { id: 'purchases', label: 'Purchases (Stock-In)', managerOnly: true },
-    { id: 'stock-adjustments', label: 'Stock Adjustments', managerOnly: true },
-    { id: 'returns', label: 'Returns & Refunds', managerOnly: true },
-    { id: 'suppliers', label: 'Suppliers', managerOnly: true },
-    { id: 'accounts', label: 'Accounts', managerOnly: true },
-    { id: 'sales-history', label: 'Sales History' },
-    { id: 'expenses', label: 'Expenses', managerOnly: true },
-    { id: 'reports', label: 'Reports', managerOnly: true },
-    { id: 'settings', label: 'Settings', adminOnly: true },
-  ];
-
-  const filteredNav = navigationItems.filter((item) => {
-    if (item.adminOnly) return userRole === 'admin';
-    if (item.managerOnly) return userRole === 'admin' || userRole === 'manager';
-    return true;
-  });
-
   const toggleCategory = (categoryName: string) => {
     setExpandedCategories(prev => {
       const next = new Set(prev);

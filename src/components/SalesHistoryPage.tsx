@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+    addSalePayment,
     buildOrderReceiptHtml,
     deleteSale,
     getSaleDetails,
@@ -34,6 +35,12 @@ const SalesHistoryPage: React.FC<SalesHistoryPageProps> = ({ onBack, onDuplicate
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [details, setDetails] = useState<SaleDetails | null>(null);
   const [paymentSummary, setPaymentSummary] = useState<SalePaymentSummary | null>(null);
+  const [salePaymentSummaries, setSalePaymentSummaries] = useState<Record<number, SalePaymentSummary>>({});
+  const [paymentsModalSaleId, setPaymentsModalSaleId] = useState<number | null>(null);
+  const [paymentsModalLoading, setPaymentsModalLoading] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState(0);
+  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [paymentNote, setPaymentNote] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -68,6 +75,36 @@ const SalesHistoryPage: React.FC<SalesHistoryPageProps> = ({ onBack, onDuplicate
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [sales, search, unpaidOnly]);
 
+  useEffect(() => {
+    const rows = filtered.slice(0, 200);
+    const missingIds = rows
+      .map((s) => s.id)
+      .filter((id) => typeof id === 'number' && !salePaymentSummaries[id]);
+
+    if (missingIds.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const results = await Promise.all(
+          missingIds.map(async (saleId) => ({ saleId, summary: await getSalePaymentSummary(saleId) }))
+        );
+        if (cancelled) return;
+        setSalePaymentSummaries((prev) => {
+          const next = { ...prev };
+          for (const r of results) next[r.saleId] = r.summary;
+          return next;
+        });
+      } catch (err) {
+        console.warn('Failed to preload payment summaries:', err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filtered, salePaymentSummaries]);
+
   const openDetails = async (saleId: number) => {
     setSelectedSaleId(saleId);
     setDetails(null);
@@ -88,6 +125,72 @@ const SalesHistoryPage: React.FC<SalesHistoryPageProps> = ({ onBack, onDuplicate
     setSelectedSaleId(null);
     setDetails(null);
     setPaymentSummary(null);
+  };
+
+  const openPaymentsModal = async (saleId: number) => {
+    setPaymentsModalSaleId(saleId);
+    setPaymentsModalLoading(true);
+    setPaymentMethod('cash');
+    setPaymentNote('');
+
+    try {
+      const summary = await getSalePaymentSummary(saleId);
+      setSalePaymentSummaries((prev) => ({ ...prev, [saleId]: summary }));
+      setPaymentAmount(summary.balance_due);
+    } catch (err) {
+      console.error('Failed to load sale payment summary:', err);
+      showError('Payments', 'Failed to load payment details');
+      setPaymentsModalSaleId(null);
+    } finally {
+      setPaymentsModalLoading(false);
+    }
+  };
+
+  const closePaymentsModal = () => {
+    setPaymentsModalSaleId(null);
+    setPaymentsModalLoading(false);
+    setPaymentAmount(0);
+    setPaymentMethod('cash');
+    setPaymentNote('');
+  };
+
+  const submitPayment = async () => {
+    if (!paymentsModalSaleId) return;
+    const summary = salePaymentSummaries[paymentsModalSaleId];
+    if (!summary) return;
+
+    if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+      showWarning('Payment', 'Enter a payment amount greater than 0');
+      return;
+    }
+    if (paymentAmount > summary.balance_due + 1e-9) {
+      showWarning('Payment', 'Payment cannot exceed the balance due');
+      return;
+    }
+
+    setPaymentsModalLoading(true);
+    try {
+      const updated = await addSalePayment(
+        paymentsModalSaleId,
+        paymentAmount,
+        paymentMethod,
+        paymentNote.trim() ? paymentNote.trim() : undefined
+      );
+      setSalePaymentSummaries((prev) => ({ ...prev, [paymentsModalSaleId]: updated }));
+      await load();
+      showSuccess('Payment Saved', `New balance: ${formatMoney(updated.balance_due)}`);
+      if (updated.balance_due <= 0.01) {
+        closePaymentsModal();
+      } else {
+        setPaymentAmount(updated.balance_due);
+        setPaymentNote('');
+      }
+    } catch (err) {
+      console.error('Failed to add payment:', err);
+      showError('Payment Failed', err instanceof Error ? err.message : 'Failed to save payment');
+    } finally {
+      setPaymentsModalLoading(false);
+    }
   };
 
   const handleReprint = async (saleId: number) => {
@@ -197,6 +300,11 @@ const SalesHistoryPage: React.FC<SalesHistoryPageProps> = ({ onBack, onDuplicate
               {filtered.slice(0, 200).map((s) => {
                 const dt = new Date(s.created_at);
                 const time = Number.isNaN(dt.getTime()) ? s.created_at : dt.toLocaleString();
+                const summary = salePaymentSummaries[s.id];
+                const amountPaid = summary?.amount_paid ?? 0;
+                const balanceDue = summary?.balance_due ?? (s.paid ? 0 : s.total_amount || 0);
+                const isPartial = amountPaid > 0.01 && balanceDue > 0.01;
+                const isPaid = summary ? balanceDue < 0.01 : s.paid;
                 return (
                   <tr key={s.id}>
                     <td>#{s.id}</td>
@@ -204,9 +312,18 @@ const SalesHistoryPage: React.FC<SalesHistoryPageProps> = ({ onBack, onDuplicate
                     <td>{s.guest_name ?? `Walk-in ${label.client}`}</td>
                     <td>{formatMoney(s.total_amount || 0)}</td>
                     <td>
-                      <span style={{ color: s.paid ? colors.success : colors.error, fontWeight: 800 }}>
-                        {s.paid ? 'PAID' : 'UNPAID'}
-                      </span>
+                      {isPartial ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <span style={{ color: '#FF9800', fontWeight: 900 }}>PARTIAL PAY</span>
+                          <span style={{ fontSize: '12px', color: colors.textSecondary }}>
+                            Paid {formatMoney(amountPaid)} · Left {formatMoney(balanceDue)}
+                          </span>
+                        </div>
+                      ) : (
+                        <span style={{ color: isPaid ? colors.success : colors.error, fontWeight: 800 }}>
+                          {isPaid ? 'PAID' : 'UNPAID'}
+                        </span>
+                      )}
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -234,6 +351,16 @@ const SalesHistoryPage: React.FC<SalesHistoryPageProps> = ({ onBack, onDuplicate
                         >
                           Re-edit (Duplicate)
                         </button>
+                        {isPartial && (
+                          <button
+                            type="button"
+                            className="bc-btn bc-btn-outline"
+                            onClick={() => void openPaymentsModal(s.id)}
+                            style={{ width: 'auto', minHeight: 40, color: '#FF9800' }}
+                          >
+                            Adjust Payment
+                          </button>
+                        )}
                         <button
                           type="button"
                           className="bc-btn bc-btn-outline"
@@ -353,6 +480,82 @@ const SalesHistoryPage: React.FC<SalesHistoryPageProps> = ({ onBack, onDuplicate
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {paymentsModalSaleId !== null && (
+        <div className="bc-modal-overlay" onClick={closePaymentsModal}>
+          <div className="bc-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+              <div>
+                <div style={{ fontSize: '18px', fontWeight: 900, color: colors.text }}>Adjust Payment</div>
+                <div style={{ fontSize: '13px', color: colors.textSecondary }}>Record a partial payment</div>
+              </div>
+              <button type="button" className="bc-btn bc-btn-outline" onClick={closePaymentsModal} style={{ width: 'auto' }}>
+                Close
+              </button>
+            </div>
+
+            <div style={{ marginTop: '12px', display: 'grid', gap: '10px' }}>
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: colors.textSecondary, marginBottom: '6px' }}>Amount</div>
+                <input
+                  className="bc-input"
+                  type="number"
+                  value={Number.isFinite(paymentAmount) ? paymentAmount : 0}
+                  onChange={(e) => setPaymentAmount(Number(e.target.value))}
+                  disabled={paymentsModalLoading}
+                />
+              </div>
+
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: colors.textSecondary, marginBottom: '6px' }}>Method</div>
+                <select
+                  className="bc-input"
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  disabled={paymentsModalLoading}
+                >
+                  <option value="cash">Cash</option>
+                  <option value="card">Card</option>
+                  <option value="bank">Bank</option>
+                  <option value="mobile">Mobile</option>
+                </select>
+              </div>
+
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: colors.textSecondary, marginBottom: '6px' }}>Note (optional)</div>
+                <input
+                  className="bc-input"
+                  value={paymentNote}
+                  onChange={(e) => setPaymentNote(e.target.value)}
+                  disabled={paymentsModalLoading}
+                  placeholder="Add a note"
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '6px' }}>
+                <button
+                  type="button"
+                  className="bc-btn bc-btn-outline"
+                  onClick={closePaymentsModal}
+                  style={{ width: 'auto' }}
+                  disabled={paymentsModalLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="bc-btn bc-btn-primary"
+                  onClick={() => void submitPayment()}
+                  style={{ width: 'auto' }}
+                  disabled={paymentsModalLoading}
+                >
+                  {paymentsModalLoading ? 'Saving…' : 'Save Payment'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

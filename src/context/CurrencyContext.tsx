@@ -92,9 +92,20 @@ export const CurrencyProvider: React.FC<React.PropsWithChildren> = ({ children }
       });
       return nf.format(safeAmount);
     } catch {
+      // Fallback with currency symbols
+      const currencySymbols: Record<string, string> = {
+        'USD': '$', 'EUR': '€', 'GBP': '£', 'JPY': '¥', 'CNY': '¥',
+        'INR': '₹', 'PKR': 'Rs', 'AUD': 'A$', 'CAD': 'C$', 'CHF': 'CHF',
+        'SEK': 'kr', 'NZD': 'NZ$', 'MYR': 'RM', 'PHP': '₱', 'THB': '฿',
+        'SGD': 'S$', 'HKD': 'HK$', 'KES': 'KSh', 'ZAR': 'R', 'BRL': 'R$',
+        'TRY': '₺', 'SAR': '﷼', 'AED': 'د.إ', 'KWD': 'د.ك', 'QAR': 'ر.ق',
+        'OMR': 'ر.ع.', 'BHD': 'ب.د', 'IDR': 'Rp', 'LKR': 'Rs', 'BDT': '৳',
+        'TWD': 'NT$', 'VND': '₫', 'DKK': 'kr', 'NOK': 'kr'
+      };
+      const symbol = currencySymbols[currencyCode] || currencyCode || 'USD';
       const digits = options?.maximumFractionDigits ?? 2;
       const fixed = safeAmount.toFixed(digits);
-      return `${currencyCode || 'USD'} ${fixed}`;
+      return `${symbol} ${fixed}`;
     }
   };
 

@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import './App.css';
 
-import { invoke } from '@tauri-apps/api/core';
 import ModernDashboard from './components/ModernDashboard';
 import NotificationToast from './components/NotificationToast';
 import OfflineLoginPage from './components/OfflineLoginPage';
@@ -21,8 +20,8 @@ const AppContent: React.FC = () => {
     const checkSetupStatus = async () => {
       if (isAuthenticated && !isLoading) {
         try {
-          const setupCompleted = await invoke<string | null>('get_setting', { key: 'setup_completed' });
-          setShowSetupWizard(!setupCompleted || setupCompleted !== 'true');
+          // User is authenticated, we don't need setup wizard on subsequent logins
+          setShowSetupWizard(false);
         } catch (error) {
           console.error('Failed to check setup status:', error);
           setShowSetupWizard(false);

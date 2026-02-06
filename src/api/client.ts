@@ -1062,6 +1062,8 @@ export const addSalePayment = (
   note?: string
 ): Promise<SalePaymentSummary> =>
   invoke<SalePaymentSummary>("add_sale_payment", {
+    // Rust command arg is `sale_id`; include both for compatibility.
+    sale_id: saleId,
     saleId,
     amount,
     method,
@@ -1072,7 +1074,8 @@ export const addSalePayment = (
  * Get payment summary for a sale (total, paid, balance, payments list).
  */
 export const getSalePaymentSummary = (saleId: number): Promise<SalePaymentSummary> =>
-  invoke<SalePaymentSummary>("get_sale_payment_summary", { saleId });
+  // Rust command arg is `sale_id`; include both for compatibility.
+  invoke<SalePaymentSummary>("get_sale_payment_summary", { sale_id: saleId, saleId });
 
 // Expense Management APIs
 /**

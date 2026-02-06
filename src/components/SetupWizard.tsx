@@ -298,14 +298,49 @@ const SetupWizard: React.FC<Props> = ({ onComplete }) => {
 
               <div className="bc-grid-2">
                 <div className="bc-field">
-                  <label className="bc-label">Currency Symbol</label>
-                  <input
+                  <label className="bc-label">Currency</label>
+                  <select
                     className="bc-input bc-auth-input"
                     value={currencySymbol}
                     onChange={(e) => setCurrencySymbol(e.target.value)}
-                    placeholder="$"
                     disabled={isSubmitting}
-                  />
+                    style={{ appearance: 'none', paddingRight: '2rem' }}
+                  >
+                    <option value="">Select Currency</option>
+                    <option value="AED">AED - United Arab Emirates Dirham</option>
+                    <option value="AUD">AUD - Australian Dollar</option>
+                    <option value="BDT">BDT - Bangladeshi Taka</option>
+                    <option value="BHD">BHD - Bahraini Dinar</option>
+                    <option value="BRL">BRL - Brazilian Real</option>
+                    <option value="CAD">CAD - Canadian Dollar</option>
+                    <option value="CHF">CHF - Swiss Franc</option>
+                    <option value="CNY">CNY - Chinese Yuan</option>
+                    <option value="DKK">DKK - Danish Krone</option>
+                    <option value="EUR">EUR - Euro</option>
+                    <option value="GBP">GBP - British Pound</option>
+                    <option value="HKD">HKD - Hong Kong Dollar</option>
+                    <option value="IDR">IDR - Indonesian Rupiah</option>
+                    <option value="INR">INR - Indian Rupee</option>
+                    <option value="JPY">JPY - Japanese Yen</option>
+                    <option value="KES">KES - Kenyan Shilling</option>
+                    <option value="KWD">KWD - Kuwaiti Dinar</option>
+                    <option value="LKR">LKR - Sri Lankan Rupee</option>
+                    <option value="MYR">MYR - Malaysian Ringgit</option>
+                    <option value="NOK">NOK - Norwegian Krone</option>
+                    <option value="NZD">NZD - New Zealand Dollar</option>
+                    <option value="OMR">OMR - Omani Rial</option>
+                    <option value="PHP">PHP - Philippine Peso</option>
+                    <option value="PKR">PKR - Pakistani Rupee</option>
+                    <option value="QAR">QAR - Qatari Riyal</option>
+                    <option value="SAR">SAR - Saudi Arabian Riyal</option>
+                    <option value="SEK">SEK - Swedish Krona</option>
+                    <option value="SGD">SGD - Singapore Dollar</option>
+                    <option value="THB">THB - Thai Baht</option>
+                    <option value="TRY">TRY - Turkish Lira</option>
+                    <option value="TWD">TWD - Taiwan Dollar</option>
+                    <option value="USD">USD - US Dollar</option>
+                    <option value="ZAR">ZAR - South African Rand</option>
+                  </select>
                 </div>
 
                 <div className="bc-field">

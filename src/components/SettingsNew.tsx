@@ -435,23 +435,41 @@ const Settings: React.FC = () => {
             </div>
 
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--app-text-secondary)' }}>Locale</div>
-              <input
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--app-text-secondary)' }}>Locale (Language & Region)</div>
+              <select
                 className="bc-input"
                 value={pendingLocale}
-                onChange={(e) => setPendingLocale(e.target.value)}
-                onBlur={async () => {
-                  try {
-                    await setLocale(pendingLocale);
-                    showSuccess('Locale Updated', `Locale set to ${pendingLocale}`);
-                  } catch (error) {
+                onChange={(e) => {
+                  setPendingLocale(e.target.value);
+                  setLocale(e.target.value).catch((error) => {
                     showError('Locale Update Failed', String(error));
-                  }
+                  });
                 }}
-                placeholder="en-US"
-              />
+              >
+                <option value="en-US">English (United States)</option>
+                <option value="en-GB">English (United Kingdom)</option>
+                <option value="en-AU">English (Australia)</option>
+                <option value="fr-FR">Français (France)</option>
+                <option value="de-DE">Deutsch (Germany)</option>
+                <option value="es-ES">Español (Spain)</option>
+                <option value="it-IT">Italiano (Italy)</option>
+                <option value="pt-BR">Português (Brazil)</option>
+                <option value="pt-PT">Português (Portugal)</option>
+                <option value="ja-JP">日本語 (Japan)</option>
+                <option value="zh-CN">中文 (Simplified)</option>
+                <option value="zh-TW">中文 (Traditional)</option>
+                <option value="ko-KR">한국어 (Korea)</option>
+                <option value="ar-SA">العربية (Saudi Arabia)</option>
+                <option value="hi-IN">हिन्दी (India)</option>
+                <option value="ur-PK">اردو (Pakistan)</option>
+                <option value="th-TH">ไทย (Thailand)</option>
+                <option value="vi-VN">Tiếng Việt (Vietnam)</option>
+                <option value="id-ID">Bahasa Indonesia (Indonesia)</option>
+                <option value="ms-MY">Bahasa Melayu (Malaysia)</option>
+                <option value="tl-PH">Tagalog (Philippines)</option>
+              </select>
               <div style={{ marginTop: 6, color: 'var(--app-text-secondary)', fontSize: 12 }}>
-                Tip: use values like <strong>en-US</strong>, <strong>en-GB</strong>, <strong>fr-FR</strong>, <strong>ar-SA</strong>.
+                This sets the language and regional format for dates, numbers, and currency display throughout the app.
               </div>
             </div>
 

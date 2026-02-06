@@ -279,25 +279,47 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
           // New payment status filter (takes precedence)
           if (filters.paymentStatus && filters.paymentStatus !== 'all') {
             const summary = salePaymentSummaries[order.id];
-            const totalAmount = summary?.total_amount ?? order.total_amount;
-            const amountPaid = summary?.amount_paid ?? 0;
-            const balanceDue = summary?.balance_due ?? totalAmount;
-            
-            if (filters.paymentStatus === 'paid' && balanceDue > 0.01) return false;
-            if (filters.paymentStatus === 'unpaid' && amountPaid > 0.01) return false;
-            if (filters.paymentStatus === 'partial' && (amountPaid < 0.01 || balanceDue < 0.01)) return false;
+
+            // When we don't yet have a payment summary for this row,
+            // fall back to the coarse `order.paid` flag instead of guessing.
+            if (filters.paymentStatus === 'paid') {
+              if (summary) {
+                if (summary.balance_due > 0.01) return false;
+              } else {
+                if (!order.paid) return false;
+              }
+            }
+
+            // Unpaid includes partial payments (anything with balance remaining).
+            if (filters.paymentStatus === 'unpaid') {
+              if (summary) {
+                if (summary.balance_due < 0.01) return false;
+              } else {
+                if (order.paid) return false;
+              }
+            }
+
+            // For partial we need the summary; if it's missing, keep the row so the
+            // UI can load the summary and then filter accurately.
+            if (filters.paymentStatus === 'partial') {
+              if (summary) {
+                const amountPaid = summary.amount_paid ?? 0;
+                const balanceDue = summary.balance_due ?? 0;
+                if (amountPaid < 0.01 || balanceDue < 0.01) return false;
+              }
+            }
           }
 
           // Month filter (YYYY-MM format)
           if (filters.month) {
-            const orderDate = formatDate(order.order_date);
+            const orderDate = order.created_at || '';
             const orderYearMonth = orderDate.substring(0, 7); // Extract YYYY-MM
             if (orderYearMonth !== filters.month) return false;
           }
 
           // Year filter
           if (filters.year) {
-            const orderDate = formatDate(order.order_date);
+            const orderDate = order.created_at || '';
             const orderYear = orderDate.substring(0, 4); // Extract YYYY
             if (orderYear !== filters.year) return false;
           }
@@ -563,25 +585,104 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
             <td style={tdStyle}>{formatDate(sale.created_at)}</td>
             <td style={tdStyle}>{formatMoney(sale.total_amount)}</td>
             <td style={tdStyle}>
-              {sale.paid
-                ? formatMoney(0)
-                : salePaymentSummaries[sale.id]
-                  ? formatMoney(salePaymentSummaries[sale.id].balance_due)
+              {salePaymentSummaries[sale.id]
+                ? formatMoney(salePaymentSummaries[sale.id].balance_due)
+                : sale.paid
+                  ? formatMoney(0)
                   : '—'}
             </td>
             <td style={tdStyle}>
-              <span style={{
-                backgroundColor: sale.paid ? colors.success : colors.error,
-                color: 'white',
-                padding: '0.25rem 0.5rem',
-                borderRadius: '4px',
-                fontSize: '0.8rem'
-              }}>
-                {sale.paid ? 'Paid' : 'Unpaid'}
-              </span>
+              {(() => {
+                const summary = salePaymentSummaries[sale.id];
+
+                // If we haven't loaded the payment summary yet, do not guess.
+                if (!summary) {
+                  if (sale.paid) {
+                    return (
+                      <span style={{
+                        backgroundColor: colors.success,
+                        color: 'white',
+                        padding: '0.25rem 0.5rem',
+                        borderRadius: '4px',
+                        fontSize: '0.8rem'
+                      }}>
+                        Paid
+                      </span>
+                    );
+                  }
+                  return (
+                    <span style={{
+                      backgroundColor: colors.error,
+                      color: 'white',
+                      padding: '0.25rem 0.5rem',
+                      borderRadius: '4px',
+                      fontSize: '0.8rem'
+                    }}>
+                      Unpaid
+                    </span>
+                  );
+                }
+
+                const amountPaid = summary.amount_paid ?? 0;
+                const balanceDue = summary.balance_due ?? 0;
+                
+                // Partial payment: has some payment but balance remaining
+                if (amountPaid > 0.01 && balanceDue > 0.01) {
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                      <span style={{
+                        backgroundColor: '#FF9800',
+                        color: 'white',
+                        padding: '0.25rem 0.5rem',
+                        borderRadius: '4px',
+                        fontSize: '0.8rem',
+                        fontWeight: 'bold'
+                      }}>
+                        PARTIAL PAY
+                      </span>
+                      <span style={{
+                        fontSize: '0.75rem',
+                        color: colors.textSecondary
+                      }}>
+                        {formatMoney(amountPaid)} of {formatMoney(sale.total_amount)}
+                      </span>
+                    </div>
+                  );
+                }
+                // Fully paid
+                if (balanceDue < 0.01) {
+                  return (
+                    <span style={{
+                      backgroundColor: colors.success,
+                      color: 'white',
+                      padding: '0.25rem 0.5rem',
+                      borderRadius: '4px',
+                      fontSize: '0.8rem'
+                    }}>
+                      Paid
+                    </span>
+                  );
+                }
+                // Unpaid
+                return (
+                  <span style={{
+                    backgroundColor: colors.error,
+                    color: 'white',
+                    padding: '0.25rem 0.5rem',
+                    borderRadius: '4px',
+                    fontSize: '0.8rem'
+                  }}>
+                    Unpaid
+                  </span>
+                );
+              })()}
             </td>
             <td style={tdStyle}>{sale.guest_name ? `${label.unit} ${label.client}` : `Walk-in ${label.client}`}</td>
             <td style={tdStyle}>
+              {(() => {
+                const summary = salePaymentSummaries[sale.id];
+                const isFullyPaid = summary ? summary.balance_due < 0.01 : sale.paid;
+                return (
               <button
                 onClick={() => openPaymentsModal(sale.id)}
                 style={{
@@ -593,10 +694,39 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
                   cursor: 'pointer',
                   fontSize: '0.85rem',
                   fontWeight: 600,
+                  marginRight: '0.5rem'
                 }}
               >
-                {sale.paid ? 'View Payments' : 'Record Payment'}
+                {isFullyPaid ? 'View Payments' : 'Record Payment'}
               </button>
+                );
+              })()}
+              {(() => {
+                const summary = salePaymentSummaries[sale.id];
+                if (!summary) return null;
+                const amountPaid = summary.amount_paid ?? 0;
+                const balanceDue = summary.balance_due ?? 0;
+                if (amountPaid > 0.01 && balanceDue > 0.01) {
+                  return (
+                    <button
+                      onClick={() => openPaymentsModal(sale.id)}
+                      style={{
+                        padding: '0.4rem 0.75rem',
+                        backgroundColor: '#FF9800',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '0.75rem',
+                        fontWeight: 600
+                      }}
+                    >
+                      Adjust Payment
+                    </button>
+                  );
+                }
+                return null;
+              })()}
             </td>
           </tr>
         ))}
@@ -788,6 +918,32 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
               onChange={(e) => handleFilterChange('endDate', e.target.value)}
               style={filterStyle}
             />
+          </div>
+
+          {/* Month Filter */}
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>Month</label>
+            <input
+              type="month"
+              value={filters.month}
+              onChange={(e) => handleFilterChange('month', e.target.value)}
+              style={filterStyle}
+            />
+          </div>
+
+          {/* Year Filter */}
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>Year</label>
+            <select
+              value={filters.year}
+              onChange={(e) => handleFilterChange('year', e.target.value)}
+              style={filterStyle}
+            >
+              <option value="">All Years</option>
+              {Array.from({ length: 51 }, (_, i) => 2020 + i).map(year => (
+                <option key={year} value={year.toString()}>{year}</option>
+              ))}
+            </select>
           </div>
 
           {/* Tab-specific filters */}

@@ -650,15 +650,15 @@ const Settings: React.FC = () => {
       {/* Reset Confirmation Dialog */}
       {showResetDialog && (
         <div className="bc-modal-overlay" role="dialog" aria-modal="true">
-          <div className="bc-modal">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: 16, borderBottom: '1px solid var(--app-border)' }}>
-              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--app-text)' }}>Security Verification</div>
-              <button className="bc-btn bc-btn-outline" onClick={cancelReset} type="button">
+          <div className="bc-modal" style={{ maxWidth: '640px', padding: '32px', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: '24px' }}>
+              <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--app-text)' }}>Security Verification</div>
+              <button className="bc-btn bc-btn-outline" onClick={cancelReset} type="button" style={{ width: 'auto' }}>
                 Close
               </button>
             </div>
 
-            <div style={{ padding: 16 }}>
+            <div>
               {resetStep === 1 && (
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 10, color: 'var(--app-text)' }}>Step 1: Safety Verification</div>

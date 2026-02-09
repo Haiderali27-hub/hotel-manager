@@ -30,6 +30,8 @@ const SalesHistoryPage: React.FC<SalesHistoryPageProps> = ({ onBack, onDuplicate
   const [sales, setSales] = useState<SaleSummary[]>([]);
   const [search, setSearch] = useState('');
   const [unpaidOnly, setUnpaidOnly] = useState(false);
+  const [filterMonth, setFilterMonth] = useState('');
+  const [filterYear, setFilterYear] = useState('');
 
   const [selectedSaleId, setSelectedSaleId] = useState<number | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
@@ -71,9 +73,15 @@ const SalesHistoryPage: React.FC<SalesHistoryPageProps> = ({ onBack, onDuplicate
         const hay = `${s.id} ${s.guest_name ?? ''} ${s.items ?? ''}`.toLowerCase();
         return hay.includes(q);
       })
+      .filter((s) => {
+        const date = new Date(s.created_at);
+        if (filterMonth && (date.getMonth() + 1) !== parseInt(filterMonth)) return false;
+        if (filterYear && date.getFullYear() !== parseInt(filterYear)) return false;
+        return true;
+      })
       .slice()
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  }, [sales, search, unpaidOnly]);
+  }, [sales, search, unpaidOnly, filterMonth, filterYear]);
 
   useEffect(() => {
     const rows = filtered.slice(0, 200);
@@ -268,6 +276,70 @@ const SalesHistoryPage: React.FC<SalesHistoryPageProps> = ({ onBack, onDuplicate
           {unpaidOnly ? 'Unpaid Only' : 'All Sales'}
         </button>
 
+        <select
+          className="bc-input"
+          value={filterMonth}
+          onChange={(e) => setFilterMonth(e.target.value)}
+          style={{ width: 'auto', minWidth: '120px' }}
+        >
+          <option value="">All Months</option>
+          <option value="1">January</option>
+          <option value="2">February</option>
+          <option value="3">March</option>
+          <option value="4">April</option>
+          <option value="5">May</option>
+          <option value="6">June</option>
+          <option value="7">July</option>
+          <option value="8">August</option>
+          <option value="9">September</option>
+          <option value="10">October</option>
+          <option value="11">November</option>
+          <option value="12">December</option>
+        </select>
+
+        <select
+          className="bc-input"
+          value={filterYear}
+          onChange={(e) => setFilterYear(e.target.value)}
+          style={{ width: 'auto', minWidth: '100px' }}
+        >
+          <option value="">All Years</option>
+          {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(y => (
+            <option key={y} value={y}>{y}</option>
+          ))}
+        </select>
+
+        <button
+          type="button"
+          className="bc-btn bc-btn-outline"
+          onClick={() => {
+            const csvData = filtered.map(s => ({
+              'Sale ID': s.id,
+              'Date': new Date(s.created_at).toLocaleString(),
+              [label.client]: s.guest_name || 'Walk-in',
+              'Items': s.items || '',
+              'Total': s.total,
+              'Paid': s.paid ? 'Yes' : 'No'
+            }));
+            const headers = Object.keys(csvData[0] || {});
+            const csv = [
+              headers.join(','),
+              ...csvData.map(row => headers.map(h => JSON.stringify(row[h as keyof typeof row])).join(','))
+            ].join('\n');
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `sales-history-${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showSuccess('Export', 'Sales history downloaded as CSV');
+          }}
+          style={{ width: 'auto' }}
+        >
+          📥 Export Excel
+        </button>
+
         <button
           type="button"
           className="bc-btn bc-btn-outline"
@@ -381,11 +453,11 @@ const SalesHistoryPage: React.FC<SalesHistoryPageProps> = ({ onBack, onDuplicate
 
       {selectedSaleId !== null && (
         <div className="bc-modal-overlay" onClick={closeDetails}>
-          <div className="bc-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '860px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center' }}>
+          <div className="bc-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '860px', padding: '32px', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', marginBottom: '24px' }}>
               <div>
-                <div style={{ fontSize: '18px', fontWeight: 900, color: colors.text }}>Sale #{selectedSaleId}</div>
-                <div style={{ fontSize: '13px', color: colors.textSecondary }}>Items, totals, and payment status</div>
+                <div style={{ fontSize: '24px', fontWeight: 700, color: colors.text }}>Sale #{selectedSaleId}</div>
+                <div style={{ fontSize: '14px', color: colors.textSecondary, marginTop: '4px' }}>Items, totals, and payment status</div>
               </div>
               <button type="button" className="bc-btn bc-btn-outline" onClick={closeDetails} style={{ width: 'auto' }}>
                 Close
@@ -486,11 +558,11 @@ const SalesHistoryPage: React.FC<SalesHistoryPageProps> = ({ onBack, onDuplicate
 
       {paymentsModalSaleId !== null && (
         <div className="bc-modal-overlay" onClick={closePaymentsModal}>
-          <div className="bc-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+          <div className="bc-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px', padding: '32px', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
               <div>
-                <div style={{ fontSize: '18px', fontWeight: 900, color: colors.text }}>Adjust Payment</div>
-                <div style={{ fontSize: '13px', color: colors.textSecondary }}>Record a partial payment</div>
+                <div style={{ fontSize: '24px', fontWeight: 700, color: colors.text }}>Adjust Payment</div>
+                <div style={{ fontSize: '14px', color: colors.textSecondary, marginTop: '4px' }}>Record a partial payment</div>
               </div>
               <button type="button" className="bc-btn bc-btn-outline" onClick={closePaymentsModal} style={{ width: 'auto' }}>
                 Close

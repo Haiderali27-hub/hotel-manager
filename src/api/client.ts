@@ -793,7 +793,7 @@ export const addStockAdjustment = (args: {
     reason: args.reason,
     notes: args.notes,
     items: args.items.map((it) => ({
-      menuItemId: it.menu_item_id,
+      menu_item_id: it.menu_item_id,
       mode: it.mode,
       quantity: it.quantity,
       note: it.note,

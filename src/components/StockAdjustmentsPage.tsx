@@ -1,16 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type {
-  MenuItem,
-  StockAdjustmentDetails,
-  StockAdjustmentItemInput,
-  StockAdjustmentSummary,
+    MenuItem,
+    StockAdjustmentDetails,
+    StockAdjustmentItemInput,
+    StockAdjustmentSummary,
 } from '../api/client';
 import {
-  addStockAdjustment,
-  getBarcodeEnabled,
-  getMenuItems,
-  getStockAdjustmentDetails,
-  getStockAdjustments,
+    addStockAdjustment,
+    getBarcodeEnabled,
+    getMenuItems,
+    getStockAdjustmentDetails,
+    getStockAdjustments,
 } from '../api/client';
 import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
@@ -401,9 +401,12 @@ const StockAdjustmentsPage: React.FC<StockAdjustmentsPageProps> = ({ onBack }) =
 
       {detailsOpen && (
         <div className="bc-modal-overlay">
-          <div className="bc-modal" style={{ maxWidth: '760px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
-              <div style={{ fontSize: '18px', fontWeight: 900, color: colors.text }}>Adjustment details</div>
+          <div className="bc-modal" style={{ maxWidth: '760px', padding: '32px', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+              <div>
+                <div style={{ fontSize: '24px', fontWeight: 700, color: colors.text }}>Adjustment Details</div>
+                <div style={{ fontSize: '14px', color: colors.textSecondary, marginTop: '4px' }}>Stock adjustment information</div>
+              </div>
               <button type="button" className="bc-btn bc-btn-outline" onClick={closeDetails} style={{ width: 'auto' }}>
                 Close
               </button>

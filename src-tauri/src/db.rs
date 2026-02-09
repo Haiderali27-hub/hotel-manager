@@ -17,18 +17,23 @@ pub fn get_db_connection() -> SqliteResult<Connection> {
 }
 
 pub fn get_db_path() -> PathBuf {
-    // For now, use the current project structure during development
+    // Prefer store-aware DB path (multi-store profiles). Fall back to legacy dev path.
+    if let Ok(path) = crate::store_profiles::get_active_store_db_path() {
+        return path;
+    }
+
+    // Legacy fallback (development project-relative DB)
     let mut path = std::env::current_dir().unwrap();
     if path.ends_with("src-tauri") {
         path = path.parent().unwrap().to_path_buf();
     }
     path.push("db");
-    
+
     // Ensure db directory exists
     if !path.exists() {
         std::fs::create_dir_all(&path).unwrap();
     }
-    
+
     path.push("hotel.db");
     path
 }
@@ -142,12 +147,29 @@ fn create_initial_schema(conn: &Connection) -> SqliteResult<()> {
         [],
     )?;
     
+    // Product categories (retail inventory)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS product_categories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            color TEXT,
+            emoji TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )",
+        [],
+    )?;
+
     // Menu items table with created_at/updated_at and inventory tracking
     conn.execute(
         "CREATE TABLE IF NOT EXISTS menu_items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT UNIQUE NOT NULL,
+            sku TEXT,
+            barcode TEXT,
             price REAL NOT NULL,
+            category TEXT NOT NULL DEFAULT 'General',
+            description TEXT,
+            is_available INTEGER NOT NULL DEFAULT 1,
             is_active INTEGER NOT NULL DEFAULT 1,
             stock_quantity INTEGER DEFAULT 0,
             track_stock INTEGER DEFAULT 0,
@@ -173,6 +195,20 @@ fn create_initial_schema(conn: &Connection) -> SqliteResult<()> {
         )",
         [],
     )?;
+
+    // Sale payments table (supports partial payments and pay-later)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS sale_payments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sale_id INTEGER NOT NULL,
+            amount REAL NOT NULL,
+            method TEXT NOT NULL,
+            note TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE
+        )",
+        [],
+    )?;
     
     // Sale items table (renamed from order_items)
     conn.execute(
@@ -189,6 +225,43 @@ fn create_initial_schema(conn: &Connection) -> SqliteResult<()> {
         )",
         [],
     )?;
+
+    // ===== SALES RETURNS / REFUNDS =====
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS sale_returns (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sale_id INTEGER NOT NULL,
+            return_date TEXT NOT NULL,
+            refund_method TEXT,
+            refund_amount REAL NOT NULL DEFAULT 0,
+            note TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS sale_return_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            return_id INTEGER NOT NULL,
+            sale_item_id INTEGER NOT NULL,
+            menu_item_id INTEGER,
+            item_name TEXT NOT NULL,
+            unit_price REAL NOT NULL,
+            quantity INTEGER NOT NULL,
+            line_total REAL NOT NULL,
+            note TEXT,
+            FOREIGN KEY (return_id) REFERENCES sale_returns(id) ON DELETE CASCADE,
+            FOREIGN KEY (sale_item_id) REFERENCES sale_items(id) ON DELETE RESTRICT,
+            FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE SET NULL
+        )",
+        [],
+    )?;
+
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_sale_returns_sale_id ON sale_returns(sale_id)", []);
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_sale_return_items_return_id ON sale_return_items(return_id)", []);
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_sale_return_items_sale_item_id ON sale_return_items(sale_item_id)", []);
     
     // Expenses table with created_at
     conn.execute(
@@ -202,6 +275,109 @@ fn create_initial_schema(conn: &Connection) -> SqliteResult<()> {
         )",
         [],
     )?;
+
+    // ===== SUPPLIERS & PURCHASES (Stock-In) =====
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS suppliers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            phone TEXT,
+            email TEXT,
+            address TEXT,
+            notes TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS purchases (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            supplier_id INTEGER,
+            purchase_date TEXT NOT NULL,
+            reference TEXT,
+            notes TEXT,
+            total_amount REAL NOT NULL DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS purchase_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            purchase_id INTEGER NOT NULL,
+            menu_item_id INTEGER,
+            item_name TEXT NOT NULL,
+            quantity INTEGER NOT NULL,
+            unit_cost REAL NOT NULL,
+            line_total REAL NOT NULL,
+            FOREIGN KEY (purchase_id) REFERENCES purchases(id) ON DELETE CASCADE,
+            FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE SET NULL
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS supplier_payments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            supplier_id INTEGER NOT NULL,
+            purchase_id INTEGER,
+            amount REAL NOT NULL,
+            method TEXT NOT NULL,
+            note TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE,
+            FOREIGN KEY (purchase_id) REFERENCES purchases(id) ON DELETE SET NULL
+        )",
+        [],
+    )?;
+
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_purchases_supplier_id ON purchases(supplier_id)", []);
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_purchase_items_purchase_id ON purchase_items(purchase_id)", []);
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_supplier_payments_supplier_id ON supplier_payments(supplier_id)", []);
+
+    // ===== STOCK ADJUSTMENTS (Retail inventory audit) =====
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS stock_adjustments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            adjustment_date TEXT NOT NULL,
+            reason TEXT,
+            notes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS stock_adjustment_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            adjustment_id INTEGER NOT NULL,
+            menu_item_id INTEGER NOT NULL,
+            item_name TEXT NOT NULL,
+            previous_stock INTEGER NOT NULL,
+            quantity_change INTEGER NOT NULL,
+            new_stock INTEGER NOT NULL,
+            note TEXT,
+            FOREIGN KEY (adjustment_id) REFERENCES stock_adjustments(id) ON DELETE CASCADE,
+            FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE RESTRICT
+        )",
+        [],
+    )?;
+
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_menu_items_sku ON menu_items(sku)", []);
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_menu_items_barcode ON menu_items(barcode)", []);
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_stock_adjustments_date ON stock_adjustments(adjustment_date)", []);
+    let _ = conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_stock_adjustment_items_adjustment_id ON stock_adjustment_items(adjustment_id)",
+        [],
+    );
+    let _ = conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_stock_adjustment_items_menu_item_id ON stock_adjustment_items(menu_item_id)",
+        [],
+    );
 
     // Shifts table for Z-reports (end-of-day closing)
     conn.execute(
@@ -219,6 +395,21 @@ fn create_initial_schema(conn: &Connection) -> SqliteResult<()> {
             total_expenses REAL DEFAULT 0.0,
             status TEXT DEFAULT 'open',
             notes TEXT
+        )",
+        [],
+    )?;
+
+    // Point transactions table for loyalty system (Phase 5)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS point_transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            customer_id INTEGER NOT NULL,
+            order_id INTEGER,
+            points_change INTEGER NOT NULL,
+            reason TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+            FOREIGN KEY (order_id) REFERENCES sales(id) ON DELETE SET NULL
         )",
         [],
     )?;
@@ -334,6 +525,10 @@ fn create_indexes(conn: &Connection) -> SqliteResult<()> {
     // Payment status index for financial reports
     let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_sales_paid ON sales(paid)", []);
     
+    // Phase 5: Loyalty points indexes
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_point_transactions_customer ON point_transactions(customer_id)", []);
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_point_transactions_order ON point_transactions(order_id)", []);
+    
     println!("Database indexes created successfully");
     Ok(())
 }
@@ -386,6 +581,20 @@ fn migrate_database(conn: &Connection) -> SqliteResult<()> {
     // 2025-12: Rename core tables to generic business names (one-time migration)
     ensure_business_table_renames(conn)?;
 
+    // Payments ledger for partial payments / pay-later (safe no-op if already present)
+    let _ = conn.execute(
+        "CREATE TABLE IF NOT EXISTS sale_payments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sale_id INTEGER NOT NULL,
+            amount REAL NOT NULL,
+            method TEXT NOT NULL,
+            note TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE
+        )",
+        [],
+    );
+
     // Add room_type column if it doesn't exist
     let _ = conn.execute(
         "ALTER TABLE resources ADD COLUMN room_type TEXT NOT NULL DEFAULT 'Standard'",
@@ -421,10 +630,154 @@ fn migrate_database(conn: &Connection) -> SqliteResult<()> {
         "ALTER TABLE menu_items ADD COLUMN category TEXT NOT NULL DEFAULT 'Main Course'",
         [],
     );
+
+    // Retail: product categories table (safe no-op if already present)
+    let _ = conn.execute(
+        "CREATE TABLE IF NOT EXISTS product_categories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            color TEXT,
+            emoji TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )",
+        [],
+    );
+
+    // Retail: add style columns if missing (safe no-op)
+    let _ = conn.execute(
+        "ALTER TABLE product_categories ADD COLUMN color TEXT",
+        [],
+    );
+    let _ = conn.execute(
+        "ALTER TABLE product_categories ADD COLUMN emoji TEXT",
+        [],
+    );
+
+    // Menu items: description column (safe no-op if already present)
+    let _ = conn.execute(
+        "ALTER TABLE menu_items ADD COLUMN description TEXT",
+        [],
+    );
+
+    // Retail: SKU / Barcode fields (safe no-op)
+    let _ = conn.execute("ALTER TABLE menu_items ADD COLUMN sku TEXT", []);
+    let _ = conn.execute("ALTER TABLE menu_items ADD COLUMN barcode TEXT", []);
     
     // Add is_available column to menu_items if it doesn't exist
     let _ = conn.execute(
         "ALTER TABLE menu_items ADD COLUMN is_available INTEGER NOT NULL DEFAULT 1",
+        [],
+    );
+
+    // Backfill categories list from existing menu items (safe no-op)
+    let _ = conn.execute(
+        "INSERT OR IGNORE INTO product_categories(name)
+         SELECT DISTINCT TRIM(category)
+         FROM menu_items
+         WHERE category IS NOT NULL AND TRIM(category) <> ''",
+        [],
+    );
+
+    // ===== SUPPLIERS & PURCHASES (Stock-In) =====
+    let _ = conn.execute(
+        "CREATE TABLE IF NOT EXISTS suppliers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            phone TEXT,
+            email TEXT,
+            address TEXT,
+            notes TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )",
+        [],
+    );
+
+    let _ = conn.execute(
+        "CREATE TABLE IF NOT EXISTS purchases (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            supplier_id INTEGER,
+            purchase_date TEXT NOT NULL,
+            reference TEXT,
+            notes TEXT,
+            total_amount REAL NOT NULL DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL
+        )",
+        [],
+    );
+
+    let _ = conn.execute(
+        "CREATE TABLE IF NOT EXISTS purchase_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            purchase_id INTEGER NOT NULL,
+            menu_item_id INTEGER,
+            item_name TEXT NOT NULL,
+            quantity INTEGER NOT NULL,
+            unit_cost REAL NOT NULL,
+            line_total REAL NOT NULL,
+            FOREIGN KEY (purchase_id) REFERENCES purchases(id) ON DELETE CASCADE,
+            FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE SET NULL
+        )",
+        [],
+    );
+
+    let _ = conn.execute(
+        "CREATE TABLE IF NOT EXISTS supplier_payments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            supplier_id INTEGER NOT NULL,
+            purchase_id INTEGER,
+            amount REAL NOT NULL,
+            method TEXT NOT NULL,
+            note TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE,
+            FOREIGN KEY (purchase_id) REFERENCES purchases(id) ON DELETE SET NULL
+        )",
+        [],
+    );
+
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_purchases_supplier_id ON purchases(supplier_id)", []);
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_purchase_items_purchase_id ON purchase_items(purchase_id)", []);
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_supplier_payments_supplier_id ON supplier_payments(supplier_id)", []);
+
+    // ===== STOCK ADJUSTMENTS (Retail inventory audit) =====
+    let _ = conn.execute(
+        "CREATE TABLE IF NOT EXISTS stock_adjustments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            adjustment_date TEXT NOT NULL,
+            reason TEXT,
+            notes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )",
+        [],
+    );
+
+    let _ = conn.execute(
+        "CREATE TABLE IF NOT EXISTS stock_adjustment_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            adjustment_id INTEGER NOT NULL,
+            menu_item_id INTEGER NOT NULL,
+            item_name TEXT NOT NULL,
+            previous_stock INTEGER NOT NULL,
+            quantity_change INTEGER NOT NULL,
+            new_stock INTEGER NOT NULL,
+            note TEXT,
+            FOREIGN KEY (adjustment_id) REFERENCES stock_adjustments(id) ON DELETE CASCADE,
+            FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE RESTRICT
+        )",
+        [],
+    );
+
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_menu_items_sku ON menu_items(sku)", []);
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_menu_items_barcode ON menu_items(barcode)", []);
+    let _ = conn.execute("CREATE INDEX IF NOT EXISTS idx_stock_adjustments_date ON stock_adjustments(adjustment_date)", []);
+    let _ = conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_stock_adjustment_items_adjustment_id ON stock_adjustment_items(adjustment_id)",
+        [],
+    );
+    let _ = conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_stock_adjustment_items_menu_item_id ON stock_adjustment_items(menu_item_id)",
         [],
     );
 

@@ -18,6 +18,7 @@ import { useCurrency } from '../context/CurrencyContext';
 import { useLabels } from '../context/LabelContext';
 import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
+import { handleNumberInputFocus } from '../utils/inputHelpers';
 
 interface ManageCatalogResourcesProps {
     onBack: () => void;
@@ -698,18 +699,22 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
                 }}>
                     <div style={{
                         backgroundColor: colors.surface,
-                        padding: '2rem',
-                        borderRadius: '12px',
+                        padding: '32px',
+                        borderRadius: '16px',
                         border: `1px solid ${colors.border}`,
-                        maxWidth: '400px',
+                        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
+                        maxWidth: '480px',
                         width: '90%'
                     }}>
-                        <h3 style={{ margin: '0 0 1rem 0', color: colors.text }}>
+                        <h3 style={{ margin: '0 0 8px 0', color: colors.text, fontSize: '24px', fontWeight: '700' }}>
                             {editingMenuItem ? 'Edit Menu Item' : 'Add Menu Item'}
                         </h3>
+                        <p style={{ margin: '0 0 24px 0', color: colors.textSecondary, fontSize: '14px' }}>
+                            {editingMenuItem ? 'Update item details' : 'Add a new item to your menu'}
+                        </p>
 
-                        <div style={{ marginBottom: '1rem' }}>
-                            <label style={{ display: 'block', marginBottom: '0.5rem', color: colors.text }}>
+                        <div style={{ marginBottom: '20px' }}>
+                            <label style={{ display: 'block', marginBottom: '8px', color: colors.text, fontSize: '14px', fontWeight: '600' }}>
                                 Item Name
                             </label>
                             <input
@@ -723,44 +728,47 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
                                     border: `1px solid ${colors.border}`,
                                     borderRadius: '8px',
                                     color: colors.text,
-                                    fontSize: '1rem'
+                                    fontSize: '15px'
                                 }}
                                 placeholder="Enter item name"
                             />
                         </div>
 
-                        <div style={{ marginBottom: '1.5rem' }}>
-                            <label style={{ display: 'block', marginBottom: '0.5rem', color: colors.text }}>
+                        <div style={{ marginBottom: '24px' }}>
+                            <label style={{ display: 'block', marginBottom: '8px', color: colors.text, fontSize: '14px', fontWeight: '600' }}>
                                 Price
                             </label>
                             <input
                                 type="number"
                                 value={menuPrice}
                                 onChange={(e) => setMenuPrice(e.target.value)}
+                                onFocus={handleNumberInputFocus}
                                 style={{
                                     width: '100%',
-                                    padding: '0.75rem',
+                                    padding: '12px 16px',
                                     backgroundColor: colors.surface,
                                     border: `1px solid ${colors.border}`,
-                                    borderRadius: '8px',
+                                    borderRadius: '10px',
                                     color: colors.text,
-                                    fontSize: '1rem'
+                                    fontSize: '15px'
                                 }}
                                 placeholder="Enter price"
                             />
                         </div>
 
-                        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
                             <button
                                 onClick={resetMenuForm}
                                 style={{
-                                    backgroundColor: colors.textMuted,
-                                    color: 'white',
-                                    border: 'none',
-                                    padding: '0.75rem 1.5rem',
-                                    borderRadius: '8px',
+                                    flex: '1',
+                                    backgroundColor: 'transparent',
+                                    color: colors.text,
+                                    border: `1px solid ${colors.border}`,
+                                    padding: '12px 24px',
+                                    borderRadius: '10px',
                                     cursor: 'pointer',
-                                    fontSize: '1rem'
+                                    fontSize: '15px',
+                                    fontWeight: '600'
                                 }}
                             >
                                 Cancel
@@ -768,13 +776,15 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
                             <button
                                 onClick={editingMenuItem ? handleUpdateMenuItem : handleAddMenuItem}
                                 style={{
-                                    backgroundColor: colors.success,
+                                    flex: '1',
+                                    backgroundColor: colors.accent,
                                     color: 'white',
                                     border: 'none',
-                                    padding: '0.75rem 1.5rem',
-                                    borderRadius: '8px',
+                                    padding: '12px 24px',
+                                    borderRadius: '10px',
                                     cursor: 'pointer',
-                                    fontSize: '1rem'
+                                    fontSize: '15px',
+                                    fontWeight: '600'
                                 }}
                             >
                                 {editingMenuItem ? 'Update' : 'Add'}
@@ -800,18 +810,22 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
                 }}>
                     <div style={{
                         backgroundColor: colors.surface,
-                        padding: '2rem',
-                        borderRadius: '12px',
+                        padding: '32px',
+                        borderRadius: '16px',
                         border: `1px solid ${colors.border}`,
-                        maxWidth: '400px',
+                        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
+                        maxWidth: '480px',
                         width: '90%'
                     }}>
-                        <h3 style={{ margin: '0 0 1rem 0', color: colors.text }}>
+                        <h3 style={{ margin: '0 0 8px 0', color: colors.text, fontSize: '24px', fontWeight: '700' }}>
                             Add {label.unit}
                         </h3>
+                        <p style={{ margin: '0 0 24px 0', color: colors.textSecondary, fontSize: '14px' }}>
+                            Add a new {label.unit.toLowerCase()} to your system
+                        </p>
 
-                        <div style={{ marginBottom: '1.5rem' }}>
-                            <label style={{ display: 'block', marginBottom: '0.5rem', color: colors.text }}>
+                        <div style={{ marginBottom: '20px' }}>
+                            <label style={{ display: 'block', marginBottom: '8px', color: colors.text, fontSize: '14px', fontWeight: '600' }}>
                                 {label.unit} Number
                             </label>
                             <input
@@ -820,19 +834,19 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
                                 onChange={(e) => setRoomNumber(e.target.value)}
                                 style={{
                                     width: '100%',
-                                    padding: '0.75rem',
+                                    padding: '12px 16px',
                                     backgroundColor: colors.surface,
                                     border: `1px solid ${colors.border}`,
-                                    borderRadius: '8px',
+                                    borderRadius: '10px',
                                     color: colors.text,
-                                    fontSize: '1rem'
+                                    fontSize: '15px'
                                 }}
                                 placeholder={`Enter ${label.unit.toLowerCase()} number`}
                             />
                         </div>
 
-                        <div style={{ marginBottom: '1.5rem' }}>
-                            <label style={{ display: 'block', marginBottom: '0.5rem', color: colors.text }}>
+                        <div style={{ marginBottom: '20px' }}>
+                            <label style={{ display: 'block', marginBottom: '8px', color: colors.text, fontSize: '14px', fontWeight: '600' }}>
                                 {label.unit} Type
                             </label>
                             <input
@@ -841,33 +855,34 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
                                 onChange={(e) => setRoomType(e.target.value)}
                                 style={{
                                     width: '100%',
-                                    padding: '0.75rem',
+                                    padding: '12px 16px',
                                     backgroundColor: colors.surface,
                                     border: `1px solid ${colors.border}`,
-                                    borderRadius: '8px',
+                                    borderRadius: '10px',
                                     color: colors.text,
-                                    fontSize: '1rem'
+                                    fontSize: '15px'
                                 }}
                                 placeholder="e.g., Standard"
                             />
                         </div>
 
-                        <div style={{ marginBottom: '1.5rem' }}>
-                            <label style={{ display: 'block', marginBottom: '0.5rem', color: colors.text }}>
+                        <div style={{ marginBottom: '24px' }}>
+                            <label style={{ display: 'block', marginBottom: '8px', color: colors.text, fontSize: '14px', fontWeight: '600' }}>
                                 Daily Rate
                             </label>
                             <input
                                 type="number"
                                 value={roomPrice}
                                 onChange={(e) => setRoomPrice(e.target.value)}
+                                onFocus={handleNumberInputFocus}
                                 style={{
                                     width: '100%',
-                                    padding: '0.75rem',
+                                    padding: '12px 16px',
                                     backgroundColor: colors.surface,
                                     border: `1px solid ${colors.border}`,
-                                    borderRadius: '8px',
+                                    borderRadius: '10px',
                                     color: colors.text,
-                                    fontSize: '1rem'
+                                    fontSize: '15px'
                                 }}
                                 placeholder="Enter daily rate"
                                 min="0"
@@ -875,17 +890,19 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
                             />
                         </div>
 
-                        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
                             <button
                                 onClick={resetRoomForm}
                                 style={{
-                                    backgroundColor: colors.textMuted,
-                                    color: 'white',
-                                    border: 'none',
-                                    padding: '0.75rem 1.5rem',
-                                    borderRadius: '8px',
+                                    flex: '1',
+                                    backgroundColor: 'transparent',
+                                    color: colors.text,
+                                    border: `1px solid ${colors.border}`,
+                                    padding: '12px 24px',
+                                    borderRadius: '10px',
                                     cursor: 'pointer',
-                                    fontSize: '1rem'
+                                    fontSize: '15px',
+                                    fontWeight: '600'
                                 }}
                             >
                                 Cancel
@@ -893,13 +910,15 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
                             <button
                                 onClick={handleAddRoom}
                                 style={{
-                                    backgroundColor: colors.success,
+                                    flex: '1',
+                                    backgroundColor: colors.accent,
                                     color: 'white',
                                     border: 'none',
-                                    padding: '0.75rem 1.5rem',
-                                    borderRadius: '8px',
+                                    padding: '12px 24px',
+                                    borderRadius: '10px',
                                     cursor: 'pointer',
-                                    fontSize: '1rem'
+                                    fontSize: '15px',
+                                    fontWeight: '600'
                                 }}
                             >
                                 Add
@@ -968,6 +987,7 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
                                         max="100"
                                         value={taxRate}
                                         onChange={(e) => setTaxRate(e.target.value)}
+                                        onFocus={handleNumberInputFocus}
                                         style={{
                                             width: '200px',
                                             padding: '0.75rem',

@@ -1,5 +1,4 @@
 /* eslint-disable react-refresh/only-export-components */
-import { invoke } from '@tauri-apps/api/core';
 import type { ReactNode } from 'react';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
@@ -63,17 +62,17 @@ const lightTheme: ThemeColors = {
   borderLight: '#e8eaec',
   
   // Interactive colors
-  accent: '#845c58',
-  accentHover: '#845c58',
-  success: '#845c58',
-  error: '#845c58',
-  warning: '#8892a9',
+  accent: '#2563EB',
+  accentHover: '#1D4ED8',
+  success: '#16A34A',
+  error: '#DC2626',
+  warning: '#D97706',
   
   // Status colors
-  successBg: 'rgba(132, 92, 88, 0.1)',
-  errorBg: 'rgba(132, 92, 88, 0.1)',
-  warningBg: 'rgba(183, 186, 195, 0.15)',
-  infoBg: 'rgba(136, 146, 169, 0.1)',
+  successBg: 'rgba(22, 163, 74, 0.12)',
+  errorBg: 'rgba(220, 38, 38, 0.12)',
+  warningBg: 'rgba(217, 119, 6, 0.12)',
+  infoBg: 'rgba(37, 99, 235, 0.12)',
   
   // Special colors
   shadow: 'rgba(0, 0, 0, 0.18)',
@@ -97,17 +96,17 @@ const darkTheme: ThemeColors = {
   borderLight: '#1e1e1f',
   
   // Interactive colors
-  accent: '#665f5f',
-  accentHover: '#665f5f',
-  success: '#665f5f',
-  error: '#665f5f',
-  warning: '#958f9e',
+  accent: '#60A5FA',
+  accentHover: '#93C5FD',
+  success: '#22C55E',
+  error: '#EF4444',
+  warning: '#F59E0B',
   
   // Status colors
-  successBg: 'rgba(102, 95, 95, 0.15)',
-  errorBg: 'rgba(149, 143, 158, 0.15)',
-  warningBg: 'rgba(102, 95, 95, 0.15)',
-  infoBg: 'rgba(205, 208, 220, 0.1)',
+  successBg: 'rgba(34, 197, 94, 0.16)',
+  errorBg: 'rgba(239, 68, 68, 0.16)',
+  warningBg: 'rgba(245, 158, 11, 0.16)',
+  infoBg: 'rgba(96, 165, 250, 0.12)',
   
   // Special colors
   shadow: 'rgba(0, 0, 0, 0.45)',
@@ -140,6 +139,10 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     }
   }, []);
 
+  // NOTE: Primary color customization has been disabled per architectural decision.
+  // The Inertia branding and theme colors remain fixed - business logos are shown separately.
+  // This useEffect is kept commented out for backward compatibility reference only.
+  /*
   useEffect(() => {
     const applyBrandPrimaryColor = async () => {
       try {
@@ -158,6 +161,7 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
 
     applyBrandPrimaryColor();
   }, []);
+  */
 
   // Save theme to localStorage when it changes
   useEffect(() => {

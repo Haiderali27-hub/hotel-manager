@@ -1,8 +1,89 @@
 use crate::models::*;
 use crate::db::*;
-use rusqlite::params;
+use rusqlite::{params, OptionalExtension};
 use tauri::command;
 use chrono::{NaiveDate, Utc, Datelike};
+
+fn validate_non_empty(value: &str, field: &str) -> Result<(), String> {
+    if value.trim().is_empty() {
+        return Err(format!("{} cannot be empty", field));
+    }
+    Ok(())
+}
+
+fn validate_positive_i32(value: i32, field: &str) -> Result<(), String> {
+    if value <= 0 {
+        return Err(format!("{} must be > 0", field));
+    }
+    Ok(())
+}
+
+fn validate_positive_f64(value: f64, field: &str) -> Result<(), String> {
+    if value <= 0.0 {
+        return Err(format!("{} must be > 0", field));
+    }
+    Ok(())
+}
+
+fn compute_supplier_balance_summary(conn: &rusqlite::Connection, supplier_id: i64) -> Result<SupplierBalanceSummary, String> {
+    let supplier_name: String = conn
+        .query_row(
+            "SELECT name FROM suppliers WHERE id = ?1",
+            params![supplier_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| {
+            if e.to_string().contains("no rows") {
+                "Supplier not found".to_string()
+            } else {
+                e.to_string()
+            }
+        })?;
+
+    let total_purchases: f64 = conn
+        .query_row(
+            "SELECT COALESCE(SUM(total_amount), 0) FROM purchases WHERE supplier_id = ?1",
+            params![supplier_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let amount_paid: f64 = conn
+        .query_row(
+            "SELECT COALESCE(SUM(amount), 0) FROM supplier_payments WHERE supplier_id = ?1",
+            params![supplier_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let balance_due = (total_purchases - amount_paid).max(0.0);
+
+    Ok(SupplierBalanceSummary {
+        supplier_id,
+        supplier_name,
+        total_purchases,
+        amount_paid,
+        balance_due,
+    })
+}
+
+fn recompute_purchase_total(conn: &rusqlite::Connection, purchase_id: i64) -> Result<f64, String> {
+    let total: f64 = conn
+        .query_row(
+            "SELECT COALESCE(SUM(line_total), 0) FROM purchase_items WHERE purchase_id = ?1",
+            params![purchase_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "UPDATE purchases SET total_amount = ?1 WHERE id = ?2",
+        params![total, purchase_id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(total)
+}
 
 // ===== ROOM COMMANDS =====
 
@@ -702,8 +783,11 @@ pub fn update_guest(guest_id: i64, name: Option<String>, phone: Option<String>, 
 #[command]
 pub fn add_menu_item(
     name: String,
+    sku: Option<String>,
+    barcode: Option<String>,
     price: f64,
     category: String,
+    description: Option<String>,
     is_available: Option<bool>,
     track_stock: Option<i32>,
     stock_quantity: Option<i32>,
@@ -721,10 +805,28 @@ pub fn add_menu_item(
         return Err("Menu item category cannot be empty".to_string());
     }
     
+    let description = description.unwrap_or_default();
     let available = is_available.unwrap_or(true);
     let track_stock = track_stock.unwrap_or(0);
     let stock_quantity = stock_quantity.unwrap_or(0);
     let low_stock_limit = low_stock_limit.unwrap_or(5);
+
+    let sku = sku.and_then(|s| {
+        let t = s.trim();
+        if t.is_empty() {
+            None
+        } else {
+            Some(t.to_string())
+        }
+    });
+    let barcode = barcode.and_then(|s| {
+        let t = s.trim();
+        if t.is_empty() {
+            None
+        } else {
+            Some(t.to_string())
+        }
+    });
 
     if track_stock != 0 && track_stock != 1 {
         return Err("track_stock must be 0 or 1".to_string());
@@ -737,11 +839,15 @@ pub fn add_menu_item(
     }
     
     let result = conn.execute(
-        "INSERT INTO menu_items (name, price, category, is_available, is_active, stock_quantity, track_stock, low_stock_limit) VALUES (?1, ?2, ?3, ?4, 1, ?5, ?6, ?7)",
+        "INSERT INTO menu_items (name, sku, barcode, price, category, description, is_available, is_active, stock_quantity, track_stock, low_stock_limit)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 1, ?8, ?9, ?10)",
         params![
             name.trim(),
+            sku,
+            barcode,
             price,
             category.trim(),
+            description.trim(),
             if available { 1 } else { 0 },
             stock_quantity,
             track_stock,
@@ -766,19 +872,25 @@ pub fn get_menu_items() -> Result<Vec<MenuItem>, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
     
     let mut stmt = conn.prepare(
-        "SELECT id, name, price, category, is_available, stock_quantity, track_stock, low_stock_limit FROM menu_items WHERE is_active = 1 AND is_available = 1 ORDER BY name"
+        "SELECT id, name, sku, barcode, price, category, COALESCE(description, '') as description, is_available, stock_quantity, track_stock, low_stock_limit
+         FROM menu_items
+         WHERE is_active = 1
+         ORDER BY name"
     ).map_err(|e| e.to_string())?;
     
     let item_iter = stmt.query_map([], |row| {
         Ok(MenuItem {
             id: row.get(0)?,
             name: row.get(1)?,
-            price: row.get(2)?,
-            category: row.get(3)?,
-            is_available: row.get::<_, i32>(4)? == 1,
-            stock_quantity: row.get(5)?,
-            track_stock: row.get(6)?,
-            low_stock_limit: row.get(7)?,
+            sku: row.get(2)?,
+            barcode: row.get(3)?,
+            price: row.get(4)?,
+            category: row.get(5)?,
+            description: row.get(6)?,
+            is_available: row.get::<_, i32>(7)? == 1,
+            stock_quantity: row.get(8)?,
+            track_stock: row.get(9)?,
+            low_stock_limit: row.get(10)?,
         })
     }).map_err(|e| e.to_string())?;
     
@@ -794,8 +906,11 @@ pub fn get_menu_items() -> Result<Vec<MenuItem>, String> {
 pub fn update_menu_item(
     item_id: i64,
     name: Option<String>,
+    sku: Option<String>,
+    barcode: Option<String>,
     price: Option<f64>,
     category: Option<String>,
+    description: Option<String>,
     is_available: Option<bool>,
     track_stock: Option<i32>,
     stock_quantity: Option<i32>,
@@ -804,8 +919,11 @@ pub fn update_menu_item(
     println!("🐛 DEBUG update_menu_item - Received parameters:");
     println!("  item_id: {:?}", item_id);
     println!("  name: {:?}", name);
+    println!("  sku: {:?}", sku);
+    println!("  barcode: {:?}", barcode);
     println!("  price: {:?}", price);
     println!("  category: {:?}", category);
+    println!("  description: {:?}", description);
     println!("  is_available: {:?}", is_available);
     println!("  track_stock: {:?}", track_stock);
     println!("  stock_quantity: {:?}", stock_quantity);
@@ -824,6 +942,26 @@ pub fn update_menu_item(
         update_parts.push("name = ?");
         params.push(Box::new(item_name.trim().to_string()));
     }
+
+    if let Some(raw) = sku {
+        let v = raw.trim();
+        update_parts.push("sku = ?");
+        if v.is_empty() {
+            params.push(Box::new(rusqlite::types::Null));
+        } else {
+            params.push(Box::new(v.to_string()));
+        }
+    }
+
+    if let Some(raw) = barcode {
+        let v = raw.trim();
+        update_parts.push("barcode = ?");
+        if v.is_empty() {
+            params.push(Box::new(rusqlite::types::Null));
+        } else {
+            params.push(Box::new(v.to_string()));
+        }
+    }
     
     if let Some(item_price) = price {
         if item_price < 0.0 {
@@ -836,6 +974,11 @@ pub fn update_menu_item(
     if let Some(ref cat) = category {
         update_parts.push("category = ?");
         params.push(Box::new(cat.to_string()));
+    }
+
+    if let Some(desc) = description {
+        update_parts.push("description = ?");
+        params.push(Box::new(desc));
     }
     
     if let Some(available) = is_available {
@@ -889,6 +1032,208 @@ pub fn update_menu_item(
     }
     
     Ok("Menu item updated successfully".to_string())
+}
+
+// ===== STOCK ADJUSTMENTS (Retail inventory audit) =====
+
+#[command]
+pub fn add_stock_adjustment(
+    adjustment_date: String,
+    reason: Option<String>,
+    notes: Option<String>,
+    items: Vec<StockAdjustmentItemInput>,
+) -> Result<i64, String> {
+    validate_date_format(&adjustment_date)?;
+    if items.is_empty() {
+        return Err("Stock adjustment must have at least one item".to_string());
+    }
+
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    conn.execute("BEGIN TRANSACTION", []).map_err(|e| e.to_string())?;
+
+    let result: Result<i64, String> = (|| {
+        conn.execute(
+            "INSERT INTO stock_adjustments (adjustment_date, reason, notes, created_at)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![adjustment_date, reason, notes, get_current_timestamp()],
+        )
+        .map_err(|e| e.to_string())?;
+
+        let adjustment_id = conn.last_insert_rowid();
+
+        for it in &items {
+            validate_positive_i32(it.quantity, "Quantity")?;
+            validate_non_empty(&it.mode, "Mode")?;
+            let mode = it.mode.trim().to_lowercase();
+
+            let (item_name, current_stock, track_stock): (String, i32, i32) = conn
+                .query_row(
+                    "SELECT name, COALESCE(stock_quantity, 0), COALESCE(track_stock, 0)
+                     FROM menu_items WHERE id = ?1",
+                    params![it.menu_item_id],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                )
+                .map_err(|e| {
+                    if e.to_string().contains("no rows") {
+                        "Product not found".to_string()
+                    } else {
+                        e.to_string()
+                    }
+                })?;
+
+            if track_stock != 1 {
+                return Err(format!("'{}' is not a tracked stock product", item_name));
+            }
+
+            let (qty_change, new_stock) = match mode.as_str() {
+                "set" => {
+                    let new_stock = it.quantity;
+                    (new_stock - current_stock, new_stock)
+                }
+                "add" => {
+                    let new_stock = current_stock + it.quantity;
+                    (it.quantity, new_stock)
+                }
+                "remove" => {
+                    let new_stock = current_stock - it.quantity;
+                    if new_stock < 0 {
+                        return Err(format!(
+                            "Cannot remove {} from '{}' (only {} in stock)",
+                            it.quantity, item_name, current_stock
+                        ));
+                    }
+                    (-it.quantity, new_stock)
+                }
+                _ => return Err("Invalid mode (use set/add/remove)".to_string()),
+            };
+
+            conn.execute(
+                "UPDATE menu_items SET stock_quantity = ?1 WHERE id = ?2 AND COALESCE(track_stock, 0) = 1",
+                params![new_stock, it.menu_item_id],
+            )
+            .map_err(|e| e.to_string())?;
+
+            conn.execute(
+                "INSERT INTO stock_adjustment_items
+                    (adjustment_id, menu_item_id, item_name, previous_stock, quantity_change, new_stock, note)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![
+                    adjustment_id,
+                    it.menu_item_id,
+                    item_name,
+                    current_stock,
+                    qty_change,
+                    new_stock,
+                    it.note
+                ],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+
+        Ok(adjustment_id)
+    })();
+
+    match result {
+        Ok(id) => {
+            conn.execute("COMMIT", []).map_err(|e| e.to_string())?;
+            Ok(id)
+        }
+        Err(e) => {
+            let _ = conn.execute("ROLLBACK", []);
+            Err(e)
+        }
+    }
+}
+
+#[command]
+pub fn get_stock_adjustments() -> Result<Vec<StockAdjustmentSummary>, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT a.id, a.adjustment_date, a.reason, a.notes,
+                    (SELECT COUNT(*) FROM stock_adjustment_items i WHERE i.adjustment_id = a.id) as item_count,
+                    a.created_at
+             FROM stock_adjustments a
+             ORDER BY a.adjustment_date DESC, a.id DESC
+             LIMIT 200",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let iter = stmt
+        .query_map([], |row| {
+            Ok(StockAdjustmentSummary {
+                id: row.get(0)?,
+                adjustment_date: row.get(1)?,
+                reason: row.get(2)?,
+                notes: row.get(3)?,
+                item_count: row.get(4)?,
+                created_at: row.get(5)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    iter.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+#[command]
+pub fn get_stock_adjustment_details(adjustment_id: i64) -> Result<StockAdjustmentDetails, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+
+    let adjustment: StockAdjustmentSummary = conn
+        .query_row(
+            "SELECT a.id, a.adjustment_date, a.reason, a.notes,
+                    (SELECT COUNT(*) FROM stock_adjustment_items i WHERE i.adjustment_id = a.id) as item_count,
+                    a.created_at
+             FROM stock_adjustments a
+             WHERE a.id = ?1",
+            params![adjustment_id],
+            |row| {
+                Ok(StockAdjustmentSummary {
+                    id: row.get(0)?,
+                    adjustment_date: row.get(1)?,
+                    reason: row.get(2)?,
+                    notes: row.get(3)?,
+                    item_count: row.get(4)?,
+                    created_at: row.get(5)?,
+                })
+            },
+        )
+        .map_err(|e| {
+            if e.to_string().contains("no rows") {
+                "Stock adjustment not found".to_string()
+            } else {
+                e.to_string()
+            }
+        })?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, adjustment_id, menu_item_id, item_name, previous_stock, quantity_change, new_stock, note
+             FROM stock_adjustment_items
+             WHERE adjustment_id = ?1
+             ORDER BY id",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let iter = stmt
+        .query_map(params![adjustment_id], |row| {
+            Ok(StockAdjustmentItemRow {
+                id: row.get(0)?,
+                adjustment_id: row.get(1)?,
+                menu_item_id: row.get(2)?,
+                item_name: row.get(3)?,
+                previous_stock: row.get(4)?,
+                quantity_change: row.get(5)?,
+                new_stock: row.get(6)?,
+                note: row.get(7)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    let items = iter.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+
+    Ok(StockAdjustmentDetails { adjustment, items })
 }
 
 #[command]
@@ -948,6 +1293,175 @@ pub fn delete_menu_item(item_id: i64) -> Result<String, String> {
         println!("✅ DEBUG delete_menu_item - Hard delete success!");
         Ok("Menu item deleted successfully".to_string())
     }
+}
+
+// ===== PRODUCT CATEGORIES (RETAIL INVENTORY) =====
+
+#[command]
+pub fn get_product_categories() -> Result<Vec<ProductCategory>, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+
+    let mut stmt = conn
+        .prepare("SELECT id, name, color, emoji, created_at FROM product_categories ORDER BY LOWER(name)")
+        .map_err(|e| e.to_string())?;
+
+    let iter = stmt
+        .query_map([], |row| {
+            Ok(ProductCategory {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                color: row.get(2)?,
+                emoji: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut categories = Vec::new();
+    for c in iter {
+        categories.push(c.map_err(|e| e.to_string())?);
+    }
+    Ok(categories)
+}
+
+#[command]
+pub fn add_product_category(name: String, color: Option<String>, emoji: Option<String>) -> Result<i64, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err("Category name is required".to_string());
+    }
+    if trimmed.len() > 50 {
+        return Err("Category name is too long".to_string());
+    }
+
+    let color = color.and_then(|c| {
+        let t = c.trim().to_string();
+        if t.is_empty() { None } else { Some(t) }
+    });
+    let emoji = emoji.and_then(|e| {
+        let t = e.trim().to_string();
+        if t.is_empty() { None } else { Some(t) }
+    });
+
+    // Create category if missing
+    let _ = conn.execute(
+        "INSERT OR IGNORE INTO product_categories(name) VALUES (?1)",
+        params![trimmed],
+    );
+
+    // If created/exists, apply style if provided
+    if color.is_some() || emoji.is_some() {
+        let _ = conn.execute(
+            "UPDATE product_categories SET color = COALESCE(?1, color), emoji = COALESCE(?2, emoji) WHERE name = ?3",
+            params![color, emoji, trimmed],
+        );
+    }
+
+    let id: i64 = conn
+        .query_row(
+            "SELECT id FROM product_categories WHERE name = ?1",
+            params![trimmed],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    Ok(id)
+}
+
+#[command]
+pub fn rename_product_category(category_id: i64, name: String) -> Result<bool, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err("Category name is required".to_string());
+    }
+    if trimmed.len() > 50 {
+        return Err("Category name is too long".to_string());
+    }
+
+    let affected = conn
+        .execute(
+            "UPDATE product_categories SET name = ?1 WHERE id = ?2",
+            params![trimmed, category_id],
+        )
+        .map_err(|e| {
+            if e.to_string().contains("UNIQUE constraint failed") {
+                "Category already exists".to_string()
+            } else {
+                e.to_string()
+            }
+        })?;
+    Ok(affected > 0)
+}
+
+#[command]
+pub fn update_product_category(
+    category_id: i64,
+    name: Option<String>,
+    color: Option<String>,
+    emoji: Option<String>,
+) -> Result<bool, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+
+    let mut update_parts: Vec<&str> = Vec::new();
+    let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+    if let Some(n) = name {
+        let trimmed = n.trim().to_string();
+        if trimmed.is_empty() {
+            return Err("Category name is required".to_string());
+        }
+        if trimmed.len() > 50 {
+            return Err("Category name is too long".to_string());
+        }
+        update_parts.push("name = ?");
+        params_vec.push(Box::new(trimmed));
+    }
+
+    if let Some(c) = color {
+        let trimmed = c.trim().to_string();
+        let val: Option<String> = if trimmed.is_empty() { None } else { Some(trimmed) };
+        update_parts.push("color = ?");
+        params_vec.push(Box::new(val));
+    }
+
+    if let Some(e) = emoji {
+        let trimmed = e.trim().to_string();
+        let val: Option<String> = if trimmed.is_empty() { None } else { Some(trimmed) };
+        update_parts.push("emoji = ?");
+        params_vec.push(Box::new(val));
+    }
+
+    if update_parts.is_empty() {
+        return Err("No fields to update".to_string());
+    }
+
+    let query = format!("UPDATE product_categories SET {} WHERE id = ?", update_parts.join(", "));
+    params_vec.push(Box::new(category_id));
+    let params_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+
+    let affected = conn.execute(&query, params_refs.as_slice()).map_err(|e| {
+        if e.to_string().contains("UNIQUE constraint failed") {
+            "Category already exists".to_string()
+        } else {
+            e.to_string()
+        }
+    })?;
+
+    Ok(affected > 0)
+}
+
+#[command]
+pub fn delete_product_category(category_id: i64) -> Result<bool, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    let affected = conn
+        .execute(
+            "DELETE FROM product_categories WHERE id = ?1",
+            params![category_id],
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(affected > 0)
 }
 
 // ===== DASHBOARD COMMANDS =====
@@ -1359,6 +1873,630 @@ pub fn delete_expense(expense_id: i64) -> Result<String, String> {
     Ok("Expense deleted successfully".to_string())
 }
 
+// ===== SUPPLIERS & PURCHASES (Stock-In) COMMANDS =====
+
+#[command]
+pub fn add_supplier(
+    name: String,
+    phone: Option<String>,
+    email: Option<String>,
+    address: Option<String>,
+    notes: Option<String>,
+) -> Result<i64, String> {
+    validate_non_empty(&name, "Supplier name")?;
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "INSERT INTO suppliers (name, phone, email, address, notes, is_active) VALUES (?1, ?2, ?3, ?4, ?5, 1)",
+        params![name.trim(), phone, email, address, notes],
+    )
+    .map_err(|e| {
+        if e.to_string().contains("UNIQUE constraint failed") {
+            "Supplier name already exists".to_string()
+        } else {
+            e.to_string()
+        }
+    })?;
+
+    Ok(conn.last_insert_rowid())
+}
+
+#[command]
+pub fn get_suppliers(include_inactive: Option<bool>) -> Result<Vec<Supplier>, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    let include_inactive = include_inactive.unwrap_or(false);
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, name, phone, email, address, notes, is_active, created_at
+             FROM suppliers
+             WHERE (?1 = 1) OR (is_active = 1)
+             ORDER BY name ASC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let iter = stmt
+        .query_map(params![if include_inactive { 1 } else { 0 }], |row| {
+            Ok(Supplier {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                phone: row.get(2)?,
+                email: row.get(3)?,
+                address: row.get(4)?,
+                notes: row.get(5)?,
+                is_active: row.get::<_, i64>(6)? == 1,
+                created_at: row.get(7)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    iter.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+#[command]
+pub fn update_supplier(
+    supplier_id: i64,
+    name: Option<String>,
+    phone: Option<String>,
+    email: Option<String>,
+    address: Option<String>,
+    notes: Option<String>,
+    is_active: Option<bool>,
+) -> Result<String, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    let mut update_parts: Vec<String> = Vec::new();
+    let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+    if let Some(ref n) = name {
+        validate_non_empty(n, "Supplier name")?;
+        update_parts.push("name = ?".to_string());
+        params.push(Box::new(n.trim().to_string()));
+    }
+    if let Some(p) = phone {
+        update_parts.push("phone = ?".to_string());
+        params.push(Box::new(p));
+    }
+    if let Some(e) = email {
+        update_parts.push("email = ?".to_string());
+        params.push(Box::new(e));
+    }
+    if let Some(a) = address {
+        update_parts.push("address = ?".to_string());
+        params.push(Box::new(a));
+    }
+    if let Some(n) = notes {
+        update_parts.push("notes = ?".to_string());
+        params.push(Box::new(n));
+    }
+    if let Some(act) = is_active {
+        update_parts.push("is_active = ?".to_string());
+        params.push(Box::new(if act { 1 } else { 0 }));
+    }
+
+    if update_parts.is_empty() {
+        return Err("No fields to update".to_string());
+    }
+
+    let query = format!("UPDATE suppliers SET {} WHERE id = ?", update_parts.join(", "));
+    params.push(Box::new(supplier_id));
+    let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+
+    let affected = conn.execute(&query, &*param_refs).map_err(|e| {
+        if e.to_string().contains("UNIQUE constraint failed") {
+            "Supplier name already exists".to_string()
+        } else {
+            e.to_string()
+        }
+    })?;
+
+    if affected == 0 {
+        return Err("Supplier not found".to_string());
+    }
+
+    Ok("Supplier updated".to_string())
+}
+
+#[command]
+pub fn delete_supplier(supplier_id: i64) -> Result<String, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+
+    let purchase_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM purchases WHERE supplier_id = ?1",
+            params![supplier_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    let payment_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM supplier_payments WHERE supplier_id = ?1",
+            params![supplier_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    if purchase_count > 0 || payment_count > 0 {
+        let affected = conn
+            .execute(
+                "UPDATE suppliers SET is_active = 0 WHERE id = ?1",
+                params![supplier_id],
+            )
+            .map_err(|e| e.to_string())?;
+        if affected == 0 {
+            return Err("Supplier not found".to_string());
+        }
+        return Ok("Supplier deactivated (has history)".to_string());
+    }
+
+    let affected = conn
+        .execute("DELETE FROM suppliers WHERE id = ?1", params![supplier_id])
+        .map_err(|e| e.to_string())?;
+    if affected == 0 {
+        return Err("Supplier not found".to_string());
+    }
+    Ok("Supplier deleted".to_string())
+}
+
+#[command]
+pub fn add_purchase(
+    supplier_id: Option<i64>,
+    purchase_date: String,
+    reference: Option<String>,
+    notes: Option<String>,
+    items: Vec<PurchaseItemInput>,
+    payment_mode: Option<String>,
+    payment_amount: Option<f64>,
+    payment_method: Option<String>,
+    payment_note: Option<String>,
+    update_stock: Option<bool>,
+) -> Result<i64, String> {
+    validate_date_format(&purchase_date)?;
+    if items.is_empty() {
+        return Err("Purchase must have at least one item".to_string());
+    }
+
+    let update_stock = update_stock.unwrap_or(true);
+    let payment_mode = payment_mode.unwrap_or_else(|| "pay_later".to_string());
+
+    // Validate & compute totals
+    let mut total_amount: f64 = 0.0;
+    for it in &items {
+        validate_non_empty(&it.item_name, "Item name")?;
+        validate_positive_i32(it.quantity, "Quantity")?;
+        validate_positive_f64(it.unit_cost, "Unit cost")?;
+        total_amount += (it.quantity as f64) * it.unit_cost;
+    }
+
+    let initial_payment: f64 = match payment_mode.as_str() {
+        "pay_now" => total_amount,
+        "pay_later" => 0.0,
+        "pay_partial" => {
+            let a = payment_amount.unwrap_or(0.0);
+            if a < 0.0 {
+                return Err("Payment amount must be >= 0".to_string());
+            }
+            if a > total_amount + 1e-9 {
+                return Err("Payment amount cannot exceed total".to_string());
+            }
+            a
+        }
+        _ => return Err("Invalid payment mode".to_string()),
+    };
+
+    if initial_payment > 0.0 {
+        let method = payment_method.clone().unwrap_or_else(|| "cash".to_string());
+        validate_non_empty(&method, "Payment method")?;
+    }
+
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    conn.execute("BEGIN TRANSACTION", []).map_err(|e| e.to_string())?;
+
+    let result: Result<i64, String> = (|| {
+        conn.execute(
+            "INSERT INTO purchases (supplier_id, purchase_date, reference, notes, total_amount, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![supplier_id, purchase_date, reference, notes, total_amount, get_current_timestamp()],
+        )
+        .map_err(|e| e.to_string())?;
+
+        let purchase_id = conn.last_insert_rowid();
+
+        for it in &items {
+            let line_total = (it.quantity as f64) * it.unit_cost;
+            conn.execute(
+                "INSERT INTO purchase_items (purchase_id, menu_item_id, item_name, quantity, unit_cost, line_total)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![purchase_id, it.menu_item_id, it.item_name.trim(), it.quantity, it.unit_cost, line_total],
+            )
+            .map_err(|e| e.to_string())?;
+
+            if update_stock {
+                if let Some(menu_item_id) = it.menu_item_id {
+                    // Only increment stock for tracked products
+                    conn.execute(
+                        "UPDATE menu_items
+                         SET stock_quantity = COALESCE(stock_quantity, 0) + ?1
+                         WHERE id = ?2 AND COALESCE(track_stock, 0) = 1",
+                        params![it.quantity, menu_item_id],
+                    )
+                    .map_err(|e| e.to_string())?;
+                }
+            }
+        }
+
+        // Record supplier payment (only if supplier is set)
+        if supplier_id.is_some() && initial_payment > 0.0 {
+            let method = payment_method.unwrap_or_else(|| "cash".to_string());
+            conn.execute(
+                "INSERT INTO supplier_payments (supplier_id, purchase_id, amount, method, note, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![supplier_id, purchase_id, initial_payment, method.trim(), payment_note, get_current_timestamp()],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+
+        // Ensure DB total matches inserted rows
+        let _ = recompute_purchase_total(&conn, purchase_id)?;
+
+        Ok(purchase_id)
+    })();
+
+    match result {
+        Ok(id) => {
+            conn.execute("COMMIT", []).map_err(|e| e.to_string())?;
+            Ok(id)
+        }
+        Err(e) => {
+            let _ = conn.execute("ROLLBACK", []);
+            Err(e)
+        }
+    }
+}
+
+#[command]
+pub fn get_purchases() -> Result<Vec<PurchaseSummary>, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT p.id, p.purchase_date, p.supplier_id, s.name, p.reference, p.notes, p.total_amount, p.created_at
+             FROM purchases p
+             LEFT JOIN suppliers s ON s.id = p.supplier_id
+             ORDER BY p.purchase_date DESC, p.id DESC
+             LIMIT 200",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let iter = stmt
+        .query_map([], |row| {
+            Ok(PurchaseSummary {
+                id: row.get(0)?,
+                purchase_date: row.get(1)?,
+                supplier_id: row.get(2)?,
+                supplier_name: row.get(3)?,
+                reference: row.get(4)?,
+                notes: row.get(5)?,
+                total_amount: row.get(6)?,
+                created_at: row.get(7)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    iter.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+#[command]
+pub fn get_purchase_details(purchase_id: i64) -> Result<PurchaseDetails, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+
+    let purchase: PurchaseSummary = conn
+        .query_row(
+            "SELECT p.id, p.purchase_date, p.supplier_id, s.name, p.reference, p.notes, p.total_amount, p.created_at
+             FROM purchases p
+             LEFT JOIN suppliers s ON s.id = p.supplier_id
+             WHERE p.id = ?1",
+            params![purchase_id],
+            |row| {
+                Ok(PurchaseSummary {
+                    id: row.get(0)?,
+                    purchase_date: row.get(1)?,
+                    supplier_id: row.get(2)?,
+                    supplier_name: row.get(3)?,
+                    reference: row.get(4)?,
+                    notes: row.get(5)?,
+                    total_amount: row.get(6)?,
+                    created_at: row.get(7)?,
+                })
+            },
+        )
+        .map_err(|e| {
+            if e.to_string().contains("no rows") {
+                "Purchase not found".to_string()
+            } else {
+                e.to_string()
+            }
+        })?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, purchase_id, menu_item_id, item_name, quantity, unit_cost, line_total
+             FROM purchase_items
+             WHERE purchase_id = ?1
+             ORDER BY id ASC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let items = stmt
+        .query_map(params![purchase_id], |row| {
+            Ok(PurchaseItemRow {
+                id: row.get(0)?,
+                purchase_id: row.get(1)?,
+                menu_item_id: row.get(2)?,
+                item_name: row.get(3)?,
+                quantity: row.get(4)?,
+                unit_cost: row.get(5)?,
+                line_total: row.get(6)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(PurchaseDetails { purchase, items })
+}
+
+#[command]
+pub fn delete_purchase(purchase_id: i64, rollback_stock: Option<bool>) -> Result<String, String> {
+    let rollback_stock = rollback_stock.unwrap_or(true);
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+
+    conn.execute("BEGIN TRANSACTION", []).map_err(|e| e.to_string())?;
+    let result: Result<(), String> = (|| {
+        if rollback_stock {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT menu_item_id, quantity
+                     FROM purchase_items
+                     WHERE purchase_id = ?1",
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map(params![purchase_id], |row| {
+                    Ok((row.get::<_, Option<i64>>(0)?, row.get::<_, i32>(1)?))
+                })
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+
+            for (menu_item_id, qty) in rows {
+                if let Some(mid) = menu_item_id {
+                    conn.execute(
+                        "UPDATE menu_items
+                         SET stock_quantity = COALESCE(stock_quantity, 0) - ?1
+                         WHERE id = ?2 AND COALESCE(track_stock, 0) = 1",
+                        params![qty, mid],
+                    )
+                    .map_err(|e| e.to_string())?;
+                }
+            }
+        }
+
+        // Delete dependent payments first
+        let _ = conn.execute(
+            "DELETE FROM supplier_payments WHERE purchase_id = ?1",
+            params![purchase_id],
+        );
+
+        // Items will be deleted via cascade, but delete explicitly for safety
+        let _ = conn.execute(
+            "DELETE FROM purchase_items WHERE purchase_id = ?1",
+            params![purchase_id],
+        );
+
+        let affected = conn
+            .execute("DELETE FROM purchases WHERE id = ?1", params![purchase_id])
+            .map_err(|e| e.to_string())?;
+        if affected == 0 {
+            return Err("Purchase not found".to_string());
+        }
+
+        Ok(())
+    })();
+
+    match result {
+        Ok(()) => {
+            conn.execute("COMMIT", []).map_err(|e| e.to_string())?;
+            Ok("Purchase deleted".to_string())
+        }
+        Err(e) => {
+            let _ = conn.execute("ROLLBACK", []);
+            Err(e)
+        }
+    }
+}
+
+#[command]
+pub fn add_supplier_payment(
+    supplier_id: i64,
+    purchase_id: Option<i64>,
+    amount: f64,
+    method: String,
+    note: Option<String>,
+) -> Result<SupplierBalanceSummary, String> {
+    validate_positive_f64(amount, "Payment amount")?;
+    validate_non_empty(&method, "Payment method")?;
+
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    // Ensure supplier exists
+    let _: String = conn
+        .query_row(
+            "SELECT name FROM suppliers WHERE id = ?1",
+            params![supplier_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| {
+            if e.to_string().contains("no rows") {
+                "Supplier not found".to_string()
+            } else {
+                e.to_string()
+            }
+        })?;
+
+    conn.execute(
+        "INSERT INTO supplier_payments (supplier_id, purchase_id, amount, method, note, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![supplier_id, purchase_id, amount, method.trim(), note, get_current_timestamp()],
+    )
+    .map_err(|e| e.to_string())?;
+
+    compute_supplier_balance_summary(&conn, supplier_id)
+}
+
+#[command]
+pub fn get_supplier_payments(supplier_id: i64) -> Result<Vec<SupplierPayment>, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, supplier_id, purchase_id, amount, method, note, created_at
+             FROM supplier_payments
+             WHERE supplier_id = ?1
+             ORDER BY created_at ASC, id ASC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let payments = stmt
+        .query_map(params![supplier_id], |row| {
+            Ok(SupplierPayment {
+                id: row.get(0)?,
+                supplier_id: row.get(1)?,
+                purchase_id: row.get(2)?,
+                amount: row.get(3)?,
+                method: row.get(4)?,
+                note: row.get(5)?,
+                created_at: row.get(6)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(payments)
+}
+
+#[command]
+pub fn get_supplier_balance_summaries(include_inactive: Option<bool>) -> Result<Vec<SupplierBalanceSummary>, String> {
+    let include_inactive = include_inactive.unwrap_or(false);
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT s.id, s.name,
+                    COALESCE((SELECT SUM(total_amount) FROM purchases p WHERE p.supplier_id = s.id), 0) AS total_purchases,
+                    COALESCE((SELECT SUM(amount) FROM supplier_payments sp WHERE sp.supplier_id = s.id), 0) AS amount_paid
+             FROM suppliers s
+             WHERE (?1 = 1) OR (s.is_active = 1)
+             ORDER BY s.name ASC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let iter = stmt
+        .query_map(params![if include_inactive { 1 } else { 0 }], |row| {
+            let total_purchases: f64 = row.get(2)?;
+            let amount_paid: f64 = row.get(3)?;
+            Ok(SupplierBalanceSummary {
+                supplier_id: row.get(0)?,
+                supplier_name: row.get(1)?,
+                total_purchases,
+                amount_paid,
+                balance_due: (total_purchases - amount_paid).max(0.0),
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    iter.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+#[command]
+pub fn get_customer_balance_summaries() -> Result<Vec<CustomerBalanceSummary>, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT c.id, c.name,
+                    COALESCE((SELECT SUM(total_amount) FROM sales s WHERE s.guest_id = c.id), 0) AS total_sales,
+                    COALESCE((SELECT SUM(sp.amount)
+                              FROM sale_payments sp
+                              JOIN sales s2 ON s2.id = sp.sale_id
+                              WHERE s2.guest_id = c.id), 0) AS amount_paid
+             FROM customers c
+             ORDER BY c.name ASC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let iter = stmt
+        .query_map([], |row| {
+            let total_sales: f64 = row.get(2)?;
+            let amount_paid: f64 = row.get(3)?;
+            Ok(CustomerBalanceSummary {
+                customer_id: row.get(0)?,
+                customer_name: row.get(1)?,
+                total_sales,
+                amount_paid,
+                balance_due: (total_sales - amount_paid).max(0.0),
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    iter.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+#[command]
+pub fn get_customer_sale_balances(customer_id: i64) -> Result<Vec<CustomerSaleBalanceRow>, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+
+    // Ensure customer exists
+    let _: String = conn
+        .query_row(
+            "SELECT name FROM customers WHERE id = ?1",
+            params![customer_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| {
+            if e.to_string().contains("no rows") {
+                "Customer not found".to_string()
+            } else {
+                e.to_string()
+            }
+        })?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT s.id, s.created_at, s.total_amount, s.paid,
+                    COALESCE((SELECT SUM(amount) FROM sale_payments sp WHERE sp.sale_id = s.id), 0) AS amount_paid
+             FROM sales s
+             WHERE s.guest_id = ?1
+             ORDER BY s.created_at DESC, s.id DESC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let iter = stmt
+        .query_map(params![customer_id], |row| {
+            let total_amount: f64 = row.get(2)?;
+            let amount_paid: f64 = row.get(4)?;
+            Ok(CustomerSaleBalanceRow {
+                sale_id: row.get(0)?,
+                created_at: row.get(1)?,
+                total_amount,
+                amount_paid,
+                balance_due: (total_amount - amount_paid).max(0.0),
+                paid: row.get::<_, i64>(3)? == 1,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    iter.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn toggle_food_order_payment(order_id: i64) -> Result<String, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
@@ -1475,6 +2613,124 @@ pub fn get_order_details(order_id: i64) -> Result<FoodOrderDetails, String> {
     })
 }
 
+// ===== SALE PAYMENTS (Partial / Pay-Later) =====
+
+fn compute_sale_payment_summary(conn: &rusqlite::Connection, sale_id: i64) -> Result<SalePaymentSummary, String> {
+    // Get sale totals
+    let (total_amount, paid, paid_at): (f64, i64, Option<String>) = conn
+        .query_row(
+            "SELECT total_amount, paid, paid_at FROM sales WHERE id = ?1",
+            params![sale_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .map_err(|e| {
+            if e.to_string().contains("no rows") {
+                "Sale not found".to_string()
+            } else {
+                e.to_string()
+            }
+        })?;
+
+    // Sum payments
+    let amount_paid: f64 = conn
+        .query_row(
+            "SELECT COALESCE(SUM(amount), 0) FROM sale_payments WHERE sale_id = ?1",
+            params![sale_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, sale_id, amount, method, note, created_at\n             FROM sale_payments\n             WHERE sale_id = ?1\n             ORDER BY created_at ASC, id ASC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let payments = stmt
+        .query_map(params![sale_id], |row| {
+            Ok(SalePayment {
+                id: row.get(0)?,
+                sale_id: row.get(1)?,
+                amount: row.get(2)?,
+                method: row.get(3)?,
+                note: row.get(4)?,
+                created_at: row.get(5)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    let balance_due = (total_amount - amount_paid).max(0.0);
+
+    Ok(SalePaymentSummary {
+        sale_id,
+        total_amount,
+        amount_paid,
+        balance_due,
+        paid: paid == 1,
+        paid_at,
+        payments,
+    })
+}
+
+#[command]
+pub fn get_sale_payment_summary(sale_id: i64) -> Result<SalePaymentSummary, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    compute_sale_payment_summary(&conn, sale_id)
+}
+
+#[command]
+pub fn add_sale_payment(sale_id: i64, amount: f64, method: String, note: Option<String>) -> Result<SalePaymentSummary, String> {
+    if amount <= 0.0 {
+        return Err("Payment amount must be > 0".to_string());
+    }
+    if method.trim().is_empty() {
+        return Err("Payment method cannot be empty".to_string());
+    }
+
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+
+    // Ensure the sale exists and get its total
+    let total_amount: f64 = conn
+        .query_row(
+            "SELECT total_amount FROM sales WHERE id = ?1",
+            params![sale_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| {
+            if e.to_string().contains("no rows") {
+                "Sale not found".to_string()
+            } else {
+                e.to_string()
+            }
+        })?;
+
+    conn.execute(
+        "INSERT INTO sale_payments (sale_id, amount, method, note, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![sale_id, amount, method.trim(), note, get_current_timestamp()],
+    )
+    .map_err(|e| e.to_string())?;
+
+    // Recompute paid sum and update sales.paid when fully paid
+    let amount_paid: f64 = conn
+        .query_row(
+            "SELECT COALESCE(SUM(amount), 0) FROM sale_payments WHERE sale_id = ?1",
+            params![sale_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let fully_paid = amount_paid + 1e-9 >= total_amount;
+    conn.execute(
+        "UPDATE sales\n         SET paid = ?1,\n             paid_at = CASE WHEN ?1 = 1 THEN COALESCE(paid_at, ?2) ELSE NULL END\n         WHERE id = ?3",
+        params![if fully_paid { 1 } else { 0 }, get_current_timestamp(), sale_id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    compute_sale_payment_summary(&conn, sale_id)
+}
+
 // ===== SALES (ALIAS) COMMANDS =====
 // Generic naming wrappers for legacy "food order" commands.
 
@@ -1516,6 +2772,301 @@ pub fn delete_sale(order_id: i64) -> Result<String, String> {
 #[command]
 pub fn get_sale_details(order_id: i64) -> Result<FoodOrderDetails, String> {
     get_order_details(order_id)
+}
+
+// ===== SALES RETURNS / REFUNDS =====
+
+#[command]
+pub fn get_sale_returnable_items(order_id: i64) -> Result<Vec<ReturnableSaleItem>, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+
+    // Ensure sale exists
+    let _: i64 = conn
+        .query_row("SELECT id FROM sales WHERE id = ?1", params![order_id], |row| row.get(0))
+        .map_err(|e| {
+            if e.to_string().contains("no rows") {
+                "Sale not found".to_string()
+            } else {
+                e.to_string()
+            }
+        })?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT si.id,
+                    si.menu_item_id,
+                    si.item_name,
+                    si.unit_price,
+                    si.quantity as sold_qty,
+                    COALESCE((SELECT SUM(ri.quantity)
+                              FROM sale_return_items ri
+                              WHERE ri.sale_item_id = si.id), 0) AS returned_qty
+             FROM sale_items si
+             WHERE si.order_id = ?1
+             ORDER BY si.id",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let iter = stmt
+        .query_map(params![order_id], |row| {
+            let sold: i32 = row.get(4)?;
+            let returned: i32 = row.get(5)?;
+            let remaining = (sold - returned).max(0);
+            Ok(ReturnableSaleItem {
+                sale_item_id: row.get(0)?,
+                menu_item_id: row.get(1)?,
+                item_name: row.get(2)?,
+                unit_price: row.get(3)?,
+                sold_qty: sold,
+                returned_qty: returned,
+                remaining_qty: remaining,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    iter.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+#[command]
+pub fn add_sale_return(
+    sale_id: i64,
+    return_date: String,
+    refund_method: Option<String>,
+    refund_amount: Option<f64>,
+    note: Option<String>,
+    items: Vec<SaleReturnItemInput>,
+) -> Result<i64, String> {
+    validate_date_format(&return_date)?;
+    if items.is_empty() {
+        return Err("Return must have at least one item".to_string());
+    }
+
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    conn.execute("BEGIN TRANSACTION", []).map_err(|e| e.to_string())?;
+
+    let result: Result<i64, String> = (|| {
+        // Ensure sale exists
+        let _: i64 = conn
+            .query_row("SELECT id FROM sales WHERE id = ?1", params![sale_id], |row| row.get(0))
+            .map_err(|e| {
+                if e.to_string().contains("no rows") {
+                    "Sale not found".to_string()
+                } else {
+                    e.to_string()
+                }
+            })?;
+
+        // Build validated item rows and compute expected total
+        let mut computed_total: f64 = 0.0;
+        let mut expanded: Vec<(i64, Option<i64>, String, f64, i32, Option<String>)> = Vec::new();
+
+        for it in &items {
+            validate_positive_i32(it.quantity, "Quantity")?;
+
+            // Fetch sale item and remaining returnable quantity
+            let (menu_item_id, item_name, unit_price, sold_qty): (Option<i64>, String, f64, i32) = conn
+                .query_row(
+                    "SELECT menu_item_id, item_name, unit_price, quantity
+                     FROM sale_items
+                     WHERE id = ?1 AND order_id = ?2",
+                    params![it.sale_item_id, sale_id],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+                )
+                .map_err(|e| {
+                    if e.to_string().contains("no rows") {
+                        "Sale item not found".to_string()
+                    } else {
+                        e.to_string()
+                    }
+                })?;
+
+            let returned_qty: i32 = conn
+                .query_row(
+                    "SELECT COALESCE(SUM(quantity), 0) FROM sale_return_items WHERE sale_item_id = ?1",
+                    params![it.sale_item_id],
+                    |row| row.get(0),
+                )
+                .map_err(|e| e.to_string())?;
+
+            let remaining = (sold_qty - returned_qty).max(0);
+            if it.quantity > remaining {
+                return Err(format!(
+                    "Cannot return {} of '{}' (only {} remaining)",
+                    it.quantity, item_name, remaining
+                ));
+            }
+
+            let line_total = unit_price * (it.quantity as f64);
+            computed_total += line_total;
+            expanded.push((it.sale_item_id, menu_item_id, item_name, unit_price, it.quantity, it.note.clone()));
+        }
+
+        let final_refund_amount = refund_amount.unwrap_or(computed_total);
+        if final_refund_amount < 0.0 {
+            return Err("Refund amount cannot be negative".to_string());
+        }
+        if final_refund_amount > computed_total + 1e-9 {
+            return Err(format!(
+                "Refund amount cannot exceed return total ({:.2})",
+                computed_total
+            ));
+        }
+
+        conn.execute(
+            "INSERT INTO sale_returns (sale_id, return_date, refund_method, refund_amount, note, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                sale_id,
+                return_date,
+                refund_method.as_ref().map(|s| s.trim().to_string()),
+                final_refund_amount,
+                note,
+                get_current_timestamp()
+            ],
+        )
+        .map_err(|e| e.to_string())?;
+
+        let return_id = conn.last_insert_rowid();
+
+        for (sale_item_id, menu_item_id, item_name, unit_price, qty, item_note) in expanded {
+            let line_total = unit_price * (qty as f64);
+
+            conn.execute(
+                "INSERT INTO sale_return_items
+                    (return_id, sale_item_id, menu_item_id, item_name, unit_price, quantity, line_total, note)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![
+                    return_id,
+                    sale_item_id,
+                    menu_item_id,
+                    item_name,
+                    unit_price,
+                    qty,
+                    line_total,
+                    item_note
+                ],
+            )
+            .map_err(|e| e.to_string())?;
+
+            // Restock tracked products when possible
+            if let Some(mid) = menu_item_id {
+                let _ = conn.execute(
+                    "UPDATE menu_items
+                     SET stock_quantity = COALESCE(stock_quantity, 0) + ?1
+                     WHERE id = ?2 AND COALESCE(track_stock, 0) = 1",
+                    params![qty, mid],
+                );
+            }
+        }
+
+        Ok(return_id)
+    })();
+
+    match result {
+        Ok(id) => {
+            conn.execute("COMMIT", []).map_err(|e| e.to_string())?;
+            Ok(id)
+        }
+        Err(e) => {
+            let _ = conn.execute("ROLLBACK", []);
+            Err(e)
+        }
+    }
+}
+
+#[command]
+pub fn get_sale_returns(limit: Option<i64>) -> Result<Vec<SaleReturnSummary>, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    let lim = limit.unwrap_or(100).clamp(1, 500);
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT r.id, r.sale_id, r.return_date, r.refund_method, r.refund_amount,
+                    (SELECT COUNT(*) FROM sale_return_items i WHERE i.return_id = r.id) as item_count,
+                    r.created_at
+             FROM sale_returns r
+             ORDER BY r.return_date DESC, r.id DESC
+             LIMIT ?1",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let iter = stmt
+        .query_map(params![lim], |row| {
+            Ok(SaleReturnSummary {
+                id: row.get(0)?,
+                sale_id: row.get(1)?,
+                return_date: row.get(2)?,
+                refund_method: row.get(3)?,
+                refund_amount: row.get(4)?,
+                item_count: row.get(5)?,
+                created_at: row.get(6)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    iter.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+#[command]
+pub fn get_sale_return_details(return_id: i64) -> Result<SaleReturnDetails, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+
+    let ret: SaleReturnSummary = conn
+        .query_row(
+            "SELECT r.id, r.sale_id, r.return_date, r.refund_method, r.refund_amount,
+                    (SELECT COUNT(*) FROM sale_return_items i WHERE i.return_id = r.id) as item_count,
+                    r.created_at
+             FROM sale_returns r
+             WHERE r.id = ?1",
+            params![return_id],
+            |row| {
+                Ok(SaleReturnSummary {
+                    id: row.get(0)?,
+                    sale_id: row.get(1)?,
+                    return_date: row.get(2)?,
+                    refund_method: row.get(3)?,
+                    refund_amount: row.get(4)?,
+                    item_count: row.get(5)?,
+                    created_at: row.get(6)?,
+                })
+            },
+        )
+        .map_err(|e| {
+            if e.to_string().contains("no rows") {
+                "Return not found".to_string()
+            } else {
+                e.to_string()
+            }
+        })?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, return_id, sale_item_id, menu_item_id, item_name, unit_price, quantity, line_total, note
+             FROM sale_return_items
+             WHERE return_id = ?1
+             ORDER BY id",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let iter = stmt
+        .query_map(params![return_id], |row| {
+            Ok(SaleReturnItemRow {
+                id: row.get(0)?,
+                return_id: row.get(1)?,
+                sale_item_id: row.get(2)?,
+                menu_item_id: row.get(3)?,
+                item_name: row.get(4)?,
+                unit_price: row.get(5)?,
+                quantity: row.get(6)?,
+                line_total: row.get(7)?,
+                note: row.get(8)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    let items = iter.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+
+    Ok(SaleReturnDetails { ret, items })
 }
 
 // Enhanced checkout function with discount support
@@ -1705,6 +3256,47 @@ pub fn get_tax_enabled() -> Result<bool, String> {
     }
 }
 
+// ===== OPTIONAL BARCODE / SKU FEATURES =====
+
+#[command]
+pub fn set_barcode_enabled(enabled: bool) -> Result<String, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_settings_table(&conn)?;
+
+    let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    conn.execute(
+        "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('barcode_enabled', ?1, ?2)",
+        params![enabled.to_string(), now],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(if enabled {
+        "Barcode features enabled".to_string()
+    } else {
+        "Barcode features disabled".to_string()
+    })
+}
+
+#[command]
+pub fn get_barcode_enabled() -> Result<bool, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_settings_table(&conn)?;
+
+    let mut stmt = conn
+        .prepare("SELECT value FROM settings WHERE key = 'barcode_enabled'")
+        .map_err(|e| e.to_string())?;
+
+    let result = stmt.query_row([], |row| {
+        let value_str: String = row.get(0)?;
+        Ok(value_str.parse::<bool>().unwrap_or(false))
+    });
+
+    match result {
+        Ok(v) => Ok(v),
+        Err(_) => Ok(false),
+    }
+}
+
 // ===== CURRENCY / LOCALE SETTINGS =====
 
 fn ensure_settings_table(conn: &rusqlite::Connection) -> Result<(), String> {
@@ -1849,11 +3441,39 @@ pub fn set_business_mode(mode: String) -> Result<String, String> {
     ensure_settings_table(&conn)?;
 
     let normalized = mode.trim().to_lowercase();
-    match normalized.as_str() {
-        "hotel" | "restaurant" | "retail" => {}
+    let normalized = match normalized.as_str() {
+        "barbershop" => "salon".to_string(),
+        "hotel" | "restaurant" | "retail" | "salon" | "cafe" => normalized,
         _ => {
-            return Err("Business mode must be one of: hotel, restaurant, retail".to_string());
+            return Err("Business mode must be one of: hotel, restaurant, retail, salon, cafe".to_string());
         }
+    };
+
+    // If a business mode was already set previously, do not allow switching.
+    let existing: Option<String> = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'business_mode'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?
+        .map(|v| v.trim().to_lowercase());
+
+    if let Some(existing_mode) = existing {
+        // Legacy / merged mode
+        let existing_mode = if existing_mode == "barbershop" {
+            "salon".to_string()
+        } else {
+            existing_mode
+        };
+
+        if existing_mode != normalized {
+            return Err(
+                "Business type is locked after first-time setup. To change it, use Settings → Reset Application Data and set up again.".to_string(),
+            );
+        }
+        return Ok("Business mode already set".to_string());
     }
 
     let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
@@ -1863,7 +3483,40 @@ pub fn set_business_mode(mode: String) -> Result<String, String> {
     )
     .map_err(|e| e.to_string())?;
 
-    Ok("Business mode updated".to_string())
+    Ok("Business mode set".to_string())
+}
+
+#[command]
+pub fn get_business_mode_status() -> Result<BusinessModeStatus, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_settings_table(&conn)?;
+
+    let raw: Option<String> = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'business_mode'",
+            [],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+
+    let locked = raw.as_ref().map(|v| !v.trim().is_empty()).unwrap_or(false);
+
+    let mode = match raw {
+        Some(v) => {
+            let normalized = v.trim().to_lowercase();
+            if normalized == "barbershop" {
+                "salon".to_string()
+            } else if matches!(normalized.as_str(), "hotel" | "restaurant" | "retail" | "salon" | "cafe") {
+                normalized
+            } else {
+                "hotel".to_string()
+            }
+        }
+        None => "hotel".to_string(),
+    };
+
+    Ok(BusinessModeStatus { mode, locked })
 }
 
 #[command]
@@ -1876,7 +3529,18 @@ pub fn get_business_mode() -> Result<String, String> {
         .map_err(|e| e.to_string())?;
 
     let result: Result<String, _> = stmt.query_row([], |row| row.get(0));
-    Ok(result.unwrap_or_else(|_| "hotel".to_string()))
+    let raw = result.unwrap_or_else(|_| "hotel".to_string());
+    let normalized = raw.trim().to_lowercase();
+
+    // Legacy / merged mode
+    if normalized == "barbershop" {
+        return Ok("salon".to_string());
+    }
+
+    match normalized.as_str() {
+        "hotel" | "restaurant" | "retail" | "salon" | "cafe" => Ok(normalized),
+        _ => Ok("hotel".to_string()),
+    }
 }
 
 // ===== SHIFT MANAGEMENT (Z-REPORT) =====
@@ -2048,4 +3712,198 @@ pub fn get_shift_history(limit: Option<i64>) -> Result<Vec<ShiftSummary>, String
     }).map_err(|e| e.to_string())?;
     
     shifts.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+// ===== LOYALTY SYSTEM COMMANDS (Phase 5) =====
+
+// Get loyalty points configuration
+#[command]
+pub fn get_loyalty_config() -> Result<(f64, f64), String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    // Default: $10 spent = 1 point, 1 point = $0.10 discount
+    let points_per_dollar: f64 = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'loyalty_points_per_dollar'",
+            [],
+            |row| row.get::<_, String>(0)
+        )
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0.1);
+    
+    let dollars_per_point: f64 = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'loyalty_dollars_per_point'",
+            [],
+            |row| row.get::<_, String>(0)
+        )
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0.1);
+    
+    Ok((points_per_dollar, dollars_per_point))
+}
+
+// Set loyalty points configuration
+#[command]
+pub fn set_loyalty_config(points_per_dollar: f64, dollars_per_point: f64) -> Result<String, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    
+    conn.execute(
+        "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('loyalty_points_per_dollar', ?1, ?2)",
+        params![points_per_dollar.to_string(), now.clone()],
+    ).map_err(|e| e.to_string())?;
+    
+    conn.execute(
+        "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('loyalty_dollars_per_point', ?1, ?2)",
+        params![dollars_per_point.to_string(), now],
+    ).map_err(|e| e.to_string())?;
+    
+    Ok("Loyalty configuration updated".to_string())
+}
+
+// Award loyalty points for a sale (called after order is finalized)
+#[command]
+pub fn award_loyalty_points(customer_id: i64, order_id: i64, order_total: f64) -> Result<i64, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    // Get loyalty config
+    let (points_per_dollar, _) = get_loyalty_config()?;
+    
+    // Calculate points to award (e.g., $10 = 1 point)
+    let points_to_award = (order_total * points_per_dollar).floor() as i64;
+    
+    if points_to_award <= 0 {
+        return Ok(0);
+    }
+    
+    // Start transaction
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    
+    // Update customer's loyalty points
+    tx.execute(
+        "UPDATE customers SET loyalty_points = loyalty_points + ?1 WHERE id = ?2",
+        params![points_to_award, customer_id],
+    ).map_err(|e| e.to_string())?;
+    
+    // Record transaction
+    let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    tx.execute(
+        "INSERT INTO point_transactions (customer_id, order_id, points_change, reason, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![
+            customer_id,
+            order_id,
+            points_to_award,
+            format!("Earned from Order #{}", order_id),
+            now
+        ],
+    ).map_err(|e| e.to_string())?;
+    
+    tx.commit().map_err(|e| e.to_string())?;
+    
+    Ok(points_to_award)
+}
+
+// Get customer's current loyalty points
+#[command]
+pub fn get_customer_loyalty_points(customer_id: i64) -> Result<i64, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    let points: i64 = conn
+        .query_row(
+            "SELECT loyalty_points FROM customers WHERE id = ?1",
+            params![customer_id],
+            |row| row.get(0)
+        )
+        .map_err(|e| e.to_string())?;
+    
+    Ok(points)
+}
+
+// Redeem loyalty points for discount
+#[command]
+pub fn redeem_loyalty_points(customer_id: i64, points_to_redeem: i64) -> Result<f64, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    if points_to_redeem <= 0 {
+        return Err("Points to redeem must be greater than 0".to_string());
+    }
+    
+    // Get current points
+    let current_points: i64 = conn
+        .query_row(
+            "SELECT loyalty_points FROM customers WHERE id = ?1",
+            params![customer_id],
+            |row| row.get(0)
+        )
+        .map_err(|e| e.to_string())?;
+    
+    if current_points < points_to_redeem {
+        return Err(format!("Insufficient points. Customer has {} points", current_points));
+    }
+    
+    // Get loyalty config
+    let (_, dollars_per_point) = get_loyalty_config()?;
+    
+    // Calculate discount amount
+    let discount_amount = points_to_redeem as f64 * dollars_per_point;
+    
+    // Start transaction
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    
+    // Deduct points from customer
+    tx.execute(
+        "UPDATE customers SET loyalty_points = loyalty_points - ?1 WHERE id = ?2",
+        params![points_to_redeem, customer_id],
+    ).map_err(|e| e.to_string())?;
+    
+    // Record transaction (negative points_change for redemption)
+    let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    tx.execute(
+        "INSERT INTO point_transactions (customer_id, order_id, points_change, reason, created_at)
+         VALUES (?1, NULL, ?2, ?3, ?4)",
+        params![
+            customer_id,
+            -points_to_redeem,
+            format!("Redeemed {} points for ${:.2} discount", points_to_redeem, discount_amount),
+            now
+        ],
+    ).map_err(|e| e.to_string())?;
+    
+    tx.commit().map_err(|e| e.to_string())?;
+    
+    Ok(discount_amount)
+}
+
+// Get loyalty point transaction history for a customer
+#[command]
+pub fn get_point_transactions(customer_id: i64, limit: Option<i64>) -> Result<Vec<crate::models::PointTransaction>, String> {
+    let conn = get_db_connection().map_err(|e| e.to_string())?;
+    
+    let mut stmt = conn.prepare(
+        "SELECT id, customer_id, order_id, points_change, reason, created_at
+         FROM point_transactions
+         WHERE customer_id = ?1
+         ORDER BY created_at DESC
+         LIMIT ?2"
+    ).map_err(|e| e.to_string())?;
+    
+    let transactions = stmt.query_map(
+        params![customer_id, limit.unwrap_or(50)],
+        |row| {
+            Ok(crate::models::PointTransaction {
+                id: row.get(0)?,
+                customer_id: row.get(1)?,
+                order_id: row.get(2)?,
+                points_change: row.get(3)?,
+                reason: row.get(4)?,
+                created_at: row.get(5)?,
+            })
+        }
+    ).map_err(|e| e.to_string())?;
+    
+    transactions.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }

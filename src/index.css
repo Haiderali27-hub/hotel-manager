@@ -42,7 +42,7 @@
   --bizcore-light-border: #d2d6db;
   --bizcore-light-text: #845c58;
   --bizcore-light-text-secondary: #8892a9;
-  --bizcore-light-action: #845c58;
+  --bizcore-light-action: #2563EB;
   --bizcore-light-input-bg: #fdfdfd;
 
   --bizcore-dark-app-bg: #0b0b0b;
@@ -50,7 +50,7 @@
   --bizcore-dark-border: #393741;
   --bizcore-dark-text: #cdd0dc;
   --bizcore-dark-text-secondary: #958f9e;
-  --bizcore-dark-action: #665f5f;
+  --bizcore-dark-action: #60A5FA;
   --bizcore-dark-input-bg: #0b0b0b;
 
   /* Semantic tokens (default: light) */
@@ -65,7 +65,7 @@
   /* Translucent helpers (allowed: derived alpha) */
   --app-overlay: rgba(0, 0, 0, 0.55);
   --app-shadow: rgba(0, 0, 0, 0.18);
-  --app-focus-ring: rgba(132, 92, 88, 0.22);
+  --app-focus-ring: rgba(37, 99, 235, 0.22);
 
   /* Legacy variables for backward compatibility */
   --bm-primary: var(--app-text);
@@ -89,7 +89,7 @@ html[data-theme="dark"] {
 
   --app-overlay: rgba(0, 0, 0, 0.7);
   --app-shadow: rgba(0, 0, 0, 0.45);
-  --app-focus-ring: rgba(102, 95, 95, 0.22);
+  --app-focus-ring: rgba(96, 165, 250, 0.22);
 }
 
 body {

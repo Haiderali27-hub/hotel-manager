@@ -44,6 +44,75 @@ const OfflineLoginPage: React.FC = () => {
   const [success, setSuccess] = useState<string>('');
   const [showResetPassword, setShowResetPassword] = useState(false);
   const [securityQuestion, setSecurityQuestion] = useState<string>('');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const PasswordVisibilityIcon = ({ visible }: { visible: boolean }) => (
+    visible ? (
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path
+          d="M3 3l18 18"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M10.58 10.58a2 2 0 0 0 2.83 2.83"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M9.88 5.07A10.94 10.94 0 0 1 12 4c7 0 10 8 10 8a18.53 18.53 0 0 1-3.04 4.19"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M6.23 6.23A18.41 18.41 0 0 0 2 12s3 8 10 8a10.94 10.94 0 0 0 4.11-.83"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    ) : (
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path
+          d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12Z"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinejoin="round"
+        />
+      </svg>
+    )
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -253,16 +322,29 @@ const OfflineLoginPage: React.FC = () => {
 
                 <div className="bc-field">
                   <label className="bc-label">Password</label>
-                  <input
-                    type="password"
-                    name="password"
-                    className="bc-input bc-auth-input"
-                    placeholder="Enter your password"
-                    value={formData.password}
-                    onChange={handleInputChange}
-                    disabled={isLoading}
-                    required
-                  />
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showLoginPassword ? 'text' : 'password'}
+                      name="password"
+                      className="bc-input bc-auth-input"
+                      placeholder="Enter your password"
+                      value={formData.password}
+                      onChange={handleInputChange}
+                      disabled={isLoading}
+                      required
+                      style={{ paddingRight: '56px' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowLoginPassword(!showLoginPassword)}
+                      className="password-toggle password-toggle--bc"
+                      disabled={isLoading}
+                      aria-label={showLoginPassword ? 'Hide password' : 'Show password'}
+                      title={showLoginPassword ? 'Hide password' : 'Show password'}
+                    >
+                      <PasswordVisibilityIcon visible={showLoginPassword} />
+                    </button>
+                  </div>
                 </div>
 
                 {error && <div className="bc-alert bc-alert-error">{error}</div>}
@@ -356,30 +438,56 @@ const OfflineLoginPage: React.FC = () => {
 
                 <div className="bc-field">
                   <label className="bc-label">New Password</label>
-                  <input
-                    type="password"
-                    name="newPassword"
-                    className="bc-input bc-auth-input"
-                    placeholder="Minimum 8 characters"
-                    value={securityData.newPassword}
-                    onChange={handleSecurityInputChange}
-                    disabled={isLoading}
-                    required
-                  />
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      name="newPassword"
+                      className="bc-input bc-auth-input"
+                      placeholder="Minimum 8 characters"
+                      value={securityData.newPassword}
+                      onChange={handleSecurityInputChange}
+                      disabled={isLoading}
+                      required
+                      style={{ paddingRight: '56px' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="password-toggle password-toggle--bc"
+                      disabled={isLoading}
+                      aria-label={showNewPassword ? 'Hide password' : 'Show password'}
+                      title={showNewPassword ? 'Hide password' : 'Show password'}
+                    >
+                      <PasswordVisibilityIcon visible={showNewPassword} />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="bc-field">
                   <label className="bc-label">Confirm New Password</label>
-                  <input
-                    type="password"
-                    name="confirmNewPassword"
-                    className="bc-input bc-auth-input"
-                    placeholder="Re-enter new password"
-                    value={securityData.confirmNewPassword}
-                    onChange={handleSecurityInputChange}
-                    disabled={isLoading}
-                    required
-                  />
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      name="confirmNewPassword"
+                      className="bc-input bc-auth-input"
+                      placeholder="Re-enter new password"
+                      value={securityData.confirmNewPassword}
+                      onChange={handleSecurityInputChange}
+                      disabled={isLoading}
+                      required
+                      style={{ paddingRight: '56px' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="password-toggle password-toggle--bc"
+                      disabled={isLoading}
+                      aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                      title={showConfirmPassword ? 'Hide password' : 'Show password'}
+                    >
+                      <PasswordVisibilityIcon visible={showConfirmPassword} />
+                    </button>
+                  </div>
                 </div>
 
                 {error && <div className="bc-alert bc-alert-error">{error}</div>}

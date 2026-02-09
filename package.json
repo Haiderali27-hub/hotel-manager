@@ -8,7 +8,16 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:retail": "vitest run tests/retail",
+    "test:retail:backend": "vitest run tests/retail/backend",
+    "test:retail:frontend": "vitest run tests/retail/frontend",
+    "test:retail:integration": "vitest run tests/retail/integration",
+    "test:watch": "vitest watch"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.7.0",
@@ -22,16 +31,25 @@
   "devDependencies": {
     "@eslint/js": "^9.32.0",
     "@tauri-apps/cli": "^2.7.1",
+    "@testing-library/jest-dom": "^6.1.5",
+    "@testing-library/react": "^16.0.0",
+    "@testing-library/user-event": "^14.5.1",
+    "@types/node": "^22.0.0",
     "@types/react": "^19.1.9",
     "@types/react-dom": "^19.1.7",
     "@types/xlsx": "^0.0.35",
     "@vitejs/plugin-react": "^4.7.0",
+    "@vitest/ui": "^1.0.4",
     "eslint": "^9.32.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^16.3.0",
+    "jsdom": "^23.0.1",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.39.0",
-    "vite": "^7.1.0"
+    "vite": "^7.1.0",
+    "vitest": "^1.0.4",
+    "@vitest/coverage-v8": "^1.0.4"
   }
 }
+

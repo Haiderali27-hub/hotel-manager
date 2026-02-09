@@ -16,7 +16,13 @@ const LowStockAlert: React.FC = () => {
 
   const fetchLowStockItems = async () => {
     try {
-      const items: LowStockItem[] = await invoke('get_low_stock_items');
+      const rows: any[] = await invoke('get_low_stock_items');
+      const items: LowStockItem[] = rows.map((raw) => ({
+        id: raw.id,
+        name: raw.name,
+        stock_quantity: raw.stock_quantity ?? raw.stockQuantity ?? 0,
+        low_stock_limit: raw.low_stock_limit ?? raw.lowStockLimit ?? 0,
+      }));
       setLowStockItems(items);
     } catch (error) {
       console.error('Failed to fetch low stock items:', error);

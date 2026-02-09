@@ -1,14 +1,17 @@
 import { invoke } from '@tauri-apps/api/core';
 import React, { useMemo, useState } from 'react';
+import { updateActiveStoreName } from '../api/client';
+import { type BusinessMode, useLabels } from '../context/LabelContext';
 import '../styles/LoginPage.css';
 
-type Step = 1 | 2;
+type Step = 1 | 2 | 3;
 
 interface Props {
   onComplete: () => void;
 }
 
 const SetupWizard: React.FC<Props> = ({ onComplete }) => {
+  const { setMode: setAppBusinessMode } = useLabels();
   const [step, setStep] = useState<Step>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string>('');
@@ -35,6 +38,8 @@ const SetupWizard: React.FC<Props> = ({ onComplete }) => {
   const [currencySymbol, setCurrencySymbol] = useState('');
   const [taxRate, setTaxRate] = useState('0');
 
+  const [businessMode, setBusinessMode] = useState<BusinessMode>('hotel');
+
   const canContinueAdminStep = useMemo(() => {
     return (
       username.trim().length > 0 &&
@@ -59,7 +64,7 @@ const SetupWizard: React.FC<Props> = ({ onComplete }) => {
   const goNext = () => {
     setError('');
     setSuccess('');
-    setStep((s) => (s === 2 ? 2 : ((s + 1) as Step)));
+    setStep((s) => (s === 3 ? 3 : ((s + 1) as Step)));
   };
 
   const toCurrencyCode = (raw: string): string => {
@@ -98,18 +103,37 @@ const SetupWizard: React.FC<Props> = ({ onComplete }) => {
         },
       });
 
-      // Best-effort: persist Business Basics so the app can be branded immediately.
-      // If any of these fail, we still complete setup (admin already exists) and the user can adjust later.
+      // Persist Business Basics so the app can be branded immediately.
+      // Business Mode is required to avoid UI/data conflicts; other settings are best-effort.
       try {
         const currencyCode = toCurrencyCode(currencySymbol);
+
+        // Required: set/lock business mode.
+        await invoke('set_business_mode', { mode: businessMode });
+
+        // Update UI terminology immediately (no reload needed).
+        setAppBusinessMode(businessMode);
+
+        // Best-effort: other settings.
         await Promise.all([
           invoke('set_business_name', { name: businessName.trim() }),
           invoke('set_currency_code', { code: currencyCode }),
           invoke('set_tax_rate', { rate: Number(taxRate) }),
           invoke('set_tax_enabled', { enabled: true }),
         ]);
+
+        // Also update the store profile name to match business name
+        try {
+          await updateActiveStoreName(businessName.trim());
+        } catch (storeErr) {
+          console.warn('[setup] Failed to update store profile name:', storeErr);
+          // Not critical - continue anyway
+        }
       } catch (settingsErr) {
-        console.warn('Setup completed but failed to persist business settings:', settingsErr);
+        // Do not silently continue: business mode must be consistent.
+        setError(String(settingsErr));
+        setIsSubmitting(false);
+        return;
       }
 
       setSuccess('Setup completed. You can now log in.');
@@ -210,6 +234,54 @@ const SetupWizard: React.FC<Props> = ({ onComplete }) => {
 
           {step === 2 && (
             <>
+              <h1 className="bc-setup-title">Select Your Business Type</h1>
+              <p className="bc-setup-subtitle">This will customize the terminology used throughout the app.</p>
+
+              <div style={{ display: 'grid', gap: 12, marginBottom: 16 }}>
+                {[
+                  { mode: 'hotel' as BusinessMode, icon: '🏨', title: 'Hotel/Motel', desc: 'Manage rooms, guests, check-ins and check-outs' },
+                  { mode: 'restaurant' as BusinessMode, icon: '🍽️', title: 'Restaurant', desc: 'Manage tables, customers, seating and orders' },
+                  { mode: 'retail' as BusinessMode, icon: '🛍️', title: 'Retail/Shop', desc: 'Manage terminals, customers, and sales' },
+                  { mode: 'salon' as BusinessMode, icon: '💇', title: 'Salon/Spa/Barbershop', desc: 'Manage stations/chairs, customers, and services' },
+                  { mode: 'cafe' as BusinessMode, icon: '☕', title: 'Cafe/Coffee Shop', desc: 'Manage tables, customers, and orders' },
+                ].map(({ mode, icon, title, desc }) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    className={businessMode === mode ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'}
+                    onClick={() => setBusinessMode(mode)}
+                    style={{
+                      padding: '12px 16px',
+                      textAlign: 'left',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      width: '100%',
+                      justifyContent: 'flex-start',
+                      border: businessMode === mode ? '2px solid var(--bm-primary)' : '1px solid var(--app-border)',
+                    }}
+                  >
+                    <span style={{ fontSize: 24 }}>{icon}</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>{title}</div>
+                      <div style={{ fontSize: 12, color: 'var(--app-text-secondary)' }}>{desc}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                className="bc-btn bc-btn-primary bc-auth-primary"
+                onClick={goNext}
+              >
+                Next Step →
+              </button>
+            </>
+          )}
+
+          {step === 3 && (
+            <>
               <h1 className="bc-setup-title">Business Profile</h1>
               <p className="bc-setup-subtitle">Set up your basics. You can change these later.</p>
 
@@ -226,14 +298,49 @@ const SetupWizard: React.FC<Props> = ({ onComplete }) => {
 
               <div className="bc-grid-2">
                 <div className="bc-field">
-                  <label className="bc-label">Currency Symbol</label>
-                  <input
+                  <label className="bc-label">Currency</label>
+                  <select
                     className="bc-input bc-auth-input"
                     value={currencySymbol}
                     onChange={(e) => setCurrencySymbol(e.target.value)}
-                    placeholder="$"
                     disabled={isSubmitting}
-                  />
+                    style={{ appearance: 'none', paddingRight: '2rem' }}
+                  >
+                    <option value="">Select Currency</option>
+                    <option value="AED">AED - United Arab Emirates Dirham</option>
+                    <option value="AUD">AUD - Australian Dollar</option>
+                    <option value="BDT">BDT - Bangladeshi Taka</option>
+                    <option value="BHD">BHD - Bahraini Dinar</option>
+                    <option value="BRL">BRL - Brazilian Real</option>
+                    <option value="CAD">CAD - Canadian Dollar</option>
+                    <option value="CHF">CHF - Swiss Franc</option>
+                    <option value="CNY">CNY - Chinese Yuan</option>
+                    <option value="DKK">DKK - Danish Krone</option>
+                    <option value="EUR">EUR - Euro</option>
+                    <option value="GBP">GBP - British Pound</option>
+                    <option value="HKD">HKD - Hong Kong Dollar</option>
+                    <option value="IDR">IDR - Indonesian Rupiah</option>
+                    <option value="INR">INR - Indian Rupee</option>
+                    <option value="JPY">JPY - Japanese Yen</option>
+                    <option value="KES">KES - Kenyan Shilling</option>
+                    <option value="KWD">KWD - Kuwaiti Dinar</option>
+                    <option value="LKR">LKR - Sri Lankan Rupee</option>
+                    <option value="MYR">MYR - Malaysian Ringgit</option>
+                    <option value="NOK">NOK - Norwegian Krone</option>
+                    <option value="NZD">NZD - New Zealand Dollar</option>
+                    <option value="OMR">OMR - Omani Rial</option>
+                    <option value="PHP">PHP - Philippine Peso</option>
+                    <option value="PKR">PKR - Pakistani Rupee</option>
+                    <option value="QAR">QAR - Qatari Riyal</option>
+                    <option value="SAR">SAR - Saudi Arabian Riyal</option>
+                    <option value="SEK">SEK - Swedish Krona</option>
+                    <option value="SGD">SGD - Singapore Dollar</option>
+                    <option value="THB">THB - Thai Baht</option>
+                    <option value="TRY">TRY - Turkish Lira</option>
+                    <option value="TWD">TWD - Taiwan Dollar</option>
+                    <option value="USD">USD - US Dollar</option>
+                    <option value="ZAR">ZAR - South African Rand</option>
+                  </select>
                 </div>
 
                 <div className="bc-field">

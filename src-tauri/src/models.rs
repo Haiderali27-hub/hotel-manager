@@ -63,12 +63,118 @@ pub type ActiveGuestRow = ActiveCustomerRow;
 pub struct MenuItem {
     pub id: i64,
     pub name: String,
+    pub sku: Option<String>,
+    pub barcode: Option<String>,
     pub price: f64,
     pub category: String,
+    pub description: String,
     pub is_available: bool,
     pub stock_quantity: i32,
     pub track_stock: i32,
     pub low_stock_limit: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct StockAdjustmentItemInput {
+    pub menu_item_id: i64,
+    pub mode: String, // set | add | remove
+    pub quantity: i32,
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct StockAdjustmentSummary {
+    pub id: i64,
+    pub adjustment_date: String,
+    pub reason: Option<String>,
+    pub notes: Option<String>,
+    pub item_count: i64,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct StockAdjustmentItemRow {
+    pub id: i64,
+    pub adjustment_id: i64,
+    pub menu_item_id: i64,
+    pub item_name: String,
+    pub previous_stock: i32,
+    pub quantity_change: i32,
+    pub new_stock: i32,
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct StockAdjustmentDetails {
+    pub adjustment: StockAdjustmentSummary,
+    pub items: Vec<StockAdjustmentItemRow>,
+}
+
+// ===== SALES RETURNS / REFUNDS =====
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SaleReturnItemInput {
+    pub sale_item_id: i64,
+    pub quantity: i32,
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ReturnableSaleItem {
+    pub sale_item_id: i64,
+    pub menu_item_id: Option<i64>,
+    pub item_name: String,
+    pub unit_price: f64,
+    pub sold_qty: i32,
+    pub returned_qty: i32,
+    pub remaining_qty: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SaleReturnSummary {
+    pub id: i64,
+    pub sale_id: i64,
+    pub return_date: String,
+    pub refund_method: Option<String>,
+    pub refund_amount: f64,
+    pub item_count: i64,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SaleReturnItemRow {
+    pub id: i64,
+    pub return_id: i64,
+    pub sale_item_id: i64,
+    pub menu_item_id: Option<i64>,
+    pub item_name: String,
+    pub unit_price: f64,
+    pub quantity: i32,
+    pub line_total: f64,
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SaleReturnDetails {
+    pub ret: SaleReturnSummary,
+    pub items: Vec<SaleReturnItemRow>,
+}
+
+// ===== BUSINESS MODE STATUS =====
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BusinessModeStatus {
+    pub mode: String,
+    pub locked: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ProductCategory {
+    pub id: i64,
+    pub name: String,
+    pub color: Option<String>,
+    pub emoji: Option<String>,
+    pub created_at: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -230,6 +336,29 @@ pub struct SaleDetails {
 // Backwards-compatible alias
 pub type FoodOrderDetails = SaleDetails;
 
+// ===== PAYMENTS (Partial / Pay-Later) =====
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SalePayment {
+    pub id: i64,
+    pub sale_id: i64,
+    pub amount: f64,
+    pub method: String,
+    pub note: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SalePaymentSummary {
+    pub sale_id: i64,
+    pub total_amount: f64,
+    pub amount_paid: f64,
+    pub balance_due: f64,
+    pub paid: bool,
+    pub paid_at: Option<String>,
+    pub payments: Vec<SalePayment>,
+}
+
 // ===== INVENTORY MODELS =====
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -268,4 +397,119 @@ pub struct ExpenseRecord {
     pub category: String,
     pub description: Option<String>,
     pub amount: f64,
+}
+
+// ===== SUPPLIERS & PURCHASES (Stock-In) =====
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Supplier {
+    pub id: i64,
+    pub name: String,
+    pub phone: Option<String>,
+    pub email: Option<String>,
+    pub address: Option<String>,
+    pub notes: Option<String>,
+    pub is_active: bool,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PurchaseItemInput {
+    pub menu_item_id: Option<i64>,
+    pub item_name: String,
+    pub quantity: i32,
+    pub unit_cost: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PurchaseItemRow {
+    pub id: i64,
+    pub purchase_id: i64,
+    pub menu_item_id: Option<i64>,
+    pub item_name: String,
+    pub quantity: i32,
+    pub unit_cost: f64,
+    pub line_total: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PurchaseSummary {
+    pub id: i64,
+    pub purchase_date: String,
+    pub supplier_id: Option<i64>,
+    pub supplier_name: Option<String>,
+    pub reference: Option<String>,
+    pub notes: Option<String>,
+    pub total_amount: f64,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PurchaseDetails {
+    pub purchase: PurchaseSummary,
+    pub items: Vec<PurchaseItemRow>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SupplierPayment {
+    pub id: i64,
+    pub supplier_id: i64,
+    pub purchase_id: Option<i64>,
+    pub amount: f64,
+    pub method: String,
+    pub note: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SupplierBalanceSummary {
+    pub supplier_id: i64,
+    pub supplier_name: String,
+    pub total_purchases: f64,
+    pub amount_paid: f64,
+    pub balance_due: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CustomerBalanceSummary {
+    pub customer_id: i64,
+    pub customer_name: String,
+    pub total_sales: f64,
+    pub amount_paid: f64,
+    pub balance_due: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CustomerSaleBalanceRow {
+    pub sale_id: i64,
+    pub created_at: String,
+    pub total_amount: f64,
+    pub amount_paid: f64,
+    pub balance_due: f64,
+    pub paid: bool,
+}
+
+// ===== LOYALTY SYSTEM MODELS (Phase 5) =====
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PointTransaction {
+    pub id: i64,
+    pub customer_id: i64,
+    pub order_id: Option<i64>,
+    pub points_change: i64,
+    pub reason: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LoyaltyConfig {
+    pub points_per_dollar: f64, // e.g., 0.1 = 10 cents earns 1 point
+    pub dollars_per_point: f64, // e.g., 0.1 = 1 point = 10 cents discount
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RedeemPointsResult {
+    pub discount_amount: f64,
+    pub points_used: i64,
+    pub remaining_points: i64,
 }

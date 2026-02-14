@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useCurrency } from '../context/CurrencyContext';
 import { labels, useLabels, type BusinessMode } from '../context/LabelContext';
 import { useNotification } from '../context/NotificationContext';
+import { useTheme } from '../context/ThemeContext';
 import UserManagement from './UserManagement';
 
 interface SecurityQuestion {
@@ -15,6 +16,7 @@ interface SecurityQuestion {
 type SettingsTab = 'general' | 'users' | 'branding' | 'database';
 
 const Settings: React.FC = () => {
+  const { colors, theme } = useTheme();
   const { showSuccess, showError } = useNotification();
   const { currencyCode, locale, supportedCurrencies, setCurrencyCode, setLocale, formatMoney } = useCurrency();
   const { current: label, mode: businessMode, setMode: setBusinessMode } = useLabels();
@@ -359,7 +361,7 @@ const Settings: React.FC = () => {
   };
 
   return (
-    <div style={{ padding: '24px', height: '100%', overflow: 'auto' }}>
+    <div style={{ padding: '24px', height: '100%', overflow: 'auto', minHeight: '100vh', backgroundColor: theme === 'dark' ? colors.primary : '#c7e2eb' }}>
       <div className="bc-card" style={{ borderRadius: 10, padding: 16, marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
           <div>

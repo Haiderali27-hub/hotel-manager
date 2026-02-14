@@ -500,10 +500,10 @@ const Dashboard: React.FC = () => {
                 fontWeight: '600',
                 background:
                   userRole === 'admin'
-                    ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                    ? 'linear-gradient(135deg, #052659 0%, #5483B3 100%)'
                     : userRole === 'manager'
-                    ? 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)'
-                    : 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+                    ? 'linear-gradient(135deg, #5483B3 0%, #7DA0CA 100%)'
+                    : 'linear-gradient(135deg, #7DA0CA 0%, #C1E8FF 100%)',
               }}
             >
               {userRole === 'admin' ? 'Admin' : userRole === 'manager' ? 'Manager' : 'Staff'}

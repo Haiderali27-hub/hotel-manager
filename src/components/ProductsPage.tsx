@@ -1,18 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MenuItem, NewMenuItem } from '../api/client';
 import {
-  addMenuItem,
-  addProductCategory,
-  addProductCategoryWithStyle,
-  deleteMenuItem,
-  deleteProductCategory,
-  getBarcodeEnabled,
-  getMenuItems,
-  getProductCategories,
-  renameProductCategory,
-  updateMenuItem,
-  updateProductCategory,
-  type ProductCategory,
+    addMenuItem,
+    addProductCategory,
+    addProductCategoryWithStyle,
+    deleteMenuItem,
+    deleteProductCategory,
+    getBarcodeEnabled,
+    getMenuItems,
+    getProductCategories,
+    renameProductCategory,
+    updateMenuItem,
+    updateProductCategory,
+    type ProductCategory,
 } from '../api/client';
 import { useCurrency } from '../context/CurrencyContext';
 import { useNotification } from '../context/NotificationContext';
@@ -48,7 +48,7 @@ const defaultDraft: ProductDraft = {
 };
 
 const ProductsPage: React.FC<ProductsPageProps> = ({ onBack }) => {
-  const { colors } = useTheme();
+  const { colors, theme } = useTheme();
   const { formatMoney } = useCurrency();
   const { showError, showSuccess } = useNotification();
 
@@ -400,7 +400,7 @@ const ProductsPage: React.FC<ProductsPageProps> = ({ onBack }) => {
   };
 
   return (
-    <div style={{ padding: '24px', minHeight: '100vh', background: colors.primary, color: colors.text }}>
+    <div style={{ padding: '24px', minHeight: '100vh', background: theme === 'dark' ? colors.primary : '#c7e2eb', color: colors.text }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <button type="button" className="bc-btn bc-btn-outline" onClick={onBack} style={{ width: 'auto' }}>

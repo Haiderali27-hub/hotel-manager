@@ -46,24 +46,24 @@ interface ThemeContextType {
 }
 
 const lightTheme: ThemeColors = {
-  // Background colors - BizCore Phase 4 Light Palette
-  primary: '#fdfdfd',
-  secondary: '#e8eaec',
-  surface: '#e8eaec',
-  card: '#e8eaec',
+  // Background colors - New Blue Palette
+  primary: '#ffffff',
+  secondary: '#C1E8FF',
+  surface: '#ffffff',
+  card: '#ffffff',
   
   // Text colors
-  text: '#845c58',
-  textSecondary: '#8892a9',
-  textMuted: '#8892a9',
+  text: '#021024',
+  textSecondary: '#052659',
+  textMuted: '#5483B3',
   
   // Border colors
-  border: '#d2d6db',
-  borderLight: '#e8eaec',
+  border: '#7DA0CA',
+  borderLight: '#C1E8FF',
   
   // Interactive colors
-  accent: '#2563EB',
-  accentHover: '#1D4ED8',
+  accent: '#5483B3',
+  accentHover: '#7DA0CA',
   success: '#16A34A',
   error: '#DC2626',
   warning: '#D97706',
@@ -72,32 +72,32 @@ const lightTheme: ThemeColors = {
   successBg: 'rgba(22, 163, 74, 0.12)',
   errorBg: 'rgba(220, 38, 38, 0.12)',
   warningBg: 'rgba(217, 119, 6, 0.12)',
-  infoBg: 'rgba(37, 99, 235, 0.12)',
+  infoBg: 'rgba(84, 131, 179, 0.12)',
   
   // Special colors
-  shadow: 'rgba(0, 0, 0, 0.18)',
-  overlay: 'rgba(0, 0, 0, 0.55)'
+  shadow: 'rgba(2, 16, 36, 0.18)',
+  overlay: 'rgba(2, 16, 36, 0.55)'
 };
 
 const darkTheme: ThemeColors = {
-  // Background colors - BizCore Phase 4 Dark Palette
-  primary: '#0b0b0b',
-  secondary: '#1e1e1f',
-  surface: '#1e1e1f',
-  card: '#1e1e1f',
+  // Background colors - New Blue Palette
+  primary: '#021024',
+  secondary: '#052659',
+  surface: '#052659',
+  card: '#052659',
   
   // Text colors
-  text: '#cdd0dc',
-  textSecondary: '#958f9e',
-  textMuted: '#958f9e',
+  text: '#C1E8FF',
+  textSecondary: '#7DA0CA',
+  textMuted: '#5483B3',
   
   // Border colors
-  border: '#393741',
-  borderLight: '#1e1e1f',
+  border: '#5483B3',
+  borderLight: '#052659',
   
   // Interactive colors
-  accent: '#60A5FA',
-  accentHover: '#93C5FD',
+  accent: '#5483B3',
+  accentHover: '#7DA0CA',
   success: '#22C55E',
   error: '#EF4444',
   warning: '#F59E0B',
@@ -106,11 +106,11 @@ const darkTheme: ThemeColors = {
   successBg: 'rgba(34, 197, 94, 0.16)',
   errorBg: 'rgba(239, 68, 68, 0.16)',
   warningBg: 'rgba(245, 158, 11, 0.16)',
-  infoBg: 'rgba(96, 165, 250, 0.12)',
+  infoBg: 'rgba(84, 131, 179, 0.16)',
   
   // Special colors
   shadow: 'rgba(0, 0, 0, 0.45)',
-  overlay: 'rgba(0, 0, 0, 0.7)'
+  overlay: 'rgba(2, 16, 36, 0.8)'
 };
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);

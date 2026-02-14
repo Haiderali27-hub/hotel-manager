@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
 import {
-  getCustomers,
-  getExpensesByDateRange,
-  getSales,
-  type Customer,
-  type ExpenseRecord,
-  type SaleSummary
+    getCustomers,
+    getExpensesByDateRange,
+    getSales,
+    type Customer,
+    type ExpenseRecord,
+    type SaleSummary
 } from '../api/client';
 import logoImage from '../assets/Logo/logo.png';
 import { useCurrency } from '../context/CurrencyContext';
@@ -36,7 +36,7 @@ interface WeeklyData {
 }
 
 const FinancialReport: React.FC<FinancialReportProps> = ({ onBack }) => {
-  const { colors } = useTheme();
+  const { colors, theme } = useTheme();
   const { showError, showSuccess, showWarning } = useNotification();
   const { formatMoney } = useCurrency();
   const { current: label } = useLabels();
@@ -419,7 +419,7 @@ const FinancialReport: React.FC<FinancialReportProps> = ({ onBack }) => {
     padding: '2rem',
     color: colors.text,
     minHeight: '100vh',
-    backgroundColor: colors.primary
+    backgroundColor: theme === 'dark' ? colors.primary : '#c7e2eb'
   };
 
   const cardStyle: React.CSSProperties = {

@@ -1,15 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  addSaleReturn,
-  getSaleReturnDetails,
-  getSaleReturnableItems,
-  getSaleReturns,
-  getSales,
-  printSaleReturnReceipt,
-  type ReturnableSaleItem,
-  type SaleReturnDetails,
-  type SaleReturnSummary,
-  type SaleSummary,
+    addSaleReturn,
+    getSaleReturnDetails,
+    getSaleReturnableItems,
+    getSaleReturns,
+    getSales,
+    printSaleReturnReceipt,
+    type ReturnableSaleItem,
+    type SaleReturnDetails,
+    type SaleReturnSummary,
+    type SaleSummary,
 } from '../api/client';
 import { useCurrency } from '../context/CurrencyContext';
 import { useNotification } from '../context/NotificationContext';
@@ -318,7 +318,7 @@ const ReturnsPage: React.FC<ReturnsPageProps> = ({ onBack }) => {
   };
 
   return (
-    <div style={{ padding: '24px', backgroundColor: colors.primary, minHeight: '100vh', color: colors.text }}>
+    <div style={{ padding: '24px', backgroundColor: theme === 'dark' ? colors.primary : '#c7e2eb', minHeight: '100vh', color: colors.text }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 900, color: colors.text }}>Returns & Refunds</h1>

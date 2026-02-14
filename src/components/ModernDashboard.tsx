@@ -57,6 +57,13 @@ const ModernDashboard: React.FC = () => {
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
     new Set(['Sales & Customers', 'Inventory & Products', 'Financial', 'Management'])
   );
+  const [totalProducts, setTotalProducts] = useState(0);
+  const [totalCustomers, setTotalCustomers] = useState(0);
+  const [totalStock, setTotalStock] = useState(0);
+  const [outOfStock, setOutOfStock] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [chartDateRange, setChartDateRange] = useState<'6months' | '3months' | '1month'>('6months');
+  const [hoveredDataPoint, setHoveredDataPoint] = useState<number | null>(null);
 
   useEffect(() => {
     loadDashboardData();
@@ -85,6 +92,27 @@ const ModernDashboard: React.FC = () => {
         low_stock_limit: raw.low_stock_limit ?? raw.lowStockLimit ?? 0,
       }));
       setLowStockItems(lowStock);
+
+      // Fetch additional dashboard metrics
+      try {
+        const products = await invoke<any[]>('get_menu_items');
+        setTotalProducts(products.length);
+        
+        const totalStockQty = products.reduce((sum, p) => sum + (p.stock_quantity || 0), 0);
+        setTotalStock(totalStockQty);
+        
+        const outOfStockCount = products.filter(p => (p.stock_quantity || 0) === 0).length;
+        setOutOfStock(outOfStockCount);
+      } catch (e) {
+        console.error('Failed to load products:', e);
+      }
+
+      try {
+        const customers = await invoke<any[]>('get_guests');
+        setTotalCustomers(customers.length);
+      } catch (e) {
+        console.error('Failed to load customers:', e);
+      }
     } catch (err) {
       console.error('Failed to load stats:', err);
     }
@@ -114,7 +142,7 @@ const ModernDashboard: React.FC = () => {
       category: 'Sales & Customers',
       items: [
         { id: 'pos', label: posNavLabel },
-        { id: 'accounts', label: 'Accounts', managerOnly: true },
+        { id: 'accounts', label: 'Accounts/Customers', managerOnly: true },
       ],
     },
     {
@@ -252,15 +280,419 @@ const ModernDashboard: React.FC = () => {
 
   const renderDashboard = () => (
     <div style={{ padding: '24px' }}>
-      <div style={{ marginBottom: '18px' }}>
-        <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 700, color: colors.text }}>
-          Dashboard
-        </h1>
-        <div style={{ marginTop: '4px', fontSize: '14px', color: colors.textSecondary }}>
-          Command Center
+      {/* Welcome Header */}
+      <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 700, color: colors.text }}>
+            Welcome {businessName}!
+          </h1>
+          <div style={{ marginTop: '4px', fontSize: '14px', color: colors.textSecondary }}>
+            Overview of your business performance
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <input
+            type="text"
+            placeholder="Search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              padding: '10px 16px',
+              borderRadius: '8px',
+              border: `1px solid ${colors.border}`,
+              backgroundColor: colors.surface,
+              color: colors.text,
+              fontSize: '14px',
+              width: '250px',
+              outline: 'none'
+            }}
+          />
         </div>
       </div>
 
+      {/* Key Metrics - 4 Cards */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+          gap: '16px',
+          marginBottom: '24px',
+        }}
+      >
+        <MetricCard 
+          title="Total Products" 
+          value={String(totalProducts)} 
+          icon="📦"
+          color="#5483B3"
+        />
+        <MetricCard 
+          title="Orders" 
+          value={String(totalOrdersToday)} 
+          icon="🛒"
+          helper="Today"
+          color="#8B5CF6"
+        />
+        <MetricCard 
+          title="Total Stock" 
+          value={String(totalStock)} 
+          icon="📊"
+          color="#10B981"
+        />
+        <MetricCard 
+          title="Out of Stock" 
+          value={String(outOfStock)} 
+          icon="⚠️"
+          color="#EF4444"
+        />
+      </div>
+
+      {/* Second Row - 3 Columns */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+          gap: '16px',
+          marginBottom: '18px',
+        }}
+      >
+        {/* No of customers */}
+        <div className="bc-card" style={{ borderRadius: '12px', padding: '20px' }}>
+          <div style={{ fontSize: '14px', fontWeight: 700, color: colors.textSecondary, marginBottom: '16px' }}>
+            No of users
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div style={{
+              width: '60px',
+              height: '60px',
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '28px'
+            }}>
+              👥
+            </div>
+            <div>
+              <div style={{ fontSize: '32px', fontWeight: 800, color: colors.text }}>
+                {totalCustomers}
+              </div>
+              <div style={{ fontSize: '13px', color: colors.textSecondary, marginTop: '4px' }}>
+                Total Customers
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Inventory Values Pie Chart */}
+        <div className="bc-card" style={{ borderRadius: '12px', padding: '20px' }}>
+          <div style={{ fontSize: '14px', fontWeight: 700, color: colors.textSecondary, marginBottom: '16px' }}>
+            Inventory Values
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+            {/* Simple Pie Chart Visualization */}
+            <div style={{ position: 'relative', width: '100px', height: '100px' }}>
+              <div style={{
+                width: '100px',
+                height: '100px',
+                borderRadius: '50%',
+                background: `conic-gradient(#10B981 0% ${(totalStock > 0 ? ((totalStock - outOfStock) / totalStock * 100) : 0)}%, #EF4444 ${(totalStock > 0 ? ((totalStock - outOfStock) / totalStock * 100) : 0)}% 100%)`,
+              }}></div>
+              <div style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                fontSize: '20px',
+                fontWeight: 800,
+                color: colors.text
+              }}>
+                {totalStock > 0 ? Math.round((totalStock - outOfStock) / totalStock * 100) : 0}%
+              </div>
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                <div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#10B981' }}></div>
+                <span style={{ fontSize: '13px', color: colors.textSecondary }}>Available units</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#EF4444' }}></div>
+                <span style={{ fontSize: '13px', color: colors.textSecondary }}>Out of stock</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Top Stores/Products */}
+        <div className="bc-card" style={{ borderRadius: '12px', padding: '20px' }}>
+          <div style={{ fontSize: '14px', fontWeight: 700, color: colors.textSecondary, marginBottom: '16px' }}>
+            Top 5 Products
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {lowStockItems.slice(0, 5).map((item, idx) => {
+              const barColors = ['#8B5CF6', '#7C3AED', '#6366F1', '#4F46E5', '#5483B3'];
+              return (
+                <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ fontSize: '12px', color: colors.textSecondary, width: '20px' }}>{idx + 1}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '13px', color: colors.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {item.name}
+                    </div>
+                    <div style={{
+                      height: '6px',
+                      backgroundColor: theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+                      borderRadius: '3px',
+                      marginTop: '4px',
+                      overflow: 'hidden'
+                    }}>
+                      <div style={{
+                        height: '100%',
+                        width: `${Math.min(100, (item.stock_quantity / (item.low_stock_limit * 2)) * 100)}%`,
+                        backgroundColor: barColors[idx % barColors.length],
+                        borderRadius: '3px'
+                      }}></div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: colors.text }}>
+                    {item.stock_quantity}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Expense vs Profit Line Chart */}
+      <div className="bc-card" style={{ borderRadius: '12px', padding: '20px', marginBottom: '18px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <div style={{ fontSize: '16px', fontWeight: 700, color: colors.text }}>
+            Expense vs Profit
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={() => setChartDateRange('1month')}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '6px',
+                border: `1px solid ${colors.border}`,
+                backgroundColor: chartDateRange === '1month' ? colors.accent : 'transparent',
+                color: chartDateRange === '1month' ? '#ffffff' : colors.textSecondary,
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+            >
+              1M
+            </button>
+            <button
+              onClick={() => setChartDateRange('3months')}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '6px',
+                border: `1px solid ${colors.border}`,
+                backgroundColor: chartDateRange === '3months' ? colors.accent : 'transparent',
+                color: chartDateRange === '3months' ? '#ffffff' : colors.textSecondary,
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+            >
+              3M
+            </button>
+            <button
+              onClick={() => setChartDateRange('6months')}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '6px',
+                border: `1px solid ${colors.border}`,
+                backgroundColor: chartDateRange === '6months' ? colors.accent : 'transparent',
+                color: chartDateRange === '6months' ? '#ffffff' : colors.textSecondary,
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+            >
+              6M
+            </button>
+          </div>
+        </div>
+        
+        {/* Line Chart */}
+        <div style={{ position: 'relative', height: '220px', paddingTop: '20px' }}>
+          {/* Y-axis labels */}
+          <div style={{ position: 'absolute', left: '0', top: '20px', bottom: '30px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', fontSize: '11px', color: colors.textSecondary }}>
+            <div>40k</div>
+            <div>30k</div>
+            <div>20k</div>
+            <div>10k</div>
+          </div>
+          
+          {/* Grid lines */}
+          <div style={{ position: 'absolute', left: '40px', right: '0', top: '20px', bottom: '30px' }}>
+            {[0, 1, 2, 3].map(i => (
+              <div key={i} style={{ position: 'absolute', left: 0, right: 0, top: `${i * 25}%`, height: '1px', backgroundColor: colors.border, opacity: 0.3 }}></div>
+            ))}
+          </div>
+          
+          {/* Line chart area */}
+          <div 
+            style={{ position: 'absolute', left: '40px', right: '0', top: '20px', bottom: '30px' }}
+            onMouseLeave={() => setHoveredDataPoint(null)}
+          >
+            <svg style={{ width: '100%', height: '100%' }} preserveAspectRatio="none">
+              {/* Define gradients for area fills */}
+              <defs>
+                <linearGradient id="profitGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stopColor="#10B981" stopOpacity="0.3" />
+                  <stop offset="100%" stopColor="#10B981" stopOpacity="0.05" />
+                </linearGradient>
+                <linearGradient id="expenseGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stopColor="#F59E0B" stopOpacity="0.3" />
+                  <stop offset="100%" stopColor="#F59E0B" stopOpacity="0.05" />
+                </linearGradient>
+              </defs>
+              
+              {/* Area fill for Profit (green) */}
+              <polygon
+                points="0,40 16.6,35 33.3,38 50,32 66.6,28 83.3,25 100,20 100,100 0,100"
+                fill="url(#profitGradient)"
+              />
+              
+              {/* Area fill for Expense (orange) */}
+              <polygon
+                points="0,50 16.6,48 33.3,52 50,45 66.6,38 83.3,42 100,35 100,100 0,100"
+                fill="url(#expenseGradient)"
+              />
+              
+              {/* Profit line (green) - slight upward trend */}
+              <polyline
+                points="0,40 16.6,35 33.3,38 50,32 66.6,28 83.3,25 100,20"
+                fill="none"
+                stroke="#10B981"
+                strokeWidth="3"
+                vectorEffect="non-scaling-stroke"
+              />
+              
+              {/* Expense line (orange) - fluctuating */}
+              <polyline
+                points="0,50 16.6,48 33.3,52 50,45 66.6,38 83.3,42 100,35"
+                fill="none"
+                stroke="#F59E0B"
+                strokeWidth="3"
+                vectorEffect="non-scaling-stroke"
+              />
+              
+              {/* Interactive data points */}
+              {[
+                { x: 0, profitY: 40, expenseY: 50, month: chartDateRange === '6months' ? 'Aug' : chartDateRange === '3months' ? 'Nov' : 'Jan', profit: 24000, expense: 20000 },
+                { x: 16.6, profitY: 35, expenseY: 48, month: chartDateRange === '6months' ? 'Sep' : chartDateRange === '3months' ? 'Dec' : 'Jan 15', profit: 26000, expense: 20800 },
+                { x: 33.3, profitY: 38, expenseY: 52, month: chartDateRange === '6months' ? 'Oct' : chartDateRange === '3months' ? 'Jan' : 'Feb 1', profit: 24800, expense: 19200 },
+                { x: 50, profitY: 32, expenseY: 45, month: chartDateRange === '6months' ? 'Nov' : chartDateRange === '3months' ? 'Jan 15' : 'Feb 8', profit: 27200, expense: 22000 },
+                { x: 66.6, profitY: 28, expenseY: 38, month: chartDateRange === '6months' ? 'Dec' : chartDateRange === '3months' ? 'Feb' : 'Feb 15', profit: 28800, expense: 24800 },
+                { x: 83.3, profitY: 25, expenseY: 42, month: chartDateRange === '6months' ? 'Jan' : chartDateRange === '3months' ? 'Feb 15' : 'Feb 22', profit: 30000, expense: 23200 },
+                { x: 100, profitY: 20, expenseY: 35, month: chartDateRange === '6months' ? 'Feb' : chartDateRange === '3months' ? 'Feb' : 'Mar', profit: 32000, expense: 26000 },
+              ].map((point, idx) => (
+                <g key={idx}>
+                  {/* Invisible hover area */}
+                  <rect
+                    x={`${point.x - 8}%`}
+                    y="0%"
+                    width="16%"
+                    height="100%"
+                    fill="transparent"
+                    style={{ cursor: 'pointer' }}
+                    onMouseEnter={() => setHoveredDataPoint(idx)}
+                  />
+                  {/* Visible dots on hover */}
+                  {hoveredDataPoint === idx && (
+                    <>
+                      <circle cx={`${point.x}%`} cy={`${point.profitY}%`} r="5" fill="#10B981" stroke="white" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+                      <circle cx={`${point.x}%`} cy={`${point.expenseY}%`} r="5" fill="#F59E0B" stroke="white" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+                    </>
+                  )}
+                </g>
+              ))}
+            </svg>
+            
+            {/* Tooltip on hover */}
+            {hoveredDataPoint !== null && (() => {
+              const dataPoints = [
+                { x: 0, profitY: 40, expenseY: 50, month: chartDateRange === '6months' ? 'Aug' : chartDateRange === '3months' ? 'Nov' : 'Jan', profit: 24000, expense: 20000 },
+                { x: 16.6, profitY: 35, expenseY: 48, month: chartDateRange === '6months' ? 'Sep' : chartDateRange === '3months' ? 'Dec' : 'Jan 15', profit: 26000, expense: 20800 },
+                { x: 33.3, profitY: 38, expenseY: 52, month: chartDateRange === '6months' ? 'Oct' : chartDateRange === '3months' ? 'Jan' : 'Feb 1', profit: 24800, expense: 19200 },
+                { x: 50, profitY: 32, expenseY: 45, month: chartDateRange === '6months' ? 'Nov' : chartDateRange === '3months' ? 'Jan 15' : 'Feb 8', profit: 27200, expense: 22000 },
+                { x: 66.6, profitY: 28, expenseY: 38, month: chartDateRange === '6months' ? 'Dec' : chartDateRange === '3months' ? 'Feb' : 'Feb 15', profit: 28800, expense: 24800 },
+                { x: 83.3, profitY: 25, expenseY: 42, month: chartDateRange === '6months' ? 'Jan' : chartDateRange === '3months' ? 'Feb 15' : 'Feb 22', profit: 30000, expense: 23200 },
+                { x: 100, profitY: 20, expenseY: 35, month: chartDateRange === '6months' ? 'Feb' : chartDateRange === '3months' ? 'Feb' : 'Mar', profit: 32000, expense: 26000 },
+              ];
+              const point = dataPoints[hoveredDataPoint];
+              return (
+                <div style={{
+                  position: 'absolute',
+                  left: `${point.x}%`,
+                  top: `${Math.min(point.profitY, point.expenseY) - 5}%`,
+                  transform: 'translate(-50%, -100%)',
+                  backgroundColor: theme === 'dark' ? 'rgba(2, 16, 36, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '8px',
+                  padding: '10px 12px',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                  zIndex: 1000,
+                  pointerEvents: 'none',
+                  minWidth: '140px',
+                  whiteSpace: 'nowrap'
+                }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: colors.text, marginBottom: '6px' }}>
+                    {point.month}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <div style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#10B981' }}></div>
+                    <span style={{ fontSize: '11px', color: colors.textSecondary }}>Profit:</span>
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: colors.text, marginLeft: 'auto' }}>
+                      {formatMoney(point.profit)}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#F59E0B' }}></div>
+                    <span style={{ fontSize: '11px', color: colors.textSecondary }}>Expense:</span>
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: colors.text, marginLeft: 'auto' }}>
+                      {formatMoney(point.expense)}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+          
+          {/* X-axis labels */}
+          <div style={{ position: 'absolute', left: '40px', right: '0', bottom: '0', display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: colors.textSecondary }}>
+            {chartDateRange === '6months' ? 
+              ['Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb'].map((month, idx) => <div key={idx}>{month}</div>) :
+              chartDateRange === '3months' ?
+              ['Nov', 'Dec', 'Jan', 'Jan 15', 'Feb', 'Feb 15', 'Feb'].map((month, idx) => <div key={idx}>{month}</div>) :
+              ['Jan', 'Jan 15', 'Feb 1', 'Feb 8', 'Feb 15', 'Feb 22', 'Mar'].map((month, idx) => <div key={idx}>{month}</div>)
+            }
+          </div>
+        </div>
+        
+        {/* Legend */}
+        <div style={{ display: 'flex', gap: '24px', marginTop: '20px', justifyContent: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ width: '30px', height: '3px', backgroundColor: '#F59E0B', borderRadius: '2px' }}></div>
+            <span style={{ fontSize: '13px', color: colors.textSecondary }}>Expense</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ width: '30px', height: '3px', backgroundColor: '#10B981', borderRadius: '2px' }}></div>
+            <span style={{ fontSize: '13px', color: colors.textSecondary }}>Profit</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Revenue Today */}
       <div
         style={{
           display: 'grid',
@@ -270,8 +702,8 @@ const ModernDashboard: React.FC = () => {
         }}
       >
         <SpecStatCard title="Gross Revenue" value={formatMoney(grossRevenueToday)} helper="Today" />
-        <SpecStatCard title="Total Orders" value={String(totalOrdersToday)} helper="Today" />
-        <SpecStatCard title="Low Stock Alerts" value={String(lowStockCount)} helper="Needs attention" />
+        <SpecStatCard title="Paid Orders" value={String(paidCount)} helper="Completed" />
+        <SpecStatCard title="Pending Payment" value={String(unpaidCount)} helper="Awaiting" />
       </div>
 
       <div
@@ -468,24 +900,76 @@ const ModernDashboard: React.FC = () => {
     <div style={{
       display: 'flex',
       height: '100vh',
-      backgroundColor: colors.primary,
+      backgroundColor: theme === 'dark' ? colors.primary : '#c7e2eb',
       overflow: 'hidden'
     }}>
       {/* Modern Sidebar */}
       <div style={{
-        width: sidebarVisible ? '250px' : '0px',
-        backgroundColor: colors.surface,
+        width: sidebarVisible ? '280px' : '0px',
+        backgroundColor: theme === 'dark' ? colors.surface : '#ffffff',
         borderRight: sidebarVisible ? `1px solid ${colors.border}` : 'none',
         display: 'flex',
         flexDirection: 'column',
-        padding: sidebarVisible ? '18px 14px' : '0px',
-        overflow: 'hidden',
-        transition: 'width 0.22s ease, padding 0.22s ease'
+        padding: sidebarVisible ? '20px 16px' : '0px',
+        overflowY: 'auto',
+        transition: 'width 0.22s ease, padding 0.22s ease',
+        position: 'relative'
       }}>
+        {/* User Profile at Top */}
+        <div style={{
+          marginBottom: '24px',
+          paddingBottom: '20px',
+          borderBottom: `1px solid ${colors.border}`
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            marginBottom: '12px'
+          }}>
+            <div style={{
+              width: '50px',
+              height: '50px',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #052659 0%, #5483B3 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '20px',
+              fontWeight: '700',
+              color: 'white'
+            }}>
+              {businessName.charAt(0).toUpperCase()}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontSize: '15px',
+                fontWeight: '700',
+                color: colors.text,
+                marginBottom: '2px',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}>
+                Admin #{adminId}
+              </div>
+              <div style={{
+                fontSize: '13px',
+                color: colors.textSecondary,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}>
+                admin@{businessName.toLowerCase().replace(/\s+/g, '')}.com
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Logo/Brand */}
         <div style={{
-          marginBottom: '2rem',
-          paddingBottom: '1.5rem',
+          marginBottom: '24px',
+          paddingBottom: '20px',
           borderBottom: `1px solid ${colors.border}`
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
@@ -493,106 +977,99 @@ const ModernDashboard: React.FC = () => {
               fontSize: '1.5rem',
               fontWeight: '700',
               margin: 0,
-              marginBottom: '0.25rem',
               color: colors.text,
               minWidth: 0
             }}>
               {businessName}
             </h1>
-
             <button
               type="button"
               onClick={() => setSidebarVisible(false)}
               title="Hide sidebar"
               style={{
-                width: '34px',
-                height: '34px',
-                borderRadius: '10px',
+                width: '32px',
+                height: '32px',
+                borderRadius: '8px',
                 border: `1px solid ${colors.border}`,
                 background: 'transparent',
                 color: colors.textSecondary,
-                cursor: 'pointer'
+                cursor: 'pointer',
+                fontSize: '18px'
               }}
             >
               ‹
             </button>
           </div>
-          <div style={{ fontSize: '12px', color: colors.textSecondary }}>
-            Offline
-          </div>
-          <div style={{ marginTop: '6px', fontSize: '12px', color: colors.textSecondary }}>
-            Mode: {mode.charAt(0).toUpperCase() + mode.slice(1)}
-          </div>
         </div>
 
-        {/* Navigation */}
-        <nav style={{ flex: 1, overflowY: 'auto' }}>
-          {/* Toggle All Categories Button */}
+        {/* Collapse/Expand All Button */}
+        <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'flex-end' }}>
           <button
             onClick={toggleAllCategories}
+            title={navigationCategories.every(c => expandedCategories.has(c.category)) ? 'Collapse All' : 'Expand All'}
             style={{
-              width: '100%',
+              width: '32px',
+              height: '32px',
+              borderRadius: '8px',
+              border: `1px solid ${colors.border}`,
+              backgroundColor: 'transparent',
+              color: colors.textSecondary,
+              cursor: 'pointer',
+              fontSize: '16px',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '8px 12px',
-              marginBottom: '12px',
-              backgroundColor: 'transparent',
-              border: `1px solid ${colors.border}`,
-              borderRadius: '8px',
-              color: colors.textSecondary,
-              fontSize: '12px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'all 0.2s',
+              justifyContent: 'center',
+              transition: 'all 0.2s'
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.backgroundColor = hoverBg;
-              e.currentTarget.style.borderColor = colors.accent;
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.backgroundColor = 'transparent';
-              e.currentTarget.style.borderColor = colors.border;
             }}
           >
-            <span>{navigationCategories.every(c => expandedCategories.has(c.category)) ? 'Collapse All' : 'Expand All'}</span>
-            <span style={{ fontSize: '14px' }}>☰</span>
+            {navigationCategories.every(c => expandedCategories.has(c.category)) ? '⊟' : '⊞'}
           </button>
+        </div>
 
-          {/* Dashboard - Always shown first */}
-          <button
-            onClick={() => setCurrentPage('dashboard')}
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '1rem',
-              padding: '10px 12px',
-              marginBottom: '16px',
-              backgroundColor: currentPage === 'dashboard' ? hoverBg : 'transparent',
-              border: 'none',
-              borderRadius: '10px',
-              borderLeft: currentPage === 'dashboard' ? `4px solid ${colors.accent}` : '4px solid transparent',
-              color: currentPage === 'dashboard' ? colors.text : colors.textSecondary,
-              fontSize: '14px',
-              fontWeight: currentPage === 'dashboard' ? '600' : '500',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              textAlign: 'left'
-            }}
-            onMouseEnter={(e) => {
-              if (currentPage !== 'dashboard') {
-                e.currentTarget.style.backgroundColor = hoverBg;
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (currentPage !== 'dashboard') {
-                e.currentTarget.style.backgroundColor = 'transparent';
-              }
-            }}
-          >
-            <span>Dashboard</span>
-          </button>
+        {/* Categorized Navigation */}
+        <nav style={{ flex: 1, overflowY: 'auto', position: 'relative' }}>
+          {/* Dashboard - Always first */}
+          <div style={{ position: 'relative', marginBottom: '20px' }}>
+            <button
+              onClick={() => setCurrentPage('dashboard')}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '14px 16px',
+                backgroundColor: currentPage === 'dashboard' ? (theme === 'dark' ? 'rgba(84, 131, 179, 0.15)' : '#E8F4FD') : 'transparent',
+                border: 'none',
+                borderRadius: '12px',
+                borderLeft: currentPage === 'dashboard' ? `4px solid ${colors.accent}` : '4px solid transparent',
+                color: currentPage === 'dashboard' ? colors.accent : colors.text,
+                fontSize: '15px',
+                fontWeight: currentPage === 'dashboard' ? '700' : '600',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                textAlign: 'left'
+              }}
+              onMouseEnter={(e) => {
+                if (currentPage !== 'dashboard') {
+                  e.currentTarget.style.backgroundColor = hoverBg;
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (currentPage !== 'dashboard') {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                }
+              }}
+            >
+              <span style={{ fontSize: '18px' }}>🏠</span>
+              <span>Dashboard</span>
+            </button>
+          </div>
 
           {/* Categorized Navigation */}
           {navigationCategories.map((category) => {
@@ -607,7 +1084,7 @@ const ModernDashboard: React.FC = () => {
             const isExpanded = expandedCategories.has(category.category);
             
             return (
-              <div key={category.category} style={{ marginBottom: '12px' }}>
+              <div key={category.category} style={{ marginBottom: '20px' }}>
                 <button
                   onClick={() => toggleCategory(category.category)}
                   style={{ 
@@ -615,12 +1092,12 @@ const ModernDashboard: React.FC = () => {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    padding: '8px 12px', 
-                    fontSize: '12px', 
-                    fontWeight: 900, 
+                    padding: '6px 8px', 
+                    fontSize: '10px', 
+                    fontWeight: 800, 
                     textTransform: 'uppercase', 
-                    color: colors.text, 
-                    letterSpacing: '0.5px',
+                    color: theme === 'dark' ? '#7DA0CA' : '#052659', 
+                    letterSpacing: '1px',
                     background: 'transparent',
                     border: 'none',
                     cursor: 'pointer',
@@ -635,114 +1112,76 @@ const ModernDashboard: React.FC = () => {
                   }}
                 >
                   <span>{category.category}</span>
-                  <span style={{ fontSize: '16px', transition: 'transform 0.2s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>›</span>
+                  <span style={{ fontSize: '14px', transition: 'transform 0.2s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>›</span>
                 </button>
                 {isExpanded && filteredItems.map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => setCurrentPage(item.id)}
-                    style={{
-                      width: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '1rem',
-                      padding: '10px 12px 10px 20px',
-                      marginBottom: '4px',
-                      backgroundColor: currentPage === item.id ? hoverBg : 'transparent',
-                      border: 'none',
-                      borderRadius: '10px',
-                      borderLeft: currentPage === item.id ? `4px solid ${colors.accent}` : '4px solid transparent',
-                      color: currentPage === item.id ? colors.text : colors.textSecondary,
-                      fontSize: '14px',
-                      fontWeight: currentPage === item.id ? '600' : '500',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                      textAlign: 'left'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (currentPage !== item.id) {
-                        e.currentTarget.style.backgroundColor = hoverBg;
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (currentPage !== item.id) {
-                        e.currentTarget.style.backgroundColor = 'transparent';
-                      }
-                    }}
-                  >
-                    <span>{item.label}</span>
-                  </button>
+                  <div key={item.id} style={{ position: 'relative' }}>
+                    <button
+                      onClick={() => setCurrentPage(item.id)}
+                      style={{
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '12px 12px 12px 20px',
+                        marginBottom: '6px',
+                        marginTop: '2px',
+                        backgroundColor: currentPage === item.id ? (theme === 'dark' ? 'rgba(84, 131, 179, 0.15)' : '#E8F4FD') : 'transparent',
+                        border: 'none',
+                        borderRadius: '12px',
+                        borderLeft: currentPage === item.id ? `4px solid ${colors.accent}` : '4px solid transparent',
+                        color: currentPage === item.id ? colors.accent : colors.text,
+                        fontSize: '14px',
+                        fontWeight: currentPage === item.id ? '700' : '500',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        textAlign: 'left'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (currentPage !== item.id) {
+                          e.currentTarget.style.backgroundColor = hoverBg;
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (currentPage !== item.id) {
+                          e.currentTarget.style.backgroundColor = 'transparent';
+                        }
+                      }}
+                    >
+                      <span>{item.label}</span>
+                    </button>
+                  </div>
                 ))}
               </div>
             );
           })}
         </nav>
 
-        {/* User Profile */}
+        {/* Logout at Bottom */}
         <div style={{
           marginTop: 'auto',
-          paddingTop: '1.5rem',
+          paddingTop: '16px',
           borderTop: `1px solid ${colors.border}`
         }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '1rem',
-            marginBottom: '1rem',
-            padding: '0.75rem',
-            backgroundColor: colors.surface,
-            borderRadius: '10px'
-          }}>
-            <div style={{
-              width: '40px',
-              height: '40px',
-              borderRadius: '50%',
-              backgroundColor: colors.accent,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '1.25rem',
-              fontWeight: '600'
-            }}>
-              {userRole === 'admin' ? 'A' : userRole === 'manager' ? 'M' : 'S'}
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{
-                fontSize: '0.875rem',
-                fontWeight: '600',
-                color: colors.text,
-                marginBottom: '2px'
-              }}>
-                Admin #{adminId}
-              </div>
-              <div style={{
-                fontSize: '0.75rem',
-                color: colors.textSecondary,
-                textTransform: 'capitalize'
-              }}>
-                {userRole || 'admin'}
-              </div>
-            </div>
-          </div>
           <button
             onClick={logout}
             style={{
               width: '100%',
-              padding: '0.75rem',
-              backgroundColor: 'transparent',
-              border: `1px solid ${colors.border}`,
-              borderRadius: '8px',
-              color: colors.error,
-              fontSize: '0.875rem',
+              padding: '12px',
+              backgroundColor: colors.error,
+              border: 'none',
+              borderRadius: '10px',
+              color: 'white',
+              fontSize: '14px',
               fontWeight: '600',
               cursor: 'pointer',
               transition: 'all 0.2s'
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = colors.errorBg;
+              e.currentTarget.style.opacity = '0.9';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
+              e.currentTarget.style.opacity = '1';
             }}
           >
             Logout
@@ -754,7 +1193,7 @@ const ModernDashboard: React.FC = () => {
       <div style={{
         flex: 1,
         overflow: 'auto',
-        backgroundColor: colors.primary,
+        backgroundColor: theme === 'dark' ? colors.primary : '#c7e2eb',
         position: 'relative'
       }}>
         {!sidebarVisible && (
@@ -774,13 +1213,66 @@ const ModernDashboard: React.FC = () => {
               background: colors.surface,
               color: colors.text,
               boxShadow: `0 6px 20px ${colors.shadow}`,
-              cursor: 'pointer'
+              cursor: 'pointer',
+              fontSize: '20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'scale(1.05)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'scale(1)';
             }}
           >
             ☰
           </button>
         )}
         {renderContent()}
+      </div>
+    </div>
+  );
+};
+
+const MetricCard: React.FC<{ title: string; value: string; icon: string; helper?: string; color: string }> = ({ 
+  title, 
+  value, 
+  icon, 
+  helper, 
+  color 
+}) => {
+  const { colors } = useTheme();
+  
+  return (
+    <div className="bc-card" style={{ borderRadius: '12px', padding: '20px', position: 'relative', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <div style={{ fontSize: '13px', color: colors.textSecondary, fontWeight: 600, marginBottom: '8px' }}>
+            {title}
+          </div>
+          <div style={{ fontSize: '28px', fontWeight: 800, color: colors.text, marginBottom: '4px' }}>
+            {value}
+          </div>
+          {helper && (
+            <div style={{ fontSize: '12px', color: colors.textSecondary }}>
+              {helper}
+            </div>
+          )}
+        </div>
+        <div style={{
+          width: '48px',
+          height: '48px',
+          borderRadius: '12px',
+          backgroundColor: color + '20',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '24px'
+        }}>
+          {icon}
+        </div>
       </div>
     </div>
   );

@@ -30,7 +30,7 @@ type DraftLine = {
 const todayYmd = () => new Date().toISOString().slice(0, 10);
 
 const StockAdjustmentsPage: React.FC<StockAdjustmentsPageProps> = ({ onBack }) => {
-  const { colors } = useTheme();
+  const { colors, theme } = useTheme();
   const { showError, showSuccess, showWarning } = useNotification();
 
   const [loading, setLoading] = useState(false);
@@ -203,7 +203,7 @@ const StockAdjustmentsPage: React.FC<StockAdjustmentsPageProps> = ({ onBack }) =
   };
 
   return (
-    <div style={{ padding: '24px' }}>
+    <div style={{ padding: '24px', minHeight: '100vh', backgroundColor: theme === 'dark' ? colors.primary : '#c7e2eb' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 900, color: colors.text }}>Stock Adjustments</h1>

@@ -1,16 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  addPurchase,
-  deletePurchase,
-  getMenuItems,
-  getPurchaseDetails,
-  getPurchases,
-  getSuppliers,
-  type MenuItem,
-  type PurchaseDetails,
-  type PurchaseItemInput,
-  type PurchaseSummary,
-  type Supplier,
+    addPurchase,
+    deletePurchase,
+    getMenuItems,
+    getPurchaseDetails,
+    getPurchases,
+    getSuppliers,
+    type MenuItem,
+    type PurchaseDetails,
+    type PurchaseItemInput,
+    type PurchaseSummary,
+    type Supplier,
 } from '../api/client';
 import { useCurrency } from '../context/CurrencyContext';
 import { useNotification } from '../context/NotificationContext';
@@ -28,7 +28,7 @@ type PaymentMode = 'pay_now' | 'pay_later' | 'pay_partial';
 type DraftItem = PurchaseItemInput & { key: string };
 
 const PurchasesPage: React.FC<PurchasesPageProps> = ({ onBack }) => {
-  const { colors } = useTheme();
+  const { colors, theme } = useTheme();
   const { formatMoney } = useCurrency();
   const { showError, showSuccess, showWarning } = useNotification();
 
@@ -300,7 +300,7 @@ const PurchasesPage: React.FC<PurchasesPageProps> = ({ onBack }) => {
   );
 
   return (
-    <div style={{ padding: '24px', minHeight: '100vh', background: colors.primary, color: colors.text }}>
+    <div style={{ padding: '24px', minHeight: '100vh', background: theme === 'dark' ? colors.primary : '#c7e2eb', color: colors.text }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <button

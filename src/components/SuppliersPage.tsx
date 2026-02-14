@@ -1,16 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  addSupplier,
-  addSupplierPayment,
-  deleteSupplier,
-  getSupplierBalanceSummaries,
-  getSupplierPayments,
-  getSuppliers,
-  updateSupplier,
-  type NewSupplier,
-  type Supplier,
-  type SupplierBalanceSummary,
-  type SupplierPayment,
+    addSupplier,
+    addSupplierPayment,
+    deleteSupplier,
+    getSupplierBalanceSummaries,
+    getSupplierPayments,
+    getSuppliers,
+    updateSupplier,
+    type NewSupplier,
+    type Supplier,
+    type SupplierBalanceSummary,
+    type SupplierPayment,
 } from '../api/client';
 import { useCurrency } from '../context/CurrencyContext';
 import { useNotification } from '../context/NotificationContext';
@@ -22,7 +22,7 @@ interface SuppliersPageProps {
 }
 
 const SuppliersPage: React.FC<SuppliersPageProps> = ({ onBack }) => {
-  const { colors } = useTheme();
+  const { colors, theme } = useTheme();
   const { formatMoney } = useCurrency();
   const { showError, showSuccess } = useNotification();
 
@@ -214,7 +214,7 @@ const SuppliersPage: React.FC<SuppliersPageProps> = ({ onBack }) => {
   };
 
   return (
-    <div style={{ padding: '24px', minHeight: '100vh', background: colors.primary, color: colors.text }}>
+    <div style={{ padding: '24px', minHeight: '100vh', background: theme === 'dark' ? colors.primary : '#c7e2eb', color: colors.text }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <button

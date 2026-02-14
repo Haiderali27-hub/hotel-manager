@@ -21,7 +21,7 @@ interface ExpensesPageProps {
 type TabId = 'add' | 'history';
 
 const ExpensesPage: React.FC<ExpensesPageProps> = ({ onBack, onExpenseChanged }) => {
-  const { colors } = useTheme();
+  const { colors, theme } = useTheme();
   const { formatMoney } = useCurrency();
   const { showError, showSuccess, showWarning } = useNotification();
 
@@ -281,7 +281,7 @@ const ExpensesPage: React.FC<ExpensesPageProps> = ({ onBack, onExpenseChanged })
         padding: '24px',
         color: colors.text,
         minHeight: '100vh',
-        backgroundColor: colors.primary,
+        backgroundColor: theme === 'dark' ? colors.primary : '#c7e2eb',
       }}
     >
       <div

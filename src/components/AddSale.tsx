@@ -671,7 +671,7 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded, onNavigateToAcco
   };
 
   return (
-    <div style={{ padding: '24px', backgroundColor: colors.primary, color: colors.text, minHeight: '100vh' }}>
+    <div style={{ padding: '24px', backgroundColor: theme === 'dark' ? colors.primary : '#c7e2eb', color: colors.text, minHeight: '100vh' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
         <button type="button" className="bc-btn bc-btn-outline" onClick={onBack} style={{ width: 'auto' }}>
           Back

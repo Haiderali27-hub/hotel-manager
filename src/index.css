@@ -34,24 +34,24 @@
   -moz-osx-font-smoothing: grayscale;
 
   /*
-    BizCore Offline Phase 4 Design System
-    Semantic mapping of the user-provided palettes.
+    New Blue Palette Design System
+    #021024, #052659, #5483B3, #7DA0CA, #C1E8FF
   */
-  --bizcore-light-app-bg: #fdfdfd;
-  --bizcore-light-surface: #e8eaec;
-  --bizcore-light-border: #d2d6db;
-  --bizcore-light-text: #845c58;
-  --bizcore-light-text-secondary: #8892a9;
-  --bizcore-light-action: #2563EB;
-  --bizcore-light-input-bg: #fdfdfd;
+  --bizcore-light-app-bg: #ffffff;
+  --bizcore-light-surface: #ffffff;
+  --bizcore-light-border: #7DA0CA;
+  --bizcore-light-text: #021024;
+  --bizcore-light-text-secondary: #052659;
+  --bizcore-light-action: #5483B3;
+  --bizcore-light-input-bg: #ffffff;
 
-  --bizcore-dark-app-bg: #0b0b0b;
-  --bizcore-dark-surface: #1e1e1f;
-  --bizcore-dark-border: #393741;
-  --bizcore-dark-text: #cdd0dc;
-  --bizcore-dark-text-secondary: #958f9e;
-  --bizcore-dark-action: #60A5FA;
-  --bizcore-dark-input-bg: #0b0b0b;
+  --bizcore-dark-app-bg: #021024;
+  --bizcore-dark-surface: #052659;
+  --bizcore-dark-border: #5483B3;
+  --bizcore-dark-text: #C1E8FF;
+  --bizcore-dark-text-secondary: #7DA0CA;
+  --bizcore-dark-action: #5483B3;
+  --bizcore-dark-input-bg: #021024;
 
   /* Semantic tokens (default: light) */
   --app-bg: var(--bizcore-light-app-bg);
@@ -63,9 +63,9 @@
   --app-input-bg: var(--bizcore-light-input-bg);
 
   /* Translucent helpers (allowed: derived alpha) */
-  --app-overlay: rgba(0, 0, 0, 0.55);
-  --app-shadow: rgba(0, 0, 0, 0.18);
-  --app-focus-ring: rgba(37, 99, 235, 0.22);
+  --app-overlay: rgba(2, 16, 36, 0.55);
+  --app-shadow: rgba(2, 16, 36, 0.18);
+  --app-focus-ring: rgba(84, 131, 179, 0.22);
 
   /* Legacy variables for backward compatibility */
   --bm-primary: var(--app-text);
@@ -87,9 +87,9 @@ html[data-theme="dark"] {
   --app-action: var(--primary-color, var(--bizcore-dark-action));
   --app-input-bg: var(--bizcore-dark-input-bg);
 
-  --app-overlay: rgba(0, 0, 0, 0.7);
+  --app-overlay: rgba(2, 16, 36, 0.8);
   --app-shadow: rgba(0, 0, 0, 0.45);
-  --app-focus-ring: rgba(96, 165, 250, 0.22);
+  --app-focus-ring: rgba(84, 131, 179, 0.22);
 }
 
 body {

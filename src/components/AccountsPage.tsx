@@ -26,7 +26,7 @@ type AccountsTab = 'customers' | 'suppliers';
 type PaymentMethod = 'cash' | 'card' | 'mobile' | 'bank';
 
 const AccountsPage: React.FC<AccountsPageProps> = ({ onBack, onNavigateToPOS }) => {
-  const { colors } = useTheme();
+  const { colors, theme } = useTheme();
   const { formatMoney } = useCurrency();
   const { showError, showSuccess } = useNotification();
 
@@ -263,7 +263,7 @@ const AccountsPage: React.FC<AccountsPageProps> = ({ onBack, onNavigateToPOS }) 
   );
 
   return (
-    <div style={{ padding: '24px', minHeight: '100vh', background: colors.primary, color: colors.text }}>
+    <div style={{ padding: '24px', minHeight: '100vh', background: theme === 'dark' ? colors.primary : '#c7e2eb', color: colors.text }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <button

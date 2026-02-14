@@ -701,9 +701,10 @@ const ModernDashboard: React.FC = () => {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '1.25rem'
+              fontSize: '1.25rem',
+              fontWeight: '600'
             }}>
-              {userRole === 'admin' ? '👑' : userRole === 'manager' ? '📊' : '🛒'}
+              {userRole === 'admin' ? 'A' : userRole === 'manager' ? 'M' : 'S'}
             </div>
             <div style={{ flex: 1 }}>
               <div style={{

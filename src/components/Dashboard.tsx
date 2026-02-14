@@ -506,7 +506,7 @@ const Dashboard: React.FC = () => {
                     : 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
               }}
             >
-              {userRole === 'admin' ? '👑 Admin' : userRole === 'manager' ? '📊 Manager' : '🛒 Staff'}
+              {userRole === 'admin' ? 'Admin' : userRole === 'manager' ? 'Manager' : 'Staff'}
             </span>
           </div>
           <button

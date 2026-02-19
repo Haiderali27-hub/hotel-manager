@@ -432,10 +432,10 @@ const SuppliersPage: React.FC<SuppliersPageProps> = ({ onBack }) => {
             if (e.target === e.currentTarget) setShowAdd(false);
           }}
         >
-          <div className="bc-card" style={{ width: 'min(820px, 96vw)', borderRadius: '16px', padding: '32px', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)' }}>
+          <div className="bc-card" style={{ width: 'min(820px, 96vw)', borderRadius: '16px', padding: '24px', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start' }}>
               <div>
-                <div style={{ fontSize: '24px', fontWeight: 700 }}>Add Supplier</div>
+                <div style={{ fontSize: '20px', fontWeight: 700 }}>Add Supplier</div>
                 <div style={{ fontSize: '14px', color: colors.textSecondary, marginTop: '6px' }}>
                   Optional: only if you buy from multiple places
                 </div>
@@ -545,10 +545,10 @@ const SuppliersPage: React.FC<SuppliersPageProps> = ({ onBack }) => {
             if (e.target === e.currentTarget) setSelected(null);
           }}
         >
-          <div className="bc-card" style={{ width: 'min(980px, 96vw)', borderRadius: '16px', padding: '32px', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)' }}>
+          <div className="bc-card" style={{ width: 'min(980px, 96vw)', borderRadius: '16px', padding: '24px', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start' }}>
               <div>
-                <div style={{ fontSize: '24px', fontWeight: 700 }}>{selected.name}</div>
+                <div style={{ fontSize: '20px', fontWeight: 700 }}>{selected.name}</div>
                 <div style={{ fontSize: '14px', color: colors.textSecondary, marginTop: '6px' }}>
                   Balance due: {formatMoney(selectedBalance?.balance_due || 0)}
                 </div>

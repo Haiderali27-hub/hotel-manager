@@ -4,10 +4,11 @@ import {
     addSale,
     addSalePayment,
     buildKitchenTicketHtml,
-    buildOrderReceiptHtml,
     getActiveCustomers,
     getBarcodeEnabled,
     getMenuItems,
+    printOrderReceipt,
+    printThermalReceipt,
     type ActiveCustomerRow,
     type KitchenTicket,
     type KitchenTicketItem,
@@ -83,6 +84,8 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded, onNavigateToAcco
     amount_paid: number;
     balance_due: number;
   } | null>(null);
+  const [discountType, setDiscountType] = useState<'none' | 'percentage' | 'fixed'>('none');
+  const [discountValue, setDiscountValue] = useState<number>(0);
 
   const isRetail = flags.retailQuickScan;
   const isKitchenMode = flags.restaurantKitchen;
@@ -489,8 +492,22 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded, onNavigateToAcco
     }
   };
 
-  const getTotalAmount = () => {
+  const getSubtotal = () => {
     return orderItems.reduce((total, item) => total + item.total_price, 0);
+  };
+
+  const getDiscountAmount = () => {
+    const subtotal = getSubtotal();
+    if (discountType === 'percentage') {
+      return (subtotal * discountValue) / 100;
+    } else if (discountType === 'fixed') {
+      return Math.min(discountValue, subtotal); // Can't discount more than subtotal
+    }
+    return 0;
+  };
+
+  const getTotalAmount = () => {
+    return Math.max(0, getSubtotal() - getDiscountAmount());
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -607,25 +624,27 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded, onNavigateToAcco
     if (!lastOrderId) return;
     
     try {
-      const receiptHtml = await buildOrderReceiptHtml(lastOrderId);
-      
-      // Create a new window for printing
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.write(receiptHtml);
-        printWindow.document.close();
-        printWindow.focus();
-        printWindow.print();
-        printWindow.close();
-        showSuccess('Receipt Printed', `Receipt for order #${lastOrderId} has been sent to printer`);
-      } else {
-        showWarning('Print Window Blocked', 'Please allow popups to print receipts');
-      }
+      await printOrderReceipt(lastOrderId);
+      showSuccess('Receipt Printed', `Receipt for order #${lastOrderId} has been sent to printer`);
     } catch (err) {
       console.error('Failed to print receipt:', err);
-      const errorMessage = 'Failed to generate receipt';
+      const errorMessage = err instanceof Error ? err.message : 'Failed to generate receipt';
       setError(errorMessage);
       showError('Print Failed', errorMessage);
+    }
+  };
+
+  const handlePrintThermal = async () => {
+    if (!lastOrderId) return;
+    
+    try {
+      await printThermalReceipt(lastOrderId);
+      showSuccess('Thermal Receipt', `Thermal receipt for order #${lastOrderId} opened`);
+    } catch (err) {
+      console.error('Failed to print thermal receipt:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to generate thermal receipt';
+      setError(errorMessage);
+      showError('Thermal Print Failed', errorMessage);
     }
   };
 
@@ -1124,8 +1143,74 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded, onNavigateToAcco
               )}
             </div>
 
-            {/* Total */}
+            {/* Discount Section */}
+            {orderItems.length > 0 && (
+              <div style={{ marginTop: '14px', padding: '12px', borderRadius: '10px', background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', border: `1px solid ${colors.border}` }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: colors.text, marginBottom: '10px' }}>Apply Discount</div>
+                
+                <div style={{ display: 'grid', gap: '10px' }}>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className={discountType === 'none' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'}
+                      onClick={() => { setDiscountType('none'); setDiscountValue(0); }}
+                      style={{ flex: 1, minWidth: '80px', padding: '8px 12px', fontSize: '13px' }}
+                    >
+                      None
+                    </button>
+                    <button
+                      type="button"
+                      className={discountType === 'percentage' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'}
+                      onClick={() => setDiscountType('percentage')}
+                      style={{ flex: 1, minWidth: '80px', padding: '8px 12px', fontSize: '13px' }}
+                    >
+                      % Off
+                    </button>
+                    <button
+                      type="button"
+                      className={discountType === 'fixed' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'}
+                      onClick={() => setDiscountType('fixed')}
+                      style={{ flex: 1, minWidth: '80px', padding: '8px 12px', fontSize: '13px' }}
+                    >
+                      Fixed
+                    </button>
+                  </div>
+
+                  {discountType !== 'none' && (
+                    <div>
+                      <input
+                        type="number"
+                        min="0"
+                        max={discountType === 'percentage' ? 100 : getSubtotal()}
+                        step={discountType === 'percentage' ? 1 : 0.01}
+                        value={discountValue}
+                        onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)}
+                        placeholder={discountType === 'percentage' ? 'Discount %' : 'Discount amount'}
+                        className="bc-input"
+                        style={{ width: '100%', padding: '10px', fontSize: '14px' }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Total Summary */}
             <div style={{ marginTop: '14px', borderTop: `1px solid ${colors.border}`, paddingTop: '12px' }}>
+              {discountType !== 'none' && getDiscountAmount() > 0 && (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', marginBottom: '8px' }}>
+                    <div style={{ fontSize: '12px', color: colors.textSecondary, fontWeight: 600 }}>Subtotal</div>
+                    <div style={{ fontSize: '14px', color: colors.textSecondary, fontWeight: 600 }}>{formatMoney(getSubtotal())}</div>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', marginBottom: '8px' }}>
+                    <div style={{ fontSize: '12px', color: '#ef4444', fontWeight: 600 }}>
+                      Discount {discountType === 'percentage' ? `(${discountValue}%)` : ''}
+                    </div>
+                    <div style={{ fontSize: '14px', color: '#ef4444', fontWeight: 600 }}>-{formatMoney(getDiscountAmount())}</div>
+                  </div>
+                </>
+              )}
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
                 <div style={{ fontSize: '12px', color: colors.textSecondary, fontWeight: 700 }}>Total</div>
                 <div style={{ fontSize: '16px', color: colors.text, fontWeight: 900 }}>{formatMoney(getTotalAmount())}</div>
@@ -1245,37 +1330,23 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded, onNavigateToAcco
 
       {/* Quick Add Customer Modal */}
       {showQuickAddCustomer && (
-        <div className="bc-modal-overlay" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className="bc-modal" style={{ 
-            maxWidth: '500px', 
-            width: '90%',
-            padding: '32px',
-            borderRadius: '16px',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.12)'
-          }}>
-            <div style={{ 
-              fontSize: '24px', 
-              fontWeight: '700', 
-              color: colors.text,
-              marginBottom: '8px'
-            }}>Quick Add {label.client}</div>
-            
-            <div style={{ 
-              fontSize: '14px', 
-              color: colors.textSecondary,
-              marginBottom: '24px'
-            }}>
+        <div className="bc-modal-overlay">
+          <div className="bc-modal" style={{ maxWidth: '520px' }}>
+            <div style={{ fontSize: '20px', fontWeight: 800, color: colors.text, marginBottom: '6px' }}>
+              Quick Add {label.client}
+            </div>
+            <div style={{ fontSize: '13px', color: colors.textSecondary, marginBottom: '20px' }}>
               Add a new customer quickly
             </div>
             
-            <div style={{ display: 'grid', gap: '20px' }}>
+            <div style={{ display: 'grid', gap: '16px' }}>
               <div>
                 <label style={{ 
                   display: 'block',
-                  fontSize: '14px', 
-                  fontWeight: '600', 
+                  fontSize: '13px', 
+                  fontWeight: 600, 
                   color: colors.text, 
-                  marginBottom: '8px' 
+                  marginBottom: '6px' 
                 }}>
                   Name *
                 </label>
@@ -1285,7 +1356,6 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded, onNavigateToAcco
                   onChange={(e) => setQuickAddName(e.target.value)}
                   placeholder="Customer name"
                   className="bc-input"
-                  style={{ padding: '12px 16px', fontSize: '15px' }}
                   autoFocus
                 />
               </div>
@@ -1293,10 +1363,10 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded, onNavigateToAcco
               <div>
                 <label style={{ 
                   display: 'block',
-                  fontSize: '14px', 
-                  fontWeight: '600', 
+                  fontSize: '13px', 
+                  fontWeight: 600, 
                   color: colors.text, 
-                  marginBottom: '8px' 
+                  marginBottom: '6px' 
                 }}>
                   Phone (Optional)
                 </label>
@@ -1306,17 +1376,16 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded, onNavigateToAcco
                   onChange={(e) => setQuickAddPhone(e.target.value)}
                   placeholder="Phone number"
                   className="bc-input"
-                  style={{ padding: '12px 16px', fontSize: '15px' }}
                 />
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '12px', marginTop: '32px' }}>
+            <div style={{ display: 'flex', gap: '10px', marginTop: '20px', flexWrap: 'wrap' }}>
               <button 
                 type="button" 
                 className="bc-btn bc-btn-primary" 
                 onClick={handleQuickAddCustomer}
-                style={{ flex: 1, padding: '12px 24px', fontSize: '15px', fontWeight: '600' }}
+                style={{ width: 'auto' }}
               >
                 Add Customer
               </button>
@@ -1328,7 +1397,7 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded, onNavigateToAcco
                   setQuickAddName('');
                   setQuickAddPhone('');
                 }}
-                style={{ padding: '12px 24px', fontSize: '15px', fontWeight: '600' }}
+                style={{ width: 'auto' }}
               >
                 Cancel
               </button>
@@ -1356,7 +1425,10 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded, onNavigateToAcco
 
             <div style={{ display: 'flex', gap: '10px', marginTop: '16px', flexWrap: 'wrap' }}>
               <button type="button" className="bc-btn bc-btn-primary" onClick={handlePrintReceipt} style={{ width: 'auto' }}>
-                Print Receipt
+                🖨️ Print Receipt
+              </button>
+              <button type="button" className="bc-btn bc-btn-secondary" onClick={handlePrintThermal} style={{ width: 'auto' }}>
+                📄 Thermal Print
               </button>
               <button type="button" className="bc-btn bc-btn-outline" onClick={closeSuccessModal} style={{ width: 'auto' }}>
                 Close

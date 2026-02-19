@@ -1306,6 +1306,18 @@ export const buildOrderReceiptHtml = (orderId: number): Promise<string> =>
   invoke("build_order_receipt_html", { orderId });
 
 /**
+ * Print thermal receipt for POS printers (58mm/80mm paper)
+ * @param orderId - ID of the order
+ * @returns Success message
+ * @example
+ * ```ts
+ * await printThermalReceipt(123);
+ * ```
+ */
+export const printThermalReceipt = (orderId: number): Promise<string> => 
+  invoke("print_thermal_receipt", { orderId });
+
+/**
  * Generate HTML invoice for a guest's final bill
  * @param guestId - ID of the guest
  * @returns HTML string ready for printing

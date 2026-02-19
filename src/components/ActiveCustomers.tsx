@@ -793,17 +793,17 @@ const ActiveCustomers: React.FC<ActiveCustomersProps> = ({ onBack, onAddSale }) 
         }}>
           <div style={{
             backgroundColor: colors.surface,
-            padding: '32px',
+            padding: '24px',
             borderRadius: '16px',
             border: `1px solid ${colors.border}`,
             boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
             maxWidth: '540px',
             width: '90%'
           }}>
-            <h3 style={{ margin: '0 0 8px 0', color: colors.text, fontSize: '24px', fontWeight: '700' }}>
+            <h3 style={{ margin: '0 0 8px 0', color: colors.text, fontSize: '20px', fontWeight: '700' }}>
               Edit {label.client}
             </h3>
-            <p style={{ margin: '0 0 24px 0', color: colors.textSecondary, fontSize: '14px' }}>
+            <p style={{ margin: '0 0 20px 0', color: colors.textSecondary, fontSize: '14px' }}>
               Update details for {editingGuest.name}
             </p>
             

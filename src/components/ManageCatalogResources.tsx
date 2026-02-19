@@ -699,17 +699,17 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
                 }}>
                     <div style={{
                         backgroundColor: colors.surface,
-                        padding: '32px',
+                        padding: '24px',
                         borderRadius: '16px',
                         border: `1px solid ${colors.border}`,
                         boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
                         maxWidth: '480px',
                         width: '90%'
                     }}>
-                        <h3 style={{ margin: '0 0 8px 0', color: colors.text, fontSize: '24px', fontWeight: '700' }}>
+                        <h3 style={{ margin: '0 0 8px 0', color: colors.text, fontSize: '20px', fontWeight: '700' }}>
                             {editingMenuItem ? 'Edit Menu Item' : 'Add Menu Item'}
                         </h3>
-                        <p style={{ margin: '0 0 24px 0', color: colors.textSecondary, fontSize: '14px' }}>
+                        <p style={{ margin: '0 0 20px 0', color: colors.textSecondary, fontSize: '14px' }}>
                             {editingMenuItem ? 'Update item details' : 'Add a new item to your menu'}
                         </p>
 
@@ -810,17 +810,17 @@ const ManageCatalogResources: React.FC<ManageCatalogResourcesProps> = ({ onBack 
                 }}>
                     <div style={{
                         backgroundColor: colors.surface,
-                        padding: '32px',
+                        padding: '24px',
                         borderRadius: '16px',
                         border: `1px solid ${colors.border}`,
                         boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
                         maxWidth: '480px',
                         width: '90%'
                     }}>
-                        <h3 style={{ margin: '0 0 8px 0', color: colors.text, fontSize: '24px', fontWeight: '700' }}>
+                        <h3 style={{ margin: '0 0 8px 0', color: colors.text, fontSize: '20px', fontWeight: '700' }}>
                             Add {label.unit}
                         </h3>
-                        <p style={{ margin: '0 0 24px 0', color: colors.textSecondary, fontSize: '14px' }}>
+                        <p style={{ margin: '0 0 20px 0', color: colors.textSecondary, fontSize: '14px' }}>
                             Add a new {label.unit.toLowerCase()} to your system
                         </p>
 

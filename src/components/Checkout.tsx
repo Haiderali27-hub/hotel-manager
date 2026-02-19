@@ -563,14 +563,14 @@ const Checkout: React.FC<CheckoutProps> = ({ guest, onBack, onCheckoutComplete }
                 }}>
                     <div style={{
                         backgroundColor: colors.primary,
-                        padding: '32px',
+                        padding: '24px',
                         borderRadius: '16px',
                         border: `2px solid ${colors.border}`,
                         maxWidth: '400px',
                         width: '90%',
                         boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)'
                     }}>
-                        <h2 style={{ margin: '0 0 8px 0', color: colors.text, fontSize: '24px', fontWeight: 700 }}>Redeem Loyalty Points</h2>
+                        <h2 style={{ margin: '0 0 8px 0', color: colors.text, fontSize: '20px', fontWeight: 700 }}>Redeem Loyalty Points</h2>
                         <div style={{ fontSize: '14px', color: colors.textSecondary, marginBottom: '20px' }}>
                             Convert points to discount
                         </div>

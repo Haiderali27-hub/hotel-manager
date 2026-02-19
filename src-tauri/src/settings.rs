@@ -53,6 +53,17 @@ pub async fn store_business_logo(source_path: String) -> Result<String, String> 
         return Err("Selected logo path is not a file".to_string());
     }
 
+    // Check file size before uploading (max 1MB for receipt embedding)
+    let metadata = std::fs::metadata(&source)
+        .map_err(|e| format!("Failed to read file metadata: {}", e))?;
+    const MAX_LOGO_SIZE: u64 = 1024 * 1024; // 1MB
+    if metadata.len() > MAX_LOGO_SIZE {
+        return Err(format!(
+            "Logo file is too large ({:.2} MB). Maximum size is 1 MB. Please compress or resize your image.",
+            metadata.len() as f64 / 1_048_576.0
+        ));
+    }
+
     let assets_dir = get_assets_dir()?;
     fs::create_dir_all(&assets_dir)
         .map_err(|e| format!("Failed to create assets directory: {}", e))?;
@@ -126,6 +137,40 @@ pub async fn get_business_logo_data_url() -> Result<Option<String>, String> {
 
     let b64 = base64::engine::general_purpose::STANDARD.encode(bytes);
     Ok(Some(format!("data:{};base64,{}", mime, b64)))
+}
+
+#[command]
+pub async fn get_file_size(path: String) -> Result<serde_json::Value, String> {
+    let path_buf = std::path::PathBuf::from(path.trim());
+    if !path_buf.exists() || !path_buf.is_file() {
+        return Err("File not found".to_string());
+    }
+    
+    let metadata = std::fs::metadata(&path_buf)
+        .map_err(|e| format!("Failed to read file metadata: {}", e))?;
+    
+    Ok(serde_json::json!({ "size": metadata.len() }))
+}
+
+#[command]
+pub async fn remove_business_logo() -> Result<String, String> {
+    use crate::db::get_db_connection;
+
+    let conn = get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+    
+    // Get current logo path to delete file
+    if let Some(logo_path) = get_setting(&conn, "business_logo_path")? {
+        let path_buf = std::path::PathBuf::from(logo_path.trim());
+        if path_buf.exists() && path_buf.is_file() {
+            std::fs::remove_file(&path_buf)
+                .map_err(|e| format!("Failed to delete logo file: {}", e))?;
+        }
+    }
+    
+    // Clear database setting
+    upsert_setting(&conn, "business_logo_path", "")?;
+    
+    Ok("Business logo removed successfully".to_string())
 }
 
 #[command]

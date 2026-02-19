@@ -7,17 +7,21 @@ use std::path::PathBuf;
 const LOGO_DATA: &[u8] = include_bytes!("../logoforcheckout.png");
 
 fn get_logo_base64() -> String {
-    // Use the embedded JPG logo for final invoices (ICO is too large at 410KB)
+    // Use the embedded PNG logo
     if !LOGO_DATA.is_empty() {
         let embedded_logo = BASE64_STANDARD.encode(LOGO_DATA);
-        println!("✅ Using embedded JPG logo data, size: {} bytes, base64 length: {}", LOGO_DATA.len(), embedded_logo.len());
+        println!("✅ Using embedded logo data, size: {} bytes, base64 length: {}", LOGO_DATA.len(), embedded_logo.len());
         
-        // Check if the logo starts with JPEG header
-        if LOGO_DATA.len() >= 3 && &LOGO_DATA[0..3] == b"\xFF\xD8\xFF" {
-            println!("✅ Valid JPEG header detected");
-        } else {
-            println!("❌ WARNING: Invalid JPEG header!");
-            println!("First 16 bytes: {:?}", &LOGO_DATA[..16.min(LOGO_DATA.len())]);
+        // Check if the logo starts with PNG or JPEG header
+        if LOGO_DATA.len() >= 3 {
+            if &LOGO_DATA[0..3] == b"\xFF\xD8\xFF" {
+                println!("✅ Valid JPEG header detected");
+            } else if LOGO_DATA.len() >= 8 && &LOGO_DATA[0..8] == b"\x89PNG\r\n\x1a\n" {
+                println!("✅ Valid PNG header detected");
+            } else {
+                println!("⚠️  WARNING: Unknown image format");
+                println!("First 16 bytes: {:?}", &LOGO_DATA[..16.min(LOGO_DATA.len())]);
+            }
         }
         
         return embedded_logo;
@@ -143,36 +147,67 @@ fn format_money(amount: f64, currency_code: &str, decimals: usize) -> String {
 
 /// Print a food order receipt
 #[tauri::command]
-pub fn print_order_receipt(order_id: i64) -> Result<String, String> {
+pub fn print_order_receipt(order_id: i64, _app_handle: tauri::AppHandle) -> Result<String, String> {
     // Generate the HTML receipt
     let mut html = build_order_receipt_html(order_id)?;
     
-    // Add auto-print JavaScript before the closing </head> tag
+    // Add auto-print JavaScript - waits for images to load before printing
     let auto_print_script = String::from(r#"
     <script>
         window.addEventListener('load', function() {
-            setTimeout(function() {
-                window.print();
-            }, 500);
+            // Wait for all images to load
+            let images = document.querySelectorAll('img');
+            let loaded = 0;
+            let total = images.length;
+            
+            if (total === 0) {
+                setTimeout(() => window.print(), 500);
+                return;
+            }
+            
+            function checkAndPrint() {
+                loaded++;
+                if (loaded === total) {
+                    setTimeout(() => window.print(), 500);
+                }
+            }
+            
+            images.forEach(img => {
+                if (img.complete) {
+                    checkAndPrint();
+                } else {
+                    img.onload = checkAndPrint;
+                    img.onerror = checkAndPrint;
+                }
+            });
+            
+            // Fallback: print after 5 seconds regardless
+            setTimeout(() => window.print(), 5000);
         });
     </script>
 "#);
     
     html = html.replace("</head>", &(auto_print_script + "</head>"));
     
-    // Create a temporary HTML file
+    // Write HTML to a temporary file and open it
+    // (Images are embedded as base64 data URLs, so they work with file:// protocol)
+    use std::fs::File;
+    use std::io::Write;
+    
     let temp_dir = std::env::temp_dir();
     let file_path = temp_dir.join(format!("receipt_{}.html", order_id));
     
-    // Write HTML to file
-    std::fs::write(&file_path, html)
-        .map_err(|e| format!("Failed to write receipt file: {}", e))?;
+    let mut file = File::create(&file_path)
+        .map_err(|e| format!("Failed to create temp file: {}", e))?;
     
-    // Open the file with the default application (browser)
+    file.write_all(html.as_bytes())
+        .map_err(|e| format!("Failed to write HTML: {}", e))?;
+    
+    // Open with default browser
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("cmd")
-            .args(["/C", "start", "", &file_path.to_string_lossy()])
+            .args(["/C", "start", "", file_path.to_str().unwrap()])
             .spawn()
             .map_err(|e| format!("Failed to open receipt: {}", e))?;
     }
@@ -194,6 +229,89 @@ pub fn print_order_receipt(order_id: i64) -> Result<String, String> {
     }
     
     Ok("Receipt opened in browser - print dialog will appear automatically".to_string())
+}
+
+/// Print thermal receipt (58mm/80mm paper - optimized for POS thermal printers)
+#[tauri::command]
+pub fn print_thermal_receipt(order_id: i64, _app_handle: tauri::AppHandle) -> Result<String, String> {
+    // Generate the thermal receipt HTML
+    let mut html = build_thermal_receipt(order_id)?;
+    
+    // Add auto-print JavaScript - waits for images to load
+    let auto_print_script = String::from(r#"
+    <script>
+        window.addEventListener('load', function() {
+            let images = document.querySelectorAll('img');
+            let loaded = 0;
+            let total = images.length;
+            
+            if (total === 0) {
+                setTimeout(() => window.print(), 500);
+                return;
+            }
+            
+            function checkAndPrint() {
+                loaded++;
+                if (loaded === total) {
+                    setTimeout(() => window.print(), 500);
+                }
+            }
+            
+            images.forEach(img => {
+                if (img.complete) {
+                    checkAndPrint();
+                } else {
+                    img.onload = checkAndPrint;
+                    img.onerror = checkAndPrint;
+                }
+            });
+            
+            setTimeout(() => window.print(), 5000);
+        });
+    </script>
+"#);
+    
+    html = html.replace("</head>", &(auto_print_script + "</head>"));
+    
+    // Write HTML to a temporary file and open it
+    use std::fs::File;
+    use std::io::Write;
+    
+    let temp_dir = std::env::temp_dir();
+    let file_path = temp_dir.join(format!("thermal_receipt_{}.html", order_id));
+    
+    let mut file = File::create(&file_path)
+        .map_err(|e| format!("Failed to create temp file: {}", e))?;
+    
+    file.write_all(html.as_bytes())
+        .map_err(|e| format!("Failed to write HTML: {}", e))?;
+    
+    // Open with default browser
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", file_path.to_str().unwrap()])
+            .spawn()
+            .map_err(|e| format!("Failed to open thermal receipt: {}", e))?;
+    }
+    
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&file_path)
+            .spawn()
+            .map_err(|e| format!("Failed to open thermal receipt: {}", e))?;
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&file_path)
+            .spawn()
+            .map_err(|e| format!("Failed to open thermal receipt: {}", e))?;
+    }
+    
+    Ok("Thermal receipt opened - ready for POS printer".to_string())
 }
 
 /// Generate HTML receipt for a food order
@@ -235,37 +353,64 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
     }).map_err(|e| format!("Order not found: {}", e))?;
     
     let (_id, created_at, total_amount, paid_status, customer_type, customer_name, guest_name, room_number) = order_row;
-    let is_paid = paid_status != 0;
+    let _is_paid = paid_status != 0;
     
     // Logo: use saved business logo if available, otherwise fall back to embedded logo.
     let logo_src = match get_business_logo_data_url(&conn)? {
-        Some(src) => src,
+        Some(src) => {
+            println!("✅ Using business logo from database, length: {}", src.len());
+            // Check if logo is too large for HTML embedding (browser limit ~2MB for data URLs)
+            if src.len() > 1_500_000 {
+                println!("⚠️  WARNING: Business logo is too large ({} bytes)! Browsers may not render it. Please upload a smaller logo (< 500KB recommended).", src.len());
+                println!("⚠️  Falling back to embedded INERTIA logo");
+                let embedded = get_logo_base64();
+                if !embedded.is_empty() {
+                    format!("data:image/png;base64,{}", embedded)
+                } else {
+                    "".to_string()
+                }
+            } else {
+                src
+            }
+        },
         None => {
+            println!("⚠️  No business logo found, using embedded logo");
             let embedded = get_logo_base64();
             if embedded.is_empty() {
+                println!("❌ Embedded logo is also empty!");
                 "".to_string()
             } else {
-                format!("data:image/jpeg;base64,{}", embedded)
+                println!("✅ Using embedded PNG logo");
+                format!("data:image/png;base64,{}", embedded)
             }
         }
     };
 
-    let logo_html = if logo_src.is_empty() {
-        "".to_string()
+    // Build logo HTML - business logo at top, INERTIA in footer
+    let inertia_logo = get_logo_base64();
+    
+    // Business logo section (top of receipt)
+    let logo_section = if !logo_src.is_empty() && logo_src.len() < 1_500_000 {
+        // Business logo available - show it centered
+        format!(r#"
+        <div class="logos">
+            <img src="{}" class="logo-main" alt="{}">
+        </div>"#, logo_src, html_escape(&business_name))
+    } else if !inertia_logo.is_empty() {
+        // No business logo, show INERTIA logo as main
+        format!(r#"
+        <div class="logos">
+            <img src="data:image/png;base64,{}" class="logo-main" alt="INERTIA">
+        </div>"#, inertia_logo)
     } else {
-        format!(r#"<img src=\"{}\" alt=\"Logo\" class=\"logo\">"#, logo_src)
+        String::new()
     };
-
-    let receipt_header_html = if receipt_header.trim().is_empty() {
-        "".to_string()
+    
+    // INERTIA footer logo (small, inline with "Powered by INERTIA")
+    let inertia_footer_logo = if !inertia_logo.is_empty() {
+        format!(r#"<img src="data:image/png;base64,{}" class="inertia-badge" alt="INERTIA">"#, inertia_logo)
     } else {
-        format!(r#"<div class=\"brand-message\">{}</div>"#, escape_multiline(receipt_header.trim()))
-    };
-
-    let receipt_footer_html = if receipt_footer.trim().is_empty() {
-        "".to_string()
-    } else {
-        format!(r#"<div class=\"brand-message\">{}</div>"#, escape_multiline(receipt_footer.trim()))
+        String::new()
     };
     
     // Format the date properly
@@ -299,7 +444,7 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
         let unit_price_fmt = format_money(unit_price, &currency_code, 2);
         let line_total_fmt = format_money(line_total, &currency_code, 2);
         items_html.push_str(&format!(
-            "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+            "<tr><td>{}</td><td class=\"text-right\">{}</td><td class=\"text-right\">{}</td><td class=\"text-right\">{}</td></tr>",
             html_escape(&item_name), quantity, unit_price_fmt, line_total_fmt
         ));
     }
@@ -325,13 +470,6 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
     } else { 
         "⚠ UNPAID" 
     };
-    let payment_color = if is_fully_paid { 
-        "#28a745" 
-    } else if amount_paid > 0.0 {
-        "#ff9800"
-    } else { 
-        "#dc3545" 
-    };
     
     // Determine customer display information
     let customer_display = match customer_type.as_str() {
@@ -343,7 +481,7 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
         }
     };
     
-    let room_display = if customer_type == "walk_in" {
+    let _room_display = if customer_type == "walk_in" {
         "Walk-in".to_string()
     } else {
         room_number.unwrap_or_else(|| "N/A".to_string())
@@ -353,120 +491,203 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
     let amount_paid_fmt = format_money(amount_paid, &currency_code, 2);
     let balance_due_fmt = format_money(balance_due, &currency_code, 2);
 
+    // Build complete HTML receipt from scratch - clean and simple
     let html = format!(r#"<!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Food Order Receipt #{}</title>
+    <title>Receipt #{}</title>
     <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        
         body {{
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            max-width: 600px;
+            font-family: Arial, sans-serif;
+            max-width: 700px;
             margin: 0 auto;
-            padding: 20px;
-            line-height: 1.6;
+            padding: 30px;
+            background: #fff;
             color: #333;
         }}
+        
+        .logos {{
+            text-align: center;
+            margin-bottom: 20px;
+        }}
+        
+        .logo-small {{
+            height: 40px;
+            width: auto;
+            margin-bottom: 10px;
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+        }}
+        
+        .logo-main {{
+            height: 70px;
+            width: auto;
+            max-width: 200px;
+            display: block;
+            margin: 0 auto 15px;
+            border: 2px solid #ddd;
+            padding: 8px;
+            background: #fff;
+            border-radius: 6px;
+        }}
+        
         .header {{
             text-align: center;
-            border-bottom: 2px solid #333;
             padding-bottom: 20px;
-            margin-bottom: 30px;
+            border-bottom: 3px solid #000;
+            margin-bottom: 25px;
         }}
-        .logo {{
-            max-width: 120px;
-            height: auto;
-            margin-bottom: 15px;
-            display: block;
-            border: 2px solid #333;
-            background: #fff;
-            padding: 8px;
+        
+        h1 {{
+            font-size: 26px;
+            margin: 10px 0;
+            color: #000;
         }}
-        .hotel-name {{
-            font-size: 28px;
-            font-weight: bold;
-            color: #2c3e50;
-            margin: 0;
-        }}
-        .hotel-subtitle {{
+        
+        .subtitle {{
             font-size: 14px;
-            color: #7f8c8d;
-            margin: 5px 0 0 0;
-            line-height: 1.4;
+            color: #666;
+            margin: 8px 0;
         }}
-        .receipt-title {{
-            font-size: 24px;
-            margin: 20px 0 10px 0;
-            color: #34495e;
+        
+        .header-note {{
+            background: #f0f8ff;
+            padding: 12px;
+            margin: 15px 0;
+            font-size: 13px;
+            border-radius: 4px;
         }}
-        .order-info {{
-            background-color: #f8f9fa;
-            padding: 20px;
+        
+        h2 {{
+            font-size: 22px;
+            margin-top: 15px;
+            color: #333;
+        }}
+        
+        .info-box {{
+            background: #f8f9fa;
+            padding: 15px;
             border-radius: 8px;
-            margin-bottom: 30px;
+            margin-bottom: 25px;
         }}
+        
         .info-row {{
             display: flex;
             justify-content: space-between;
-            margin-bottom: 10px;
-            padding: 5px 0;
+            padding: 8px 0;
+            border-bottom: 1px solid #dee2e6;
         }}
-        .info-label {{
+        
+        .info-row:last-child {{
+            border-bottom: none;
+        }}
+        
+        .label {{
             font-weight: bold;
-            color: #495057;
+            color: #555;
         }}
+        
         .payment-status {{
             font-weight: bold;
-            color: {};
-            font-size: 18px;
+            font-size: 15px;
         }}
+        
+        .status-paid {{ color: #28a745; }}
+        .status-partial {{ color: #ffc107; }}
+        .status-unpaid {{ color: #dc3545; }}
+        
         table {{
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 30px;
-            background-color: white;
+            margin-bottom: 20px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }}
-        th, td {{
+        
+        th {{
+            background: #343a40;
+            color: white;
             padding: 12px;
             text-align: left;
-            border-bottom: 1px solid #dee2e6;
-        }}
-        th {{
-            background-color: #495057;
-            color: white;
             font-weight: bold;
         }}
+        
+        td {{
+            padding: 10px 12px;
+            border-bottom: 1px solid #dee2e6;
+        }}
+        
+        tbody tr:hover {{
+            background: #f8f9fa;
+        }}
+        
         .text-right {{
             text-align: right;
         }}
-        .total-row {{
-            background-color: #f8f9fa;
+        
+        tfoot tr {{
             font-weight: bold;
             font-size: 18px;
         }}
+        
+        .total-row {{
+            background: #e9ecef;
+        }}
+        
+        .payment-row {{
+            background: #fff3cd;
+            border-top: 2px solid #856404;
+        }}
+        
+        .balance-row {{
+            background: #f8d7da;
+            border-top: 2px solid #721c24;
+        }}
+        
+        .balance-row td {{
+            color: #721c24;
+        }}
+        
         .footer {{
             text-align: center;
-            margin-top: 40px;
-            padding-top: 20px;
-            border-top: 1px solid #dee2e6;
-            color: #6c757d;
-            font-size: 14px;
+            margin-top: 50px;
+            padding-top: 25px;
+            border-top: 2px solid #dee2e6;
+            color: #666;
         }}
-        .brand-message {{
-            margin-top: 10px;
-            font-size: 13px;
-            color: #444;
-            line-height: 1.4;
+        
+        .footer p {{
+            margin: 8px 0;
         }}
+        
+        .branding {{
+            font-size: 11px;
+            color: #999;
+            margin-top: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }}
+        
+        .inertia-badge {{
+            height: 20px;
+            width: auto;
+            vertical-align: middle;
+            opacity: 0.7;
+        }}
+        
         @media print {{
             body {{
-                margin: 0;
                 padding: 15px;
             }}
-            .no-print {{
-                display: none;
+            .logos img, .logo-small, .logo-main {{
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
             }}
         }}
     </style>
@@ -474,35 +695,31 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
 <body>
     <div class="header">
         {}
-        <h1 class="hotel-name">{}</h1>
-        <p class="hotel-subtitle">{}</p>
+        <h1>{}</h1>
+        <p class="subtitle">{}</p>
         {}
-        <h2 class="receipt-title">Food Order Receipt</h2>
+        <h2>Sales Receipt</h2>
     </div>
-
-    <div class="order-info">
+    
+    <div class="info-box">
         <div class="info-row">
-            <span class="info-label">Order #:</span>
+            <span class="label">Receipt #:</span>
             <span>{}</span>
         </div>
         <div class="info-row">
-            <span class="info-label">Date:</span>
+            <span class="label">Date:</span>
             <span>{}</span>
         </div>
         <div class="info-row">
-            <span class="info-label">Customer:</span>
+            <span class="label">Customer:</span>
             <span>{}</span>
         </div>
         <div class="info-row">
-            <span class="info-label">Room:</span>
-            <span>{}</span>
-        </div>
-        <div class="info-row">
-            <span class="info-label">Payment Status:</span>
-            <span class="payment-status">{}</span>
+            <span class="label">Payment Status:</span>
+            <span class="payment-status {}">{}</span>
         </div>
     </div>
-
+    
     <table>
         <thead>
             <tr>
@@ -517,61 +734,65 @@ pub fn build_order_receipt_html(order_id: i64) -> Result<String, String> {
         </tbody>
         <tfoot>
             <tr class="total-row">
-                <td colspan="3"><strong>Grand Total</strong></td>
-                <td class="text-right"><strong>{}</strong></td>
+                <td colspan="3">Grand Total</td>
+                <td class="text-right">{}</td>
             </tr>
             {}
         </tfoot>
     </table>
-
+    
     <div class="footer">
-        <p>Thank you for dining with us!</p>
+        <p><strong>Thank you for your purchase!</strong></p>
         {}
-        <p>Receipt generated on {}</p>
+        <div class="branding">
+            <span>Powered by</span>
+            {}
+            <strong>INERTIA</strong>
+        </div>
+        <p style="font-size: 12px;">Receipt generated on {}</p>
     </div>
 </body>
-</html>"#, 
+</html>"#,
         order_id,
-        payment_color,
-        logo_html,
-    html_escape(&business_name),
-    html_escape(&business_address),
-        receipt_header_html,
-        order_id,
-        formatted_date,
-        html_escape(&customer_display),
-        html_escape(&room_display),
-        payment_status,
-        items_html,
-        total_amount_fmt,
-        // Add payment breakdown if partially paid or unpaid
-        if !is_fully_paid {
-            format!(r#"
-            <tr style="background-color: #fff3cd; border-top: 2px solid #856404;">
-                <td colspan="3" style="padding: 8px;"><strong>Amount Paid</strong></td>
-                <td class="text-right" style="padding: 8px;"><strong>{}</strong></td>
-            </tr>
-            <tr style="background-color: #f8d7da; border-bottom: 2px solid #721c24;">
-                <td colspan="3" style="padding: 8px;"><strong>Balance Due</strong></td>
-                <td class="text-right" style="padding: 8px; color: #721c24;"><strong>{}</strong></td>
-            </tr>"#, amount_paid_fmt, balance_due_fmt)
+        logo_section,
+        html_escape(&business_name),
+        html_escape(&business_address),
+        if !receipt_header.trim().is_empty() {
+            format!(r#"<div class="header-note">{}</div>"#, html_escape(&receipt_header))
         } else {
             String::new()
         },
-        receipt_footer_html,
+        order_id,
+        formatted_date,
+        html_escape(&customer_display),
+        if is_fully_paid { "status-paid" } else if amount_paid > 0.0 { "status-partial" } else { "status-unpaid" },
+        payment_status,
+        items_html,
+        total_amount_fmt,
+        if !is_fully_paid {
+            format!(
+                r#"<tr class="payment-row">
+                <td colspan="3">Amount Paid</td>
+                <td class="text-right">{}</td>
+            </tr>
+            <tr class="balance-row">
+                <td colspan="3">Balance Due</td>
+                <td class="text-right">{}</td>
+            </tr>"#,
+                amount_paid_fmt, balance_due_fmt
+            )
+        } else {
+            String::new()
+        },
+        if !receipt_footer.trim().is_empty() {
+            format!(r#"<p style="margin: 15px 0; font-size: 13px;">{}</p>"#, html_escape(&receipt_footer))
+        } else {
+            String::new()
+        },
+        inertia_footer_logo,
         chrono::Local::now().format("%B %d, %Y at %I:%M %p")
     );
-    
-    // Debug: Print first 500 characters to see if logo is embedded
-    if html.len() > 500 {
-        println!("🔍 HTML PREVIEW (first 500 chars): {}", &html[..500]);
-    }
-    if html.contains("data:image/jpeg;base64,") {
-        println!("✅ Logo image tag found in HTML!");
-    } else {
-        println!("❌ Logo image tag NOT found in HTML!");
-    }
-    
+
     Ok(html)
 }
 
@@ -599,15 +820,31 @@ pub fn build_sale_return_receipt_html(return_id: i64) -> Result<String, String> 
             if embedded.is_empty() {
                 "".to_string()
             } else {
-                format!("data:image/jpeg;base64,{}", embedded)
+                format!("data:image/png;base64,{}", embedded)
             }
         }
     };
 
+    // Build logo HTML - business logo at top, INERTIA in footer
+    let inertia_logo = get_logo_base64();
+    
+    // Business logo (main logo at top)
     let logo_html = if logo_src.is_empty() {
-        "".to_string()
+        // No business logo, show INERTIA as main
+        if inertia_logo.is_empty() {
+            "".to_string()
+        } else {
+            format!(r#"<img src="data:image/png;base64,{}" alt="INERTIA" style="height: 45px; width: auto; max-width: 100px; object-fit: contain; display: block; margin: 0 auto 6px; border: 1px solid #ddd; padding: 3px; background: white; border-radius: 4px;">"#, inertia_logo)
+        }
     } else {
-        format!(r#"<img src=\"{}\" alt=\"Logo\" class=\"logo\">"#, logo_src)
+        format!(r#"<img src="{}" alt="Business Logo" style="height: 45px; width: auto; max-width: 100px; object-fit: contain; display: block; margin: 0 auto 6px; border: 1px solid #ddd; padding: 3px; background: white; border-radius: 4px;">"#, logo_src)
+    };
+    
+    // INERTIA footer logo (small, inline with "Powered by INERTIA")
+    let inertia_footer_html = if inertia_logo.is_empty() {
+        r#"<div class="sub" style="margin-top:8px; color: #999; font-size: 11px;">Powered by <strong>INERTIA</strong></div>"#.to_string()
+    } else {
+        format!(r#"<div class="sub" style="margin-top:8px; color: #999; font-size: 11px; display: flex; align-items: center; justify-content: center; gap: 4px;"><span>Powered by</span><img src="data:image/png;base64,{}" alt="INERTIA" style="height: 16px; width: auto; opacity: 0.7; vertical-align: middle;"><strong>INERTIA</strong></div>"#, inertia_logo)
     };
 
     // Return header
@@ -708,7 +945,7 @@ pub fn build_sale_return_receipt_html(return_id: i64) -> Result<String, String> 
   <style>
     body {{ font-family: Arial, sans-serif; color: #111; margin: 0; padding: 16px; }}
     .wrap {{ max-width: 380px; margin: 0 auto; }}
-    .logo {{ max-width: 140px; max-height: 60px; display: block; margin: 0 auto 8px; }}
+    .logo {{ max-width: 140px; max-height: 60px; display: block; margin: 0 auto 8px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
     h1 {{ font-size: 18px; margin: 6px 0 2px; text-align: center; }}
     .sub {{ text-align: center; font-size: 12px; color: #444; }}
     .hr {{ border-top: 1px dashed #999; margin: 12px 0; }}
@@ -761,6 +998,7 @@ pub fn build_sale_return_receipt_html(return_id: i64) -> Result<String, String> 
     <div class=\"hr\"></div>
     {footer_html}
     <div class=\"sub\" style=\"margin-top:10px\">Thank you</div>
+    {inertia_footer_html}
   </div>
 </body>
 </html>"#,
@@ -770,6 +1008,7 @@ pub fn build_sale_return_receipt_html(return_id: i64) -> Result<String, String> 
         header_html = header_html,
         footer_html = footer_html,
         logo_html = logo_html,
+        inertia_footer_html = inertia_footer_html,
         sale_id = sale_id,
         return_date = html_escape(&return_date),
         created_at = html_escape(&created_at),
@@ -785,16 +1024,39 @@ pub fn build_sale_return_receipt_html(return_id: i64) -> Result<String, String> 
 
 /// Print a sale return receipt (opens in browser with auto-print)
 #[tauri::command]
-pub fn print_sale_return_receipt(return_id: i64) -> Result<String, String> {
+pub fn print_sale_return_receipt(return_id: i64, _app_handle: tauri::AppHandle) -> Result<String, String> {
     let mut html = build_sale_return_receipt_html(return_id)?;
 
     let auto_print_script = String::from(
         r#"
     <script>
         window.addEventListener('load', function() {
-            setTimeout(function() {
-                window.print();
-            }, 500);
+            let images = document.querySelectorAll('img');
+            let loaded = 0;
+            let total = images.length;
+            
+            if (total === 0) {
+                setTimeout(() => window.print(), 500);
+                return;
+            }
+            
+            function checkAndPrint() {
+                loaded++;
+                if (loaded === total) {
+                    setTimeout(() => window.print(), 500);
+                }
+            }
+            
+            images.forEach(img => {
+                if (img.complete) {
+                    checkAndPrint();
+                } else {
+                    img.onload = checkAndPrint;
+                    img.onerror = checkAndPrint;
+                }
+            });
+            
+            setTimeout(() => window.print(), 5000);
         });
     </script>
 "#,
@@ -802,16 +1064,24 @@ pub fn print_sale_return_receipt(return_id: i64) -> Result<String, String> {
 
     html = html.replace("</head>", &(auto_print_script + "</head>"));
 
+    // Write HTML to a temporary file and open it
+    use std::fs::File;
+    use std::io::Write;
+    
     let temp_dir = std::env::temp_dir();
     let file_path = temp_dir.join(format!("return_receipt_{}.html", return_id));
-
-    std::fs::write(&file_path, html)
-        .map_err(|e| format!("Failed to write return receipt file: {}", e))?;
-
+    
+    let mut file = File::create(&file_path)
+        .map_err(|e| format!("Failed to create temp file: {}", e))?;
+    
+    file.write_all(html.as_bytes())
+        .map_err(|e| format!("Failed to write HTML: {}", e))?;
+    
+    // Open with default browser
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("cmd")
-            .args(["/C", "start", "", &file_path.to_string_lossy()])
+            .args(["/C", "start", "", file_path.to_str().unwrap()])
             .spawn()
             .map_err(|e| format!("Failed to open return receipt: {}", e))?;
     }
@@ -980,15 +1250,24 @@ pub fn build_final_invoice_html_with_discount(
             if embedded.is_empty() {
                 "".to_string()
             } else {
-                format!("data:image/jpeg;base64,{}", embedded)
+                format!("data:image/png;base64,{}", embedded)
             }
         }
     };
 
+    // INERTIA branding logo (small, at top)
+    let inertia_logo = get_logo_base64();
+    let inertia_logo_html = if inertia_logo.is_empty() {
+        "".to_string()
+    } else {
+        format!(r#"<img src="data:image/png;base64,{}" alt="INERTIA" style="height: 35px; width: auto; max-width: 90px; object-fit: contain; display: block; margin: 0 auto 8px;">"#, inertia_logo)
+    };
+
+    // Business logo (main logo)
     let logo_html = if logo_src.is_empty() {
         "".to_string()
     } else {
-        format!(r#"<img src=\"{}\" alt=\"Logo\" style=\"width: auto; height: 60px; max-width: 120px; object-fit: contain; display: block; margin: 0 auto; -webkit-print-color-adjust: exact; print-color-adjust: exact;\">"#, logo_src)
+        format!(r#"<img src="{}" alt="Business Logo" style="height: 55px; width: auto; max-width: 110px; object-fit: contain; display: block; margin: 0 auto 8px; border: 1px solid #ddd; padding: 4px; background: white; border-radius: 4px;">"#, logo_src)
     };
 
     let receipt_header_html = if receipt_header.trim().is_empty() {
@@ -1110,11 +1389,11 @@ pub fn build_final_invoice_html_with_discount(
         }
     }
     
-    // If no food items, show a simple message
+    // If no items, show a simple message
     if food_table_rows.is_empty() {
         let zero_fmt = format_money(0.0, &currency_code, 0);
         food_table_rows = r#"<div class="table-row">
-            <div class="table-cell">No food orders</div>
+            <div class="table-cell">No items</div>
             <div class="table-cell center">-</div>
             <div class="table-cell center">-</div>
             <div class="table-cell right">__ZERO__</div>
@@ -1217,6 +1496,8 @@ pub fn build_final_invoice_html_with_discount(
             border-radius: 4px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             object-fit: contain;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
         }}
         
         .logo::after {{
@@ -1393,6 +1674,7 @@ pub fn build_final_invoice_html_with_discount(
         <div class="header">
             <div class="logo-container" style="text-align: center; margin-bottom: 20px; padding: 10px;">
                 {}
+                {}
             </div>
             <div class="hotel-name">{}</div>
             <div class="hotel-address">{}</div>
@@ -1439,7 +1721,7 @@ pub fn build_final_invoice_html_with_discount(
             <div class="table-cell right">{}</div>
         </div>
         
-        <div class="section-header">FOOD ORDERS</div>
+        <div class="section-header">ITEMS</div>
         <div class="table-header">
             <div class="table-cell">Item</div>
             <div class="table-cell center">Qty</div>
@@ -1454,7 +1736,7 @@ pub fn build_final_invoice_html_with_discount(
                 <span>{}</span>
             </div>
             <div class="total-row">
-                <span>Food Orders:</span>
+                <span>Items:</span>
                 <span>{}</span>
             </div>
             <div class="total-row">
@@ -1474,13 +1756,14 @@ pub fn build_final_invoice_html_with_discount(
         </div>
         
         <div style="margin: 8px 0; padding: 6px; border: 1px solid #333; font-size: 9px; text-align: center; background: #f9f9f9;">
-            <strong>NOTE:</strong> Only unpaid food orders are included in the total amount.<br>
+            <strong>NOTE:</strong> Only unpaid items are included in the total amount.<br>
             Paid orders are shown with [PAID] status and crossed out for reference only.
         </div>
         
         <div class="footer">
-            Thank you for your stay!<br>
+            Thank you for your purchase!<br>
             {}<br>
+            <span style="font-size: 8px; color: #999; margin-top: 8px; display: block;">Powered by <strong>INERTIA</strong></span><br>
             Invoice generated on {} at {}
         </div>
         
@@ -1490,7 +1773,8 @@ pub fn build_final_invoice_html_with_discount(
     </div>
 </body>
 </html>"#,
-    logo_html,                    // Logo image HTML
+    inertia_logo_html,            // INERTIA branding logo
+    logo_html,                    // Business logo
     html_escape(&business_name),  // Business name
     html_escape(&business_address), // Business address
     receipt_header_html,
@@ -1569,6 +1853,207 @@ pub fn build_final_invoice_html_with_discount(
     }
     
     Ok(html)
+}
+
+/// Build a simplified thermal printer receipt (58mm/80mm paper - text only, no graphics)
+/// This is designed for POS thermal printers that work best with plain text
+pub fn build_thermal_receipt(order_id: i64) -> Result<String, String> {
+    let conn = crate::db::get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+
+    // Get settings
+    let business_name = get_setting_or(&conn, "business_name", "Business Manager")?;
+    let _business_address = get_setting_or(&conn, "business_address", "")?;
+    let receipt_header = get_setting_or(&conn, "receipt_header", "WELCOME TO THE SHOP")?;
+    let receipt_footer = get_setting_or(&conn, "receipt_footer", "Thank you for your purchase!")?;
+
+    // Get logos
+    let logo_src = match get_business_logo_data_url(&conn)? {
+        Some(src) => {
+            if src.len() < 1_500_000 {
+                src
+            } else {
+                let embedded = get_logo_base64();
+                if embedded.is_empty() {
+                    "".to_string()
+                } else {
+                    format!("data:image/png;base64,{}", embedded)
+                }
+            }
+        },
+        None => {
+            let embedded = get_logo_base64();
+            if embedded.is_empty() {
+                "".to_string()
+            } else {
+                format!("data:image/png;base64,{}", embedded)
+            }
+        }
+    };
+
+    let inertia_logo = get_logo_base64();
+    
+    // Build logo HTML for thermal receipt (small, centered)
+    let logo_html = if !logo_src.is_empty() {
+        format!(r#"<div style="text-align: center; margin-bottom: 8px;"><img src="{}" alt="Logo" style="height: 40px; width: auto; max-width: 60mm; display: inline-block;"></div>"#, logo_src)
+    } else {
+        String::new()
+    };
+    
+    // INERTIA footer logo for thermal
+    let inertia_footer_html = if !inertia_logo.is_empty() {
+        format!(r#"<div style="text-align: center; margin-top: 4px; font-size: 10px; color: #666;"><img src="data:image/png;base64,{}" alt="INERTIA" style="height: 14px; width: auto; opacity: 0.7; vertical-align: middle; margin-right: 4px;"><span>Powered by INERTIA</span></div>"#, inertia_logo)
+    } else {
+        r#"<div style="text-align: center; margin-top: 4px; font-size: 10px; color: #666;">Powered by INERTIA</div>"#.to_string()
+    };
+
+    // Get order details
+    let mut stmt = conn.prepare(
+        "SELECT id, created_at, total_amount, paid, customer_type, customer_name 
+         FROM sales WHERE id = ?1"
+    ).map_err(|e| format!("Failed to prepare statement: {}", e))?;
+
+    let order_row = stmt.query_row([order_id], |row: &rusqlite::Row| {
+        Ok((
+            row.get::<_, i64>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, f64>(2)?,
+            row.get::<_, i64>(3)?,
+            row.get::<_, String>(4)?,
+            row.get::<_, Option<String>>(5)?,
+        ))
+    }).map_err(|e| format!("Order not found: {}", e))?;
+
+    let (_id, created_at, total_amount, paid_status, customer_type, customer_name) = order_row;
+    let _is_paid = paid_status != 0;
+
+    // Format date
+    let formatted_date = if let Ok(parsed_date) = chrono::DateTime::parse_from_rfc3339(&created_at) {
+        parsed_date.format("%b %d, %Y %I:%M %p").to_string()
+    } else {
+        created_at.clone()
+    };
+
+    let customer = customer_name.as_deref().unwrap_or(&customer_type);
+
+    // Get order items
+    let mut items_stmt = conn.prepare(
+        "SELECT item_name, quantity, unit_price, line_total 
+         FROM sale_items WHERE order_id = ?1"
+    ).map_err(|e| format!("Failed to prepare items statement: {}", e))?;
+
+    let items = items_stmt.query_map([order_id], |row: &rusqlite::Row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, i32>(1)?,
+            row.get::<_, f64>(2)?,
+            row.get::<_, f64>(3)?,
+        ))
+    }).map_err(|e| format!("Failed to query items: {}", e))?;
+
+    let mut items_text = String::new();
+    for item_result in items {
+        let (name, qty, _unit_price, total_price) = item_result.map_err(|e| format!("Failed to read item: {}", e))?;
+        items_text.push_str(&format!(
+            "{:<20} {:>3} x {:>8.2}\n",
+            truncate_str(&name, 20),
+            qty,
+            total_price
+        ));
+    }
+
+    // Get currency symbol
+    let currency = get_setting_or(&conn, "currency", "PKR")?;
+
+    // Build thermal receipt (optimized for 58mm/80mm thermal printers)
+    // Using plain text formatting for maximum compatibility
+    let thermal_text = format!(
+        r#"<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Thermal Receipt #{}</title>
+    <style>
+        @page {{
+            size: 80mm auto;
+            margin: 0;
+        }}
+        body {{
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.3;
+            margin: 0;
+            padding: 8px;
+            width: 80mm;
+        }}
+        pre {{
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }}
+        img {{
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }}
+    </style>
+</head>
+<body>
+{}
+<pre>
+================================
+      {}
+      {}
+================================
+Receipt #: {}
+Date: {}
+Customer: {}
+--------------------------------
+ITEM                QTY   TOTAL
+--------------------------------
+{}--------------------------------
+GRAND TOTAL:     {} {:.2}
+Payment: {}
+================================
+{}
+================================
+</pre>
+{}
+</body>
+</html>"#,
+        order_id,
+        logo_html,
+        center_text(&business_name, 32),
+        center_text(&receipt_header, 32),
+        order_id,
+        formatted_date,
+        customer,
+        items_text,
+        currency,
+        total_amount,
+        if _is_paid { "PAID" } else { "PENDING" },
+        receipt_footer,
+        inertia_footer_html
+    );
+
+    Ok(thermal_text)
+}
+
+/// Helper function to center text within a given width
+fn center_text(text: &str, width: usize) -> String {
+    let text_len = text.len();
+    if text_len >= width {
+        return text.to_string();
+    }
+    let padding = (width - text_len) / 2;
+    format!("{}{}", " ".repeat(padding), text)
+}
+
+/// Helper function to truncate string to max length
+fn truncate_str(s: &str, max_len: usize) -> String {
+    if s.len() <= max_len {
+        s.to_string()
+    } else {
+        format!("{}...", &s[..max_len - 3])
+    }
 }
 
 fn calculate_stay_days(check_in: &str, check_out: &str) -> Result<i32, String> {

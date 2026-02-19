@@ -463,10 +463,10 @@ const AccountsPage: React.FC<AccountsPageProps> = ({ onBack, onNavigateToPOS }) 
             if (e.target === e.currentTarget) setSelectedCustomer(null);
           }}
         >
-          <div className="bc-card" style={{ width: 'min(1020px, 96vw)', borderRadius: '16px', padding: '32px', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)' }}>
+          <div className="bc-card" style={{ width: 'min(1020px, 96vw)', borderRadius: '16px', padding: '24px', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start' }}>
               <div>
-                <div style={{ fontSize: '24px', fontWeight: 700 }}>{selectedCustomer.customer_name}</div>
+                <div style={{ fontSize: '20px', fontWeight: 700 }}>{selectedCustomer.customer_name}</div>
                 <div style={{ fontSize: '14px', color: colors.textSecondary, marginTop: '6px' }}>
                   Balance: <span style={{ color: colors.text, fontWeight: 700 }}>{formatMoney(selectedCustomer.balance_due || 0)}</span>
                 </div>
@@ -615,10 +615,10 @@ const AccountsPage: React.FC<AccountsPageProps> = ({ onBack, onNavigateToPOS }) 
             if (e.target === e.currentTarget) setSelectedSupplier(null);
           }}
         >
-          <div className="bc-card" style={{ width: 'min(1020px, 96vw)', borderRadius: '16px', padding: '32px', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)' }}>
+          <div className="bc-card" style={{ width: 'min(1020px, 96vw)', borderRadius: '16px', padding: '24px', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start' }}>
               <div>
-                <div style={{ fontSize: '24px', fontWeight: 700 }}>{selectedSupplier.supplier_name}</div>
+                <div style={{ fontSize: '20px', fontWeight: 700 }}>{selectedSupplier.supplier_name}</div>
                 <div style={{ fontSize: '14px', color: colors.textSecondary, marginTop: '6px' }}>
                   Balance: <span style={{ color: colors.text, fontWeight: 700 }}>{formatMoney(selectedSupplier.balance_due || 0)}</span>
                 </div>

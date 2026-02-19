@@ -572,8 +572,8 @@ const ProductsPage: React.FC<ProductsPageProps> = ({ onBack }) => {
 
       {isModalOpen && (
         <div className="bc-modal-overlay">
-          <div className="bc-modal" style={{ maxWidth: '640px', padding: '32px', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)' }}>
-            <div style={{ fontSize: '24px', fontWeight: 700, color: colors.text, marginBottom: '8px' }}>{title}</div>
+          <div className="bc-modal" style={{ maxWidth: '640px', padding: '24px', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)' }}>
+            <div style={{ fontSize: '20px', fontWeight: 700, color: colors.text, marginBottom: '8px' }}>{title}</div>
             <div style={{ fontSize: '14px', color: colors.textSecondary, marginBottom: '20px' }}>
               {editingId ? 'Update product details' : 'Add a new product to your inventory'}
             </div>

@@ -6,6 +6,7 @@ import {
     getSaleDetails,
     getSalePaymentSummary,
     getSales,
+    printOrderReceipt,
     type SaleDetails,
     type SalePaymentSummary,
     type SaleSummary,
@@ -203,17 +204,7 @@ const SalesHistoryPage: React.FC<SalesHistoryPageProps> = ({ onBack, onDuplicate
 
   const handleReprint = async (saleId: number) => {
     try {
-      const html = await buildOrderReceiptHtml(saleId);
-      const w = window.open('', '_blank');
-      if (!w) {
-        showWarning('Print Window Blocked', 'Please allow popups to print receipts');
-        return;
-      }
-      w.document.write(html);
-      w.document.close();
-      w.focus();
-      w.print();
-      w.close();
+      await printOrderReceipt(saleId);
       showSuccess('Printed', `Receipt for sale #${saleId} sent to printer`);
     } catch (e) {
       showError('Print', e instanceof Error ? e.message : String(e));
@@ -453,10 +444,10 @@ const SalesHistoryPage: React.FC<SalesHistoryPageProps> = ({ onBack, onDuplicate
 
       {selectedSaleId !== null && (
         <div className="bc-modal-overlay" onClick={closeDetails}>
-          <div className="bc-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '860px', padding: '32px', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', marginBottom: '24px' }}>
+          <div className="bc-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '860px', padding: '24px', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', marginBottom: '20px' }}>
               <div>
-                <div style={{ fontSize: '24px', fontWeight: 700, color: colors.text }}>Sale #{selectedSaleId}</div>
+                <div style={{ fontSize: '20px', fontWeight: 700, color: colors.text }}>Sale #{selectedSaleId}</div>
                 <div style={{ fontSize: '14px', color: colors.textSecondary, marginTop: '4px' }}>Items, totals, and payment status</div>
               </div>
               <button type="button" className="bc-btn bc-btn-outline" onClick={closeDetails} style={{ width: 'auto' }}>
@@ -558,10 +549,10 @@ const SalesHistoryPage: React.FC<SalesHistoryPageProps> = ({ onBack, onDuplicate
 
       {paymentsModalSaleId !== null && (
         <div className="bc-modal-overlay" onClick={closePaymentsModal}>
-          <div className="bc-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px', padding: '32px', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+          <div className="bc-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px', padding: '24px', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
               <div>
-                <div style={{ fontSize: '24px', fontWeight: 700, color: colors.text }}>Adjust Payment</div>
+                <div style={{ fontSize: '20px', fontWeight: 700, color: colors.text }}>Adjust Payment</div>
                 <div style={{ fontSize: '14px', color: colors.textSecondary, marginTop: '4px' }}>Record a partial payment</div>
               </div>
               <button type="button" className="bc-btn bc-btn-outline" onClick={closePaymentsModal} style={{ width: 'auto' }}>

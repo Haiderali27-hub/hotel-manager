@@ -55,6 +55,13 @@ const ReturnsPage: React.FC<ReturnsPageProps> = ({ onBack }) => {
   const [details, setDetails] = useState<SaleReturnDetails | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
 
+  // History filters
+  const [dateFilterType, setDateFilterType] = useState<'all' | 'day' | 'month' | 'range'>('all');
+  const [filterDate, setFilterDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [filterMonth, setFilterMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [filterStartDate, setFilterStartDate] = useState(() => new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10));
+  const [filterEndDate, setFilterEndDate] = useState(() => new Date().toISOString().slice(0, 10));
+
   const cardStyle: React.CSSProperties = {
     backgroundColor: colors.card,
     border: `1px solid ${colors.border}`,
@@ -127,6 +134,26 @@ const ReturnsPage: React.FC<ReturnsPageProps> = ({ onBack }) => {
     }
     return total;
   }, [qtyBySaleItemId, returnable]);
+
+  const filteredHistory = useMemo(() => {
+    if (dateFilterType === 'all') return history;
+    
+    return history.filter(r => {
+      const returnDate = r.return_date;
+      if (!returnDate) return false;
+      
+      switch (dateFilterType) {
+        case 'day':
+          return returnDate === filterDate;
+        case 'month':
+          return returnDate.startsWith(filterMonth);
+        case 'range':
+          return returnDate >= filterStartDate && returnDate <= filterEndDate;
+        default:
+          return true;
+      }
+    });
+  }, [history, dateFilterType, filterDate, filterMonth, filterStartDate, filterEndDate]);
 
   const resetProcessForm = () => {
     setSaleIdInput('');
@@ -343,12 +370,18 @@ const ReturnsPage: React.FC<ReturnsPageProps> = ({ onBack }) => {
           <div style={cardStyle}>
             <div style={{ display: 'grid', gridTemplateColumns: '220px 200px 220px 1fr', gap: '12px', alignItems: 'end' }}>
               <div>
-                <div style={{ fontSize: '12px', color: colors.textSecondary, marginBottom: '6px' }}>Sale ID</div>
+                <div style={{ fontSize: '12px', color: colors.textSecondary, marginBottom: '6px' }}>
+                  <span style={{ color: '#ef4444' }}>* </span>Sale ID
+                  <span style={{ fontSize: '10px', display: 'block', marginTop: '2px', fontStyle: 'italic' }}>
+                    Links return to original sale
+                  </span>
+                </div>
                 <input
                   value={saleIdInput}
                   onChange={(e) => setSaleIdInput(e.target.value)}
                   placeholder="e.g. 123"
                   style={inputStyle}
+                  required
                 />
                 <div style={{ marginTop: '8px' }}>
                   <button onClick={() => void openSalePicker()} style={secondaryButtonStyle}>
@@ -357,8 +390,20 @@ const ReturnsPage: React.FC<ReturnsPageProps> = ({ onBack }) => {
                 </div>
               </div>
               <div>
-                <div style={{ fontSize: '12px', color: colors.textSecondary, marginBottom: '6px' }}>Return date</div>
-                <input value={returnDate} onChange={(e) => setReturnDate(e.target.value)} type="date" style={inputStyle} />
+                <div style={{ fontSize: '12px', color: colors.textSecondary, marginBottom: '6px' }}>
+                  <span style={{ color: '#ef4444' }}>* </span>Return date
+                </div>
+                <input 
+                  value={returnDate} 
+                  onChange={(e) => setReturnDate(e.target.value)} 
+                  type="date" 
+                  style={{ 
+                    ...inputStyle, 
+                    colorScheme: theme === 'dark' ? 'dark' : 'light', 
+                    cursor: 'pointer' 
+                  }} 
+                  required
+                />
               </div>
               <div>
                 <div style={{ fontSize: '12px', color: colors.textSecondary, marginBottom: '6px' }}>Refund method</div>
@@ -492,17 +537,85 @@ const ReturnsPage: React.FC<ReturnsPageProps> = ({ onBack }) => {
       {tab === 'history' && (
         <div style={{ marginTop: '16px', display: 'grid', gridTemplateColumns: selectedReturnId ? '1fr 1fr' : '1fr', gap: '12px' }}>
           <div style={cardStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
               <div style={{ fontWeight: 900 }}>Recent returns</div>
               <button onClick={() => void loadHistory()} style={secondaryButtonStyle} disabled={loadingHistory}>
                 {loadingHistory ? 'Refreshing…' : 'Refresh'}
               </button>
             </div>
 
+            {/* Date Filter Controls */}
+            <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: colors.surface, borderRadius: '8px', border: `1px solid ${colors.border}` }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: colors.textSecondary, marginBottom: '8px' }}>Filter by Date</div>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'end' }}>
+                <div style={{ flex: '0 0 140px' }}>
+                  <select 
+                    value={dateFilterType} 
+                    onChange={(e) => setDateFilterType(e.target.value as any)}
+                    style={{ ...inputStyle, padding: '8px 10px' }}
+                  >
+                    <option value="all">All dates</option>
+                    <option value="day">Specific day</option>
+                    <option value="month">Specific month</option>
+                    <option value="range">Date range</option>
+                  </select>
+                </div>
+
+                {dateFilterType === 'day' && (
+                  <div style={{ flex: '0 0 160px' }}>
+                    <input
+                      type="date"
+                      value={filterDate}
+                      onChange={(e) => setFilterDate(e.target.value)}
+                      style={{ ...inputStyle, padding: '8px 10px', colorScheme: theme === 'dark' ? 'dark' : 'light', cursor: 'pointer' }}
+                    />
+                  </div>
+                )}
+
+                {dateFilterType === 'month' && (
+                  <div style={{ flex: '0 0 160px' }}>
+                    <input
+                      type="month"
+                      value={filterMonth}
+                      onChange={(e) => setFilterMonth(e.target.value)}
+                      style={{ ...inputStyle, padding: '8px 10px', colorScheme: theme === 'dark' ? 'dark' : 'light', cursor: 'pointer' }}
+                    />
+                  </div>
+                )}
+
+                {dateFilterType === 'range' && (
+                  <>
+                    <div style={{ flex: '0 0 140px' }}>
+                      <div style={{ fontSize: '10px', color: colors.textSecondary, marginBottom: '4px' }}>From</div>
+                      <input
+                        type="date"
+                        value={filterStartDate}
+                        onChange={(e) => setFilterStartDate(e.target.value)}
+                        style={{ ...inputStyle, padding: '8px 10px', colorScheme: theme === 'dark' ? 'dark' : 'light', cursor: 'pointer' }}
+                      />
+                    </div>
+                    <div style={{ flex: '0 0 140px' }}>
+                      <div style={{ fontSize: '10px', color: colors.textSecondary, marginBottom: '4px' }}>To</div>
+                      <input
+                        type="date"
+                        value={filterEndDate}
+                        onChange={(e) => setFilterEndDate(e.target.value)}
+                        style={{ ...inputStyle, padding: '8px 10px', colorScheme: theme === 'dark' ? 'dark' : 'light', cursor: 'pointer' }}
+                      />
+                    </div>
+                  </>
+                )}
+
+                <div style={{ fontSize: '12px', color: colors.textSecondary, padding: '8px' }}>
+                  Showing {filteredHistory.length} of {history.length} returns
+                </div>
+              </div>
+            </div>
+
             {loadingHistory ? (
               <div style={{ padding: '12px 0', color: colors.textSecondary }}>Loading…</div>
-            ) : history.length === 0 ? (
-              <div style={{ padding: '12px 0', color: colors.textSecondary }}>No returns found.</div>
+            ) : filteredHistory.length === 0 ? (
+              <div style={{ padding: '12px 0', color: colors.textSecondary }}>No returns found{dateFilterType !== 'all' ? ' for selected date filter' : ''}.</div>
             ) : (
               <div style={{ overflowX: 'auto', marginTop: '12px' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -518,7 +631,7 @@ const ReturnsPage: React.FC<ReturnsPageProps> = ({ onBack }) => {
                     </tr>
                   </thead>
                   <tbody>
-                    {history.map((r) => (
+                    {filteredHistory.map((r) => (
                       <tr key={r.id} style={{ borderBottom: `1px solid ${colors.border}` }}>
                         <td style={{ padding: '10px 8px', fontWeight: 900 }}>#{r.id}</td>
                         <td style={{ padding: '10px 8px' }}>#{r.sale_id}</td>

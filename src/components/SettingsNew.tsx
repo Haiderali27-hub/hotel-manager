@@ -13,7 +13,7 @@ interface SecurityQuestion {
   answer: string;
 }
 
-type SettingsTab = 'general' | 'users' | 'branding' | 'database';
+type SettingsTab = 'general' | 'users' | 'branding' | 'database' | 'support';
 
 const Settings: React.FC = () => {
   const { colors, theme } = useTheme();
@@ -108,6 +108,23 @@ const Settings: React.FC = () => {
 
       if (!selected || Array.isArray(selected)) return;
 
+      // Check file size before uploading (max 1MB)
+      try {
+        const fileStats = await invoke<{ size: number }>('get_file_size', { path: selected });
+        const MAX_SIZE = 1024 * 1024; // 1MB
+        if (fileStats.size > MAX_SIZE) {
+          const sizeMB = (fileStats.size / 1_048_576).toFixed(2);
+          showError(
+            'File Too Large',
+            `Logo is ${sizeMB} MB. Maximum size is 1 MB. Please compress or resize your image using tools like TinyPNG.com or Squoosh.app`
+          );
+          return;
+        }
+      } catch (err) {
+        console.warn('Could not check file size:', err);
+        // Continue anyway, backend will validate
+      }
+
       const storedPath = await invoke<string>('store_business_logo', {
         sourcePath: selected
       });
@@ -123,6 +140,18 @@ const Settings: React.FC = () => {
     } catch (error) {
       console.error('Logo upload failed:', error);
       showError('Logo Upload Failed', `${error}`);
+    }
+  };
+
+  const handleRemoveLogo = async () => {
+    try {
+      await invoke('remove_business_logo');
+      setBusinessLogoPath('');
+      setBusinessLogoDataUrl('');
+      showSuccess('Logo Removed', 'Business logo has been removed. Receipts will now show only the INERTIA logo.');
+    } catch (error) {
+      console.error('Logo removal failed:', error);
+      showError('Removal Failed', `${error}`);
     }
   };
 
@@ -403,6 +432,13 @@ const Settings: React.FC = () => {
           >
             Database
           </button>
+          <button
+            type="button"
+            className={activeTab === 'support' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'}
+            onClick={() => setActiveTab('support')}
+          >
+            Support
+          </button>
         </div>
       </div>
 
@@ -565,6 +601,11 @@ const Settings: React.FC = () => {
                 <button className="bc-btn bc-btn-primary" onClick={handleUploadLogo} type="button">
                   Upload Logo
                 </button>
+                {businessLogoPath && (
+                  <button className="bc-btn" onClick={handleRemoveLogo} type="button" style={{ background: '#ef4444', color: 'white' }}>
+                    Remove Logo
+                  </button>
+                )}
                 {businessLogoDataUrl ? (
                   <img src={businessLogoDataUrl} alt="Logo preview" style={{ height: 48, maxWidth: 140, objectFit: 'contain' }} />
                 ) : null}
@@ -572,7 +613,9 @@ const Settings: React.FC = () => {
                   {businessLogoPath || 'No logo set'}
                 </div>
               </div>
-              <div style={{ marginTop: 8, color: 'var(--app-text-secondary)', fontSize: 12 }}>
+              <div style={{ marginTop: 8, color: 'var(--app-text-secondary)', fontSize: 12, lineHeight: 1.5 }}>
+                ⚠️ <strong>Maximum size: 1 MB</strong> (recommended: 500 KB or less)<br />
+                Large logos won't display on receipts. Use <a href="https://tinypng.com" target="_blank" style={{ color: 'var(--app-primary)' }}>TinyPNG.com</a> or <a href="https://squoosh.app" target="_blank" style={{ color: 'var(--app-primary)' }}>Squoosh.app</a> to compress.<br />
                 This logo will appear on receipts and can be used in your business materials. It does not replace the Inertia branding.
               </div>
             </div>
@@ -652,9 +695,9 @@ const Settings: React.FC = () => {
       {/* Reset Confirmation Dialog */}
       {showResetDialog && (
         <div className="bc-modal-overlay" role="dialog" aria-modal="true">
-          <div className="bc-modal" style={{ maxWidth: '640px', padding: '32px', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: '24px' }}>
-              <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--app-text)' }}>Security Verification</div>
+          <div className="bc-modal" style={{ maxWidth: '640px', padding: '24px', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: '20px' }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--app-text)' }}>Security Verification</div>
               <button className="bc-btn bc-btn-outline" onClick={cancelReset} type="button" style={{ width: 'auto' }}>
                 Close
               </button>
@@ -858,6 +901,108 @@ const Settings: React.FC = () => {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'support' && (
+        <div className="bc-card" style={{ borderRadius: 10, padding: 16 }}>
+          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 12, color: 'var(--app-text)' }}>Contact Support</div>
+
+          <div style={{ display: 'grid', gap: 20 }}>
+            {/* Contact Information */}
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10, color: 'var(--app-text)' }}>Get Help</div>
+              <div style={{ 
+                padding: '16px', 
+                backgroundColor: colors.surface, 
+                borderRadius: '10px', 
+                border: `1px solid ${colors.border}` 
+              }}>
+                <div style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 1.6 }}>
+                  <div style={{ marginBottom: 12 }}>
+                    Need assistance? Have questions or feedback? We're here to help!
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <span style={{ fontSize: 18 }}>📧</span>
+                    <div>
+                      <div style={{ fontSize: 12, color: colors.textSecondary }}>Email Support</div>
+                      <a 
+                        href="mailto:anomly80@gmail.com" 
+                        style={{ 
+                          color: colors.accent, 
+                          textDecoration: 'none', 
+                          fontWeight: 700,
+                          fontSize: 15
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
+                        onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}
+                      >
+                        anomly80@gmail.com
+                      </a>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 12, fontStyle: 'italic', marginTop: 12, color: colors.textSecondary }}>
+                    💡 Tip: Include screenshots and detailed descriptions of any issues for faster resolution.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Logo & Receipt Information */}
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10, color: 'var(--app-text)' }}>Logo & Receipt Information</div>
+              <div style={{ 
+                padding: '16px', 
+                backgroundColor: colors.surface, 
+                borderRadius: '10px', 
+                border: `1px solid ${colors.border}` 
+              }}>
+                <div style={{ color: colors.textSecondary, fontSize: 13, lineHeight: 1.6 }}>
+                  <div style={{ marginBottom: 12 }}>
+                    <strong style={{ color: colors.text }}>Business Logo on Receipts:</strong>
+                  </div>
+                  <ul style={{ margin: '8px 0', paddingLeft: '20px' }}>
+                    <li style={{ marginBottom: 6 }}>Upload your logo in the <strong>Branding</strong> tab above</li>
+                    <li style={{ marginBottom: 6 }}>Your logo will appear on all printed receipts and reports</li>
+                    <li style={{ marginBottom: 6 }}>The INERTIA branding also appears automatically</li>
+                    <li>Supported formats: PNG, JPG, SVG, WebP</li>
+                  </ul>
+                  
+                  <div style={{ marginTop: 16, paddingTop: 12, borderTop: `1px solid ${colors.border}` }}>
+                    <strong style={{ color: colors.text }}>Receipt Header & Footer:</strong>
+                  </div>
+                  <ul style={{ margin: '8px 0', paddingLeft: '20px' }}>
+                    <li style={{ marginBottom: 6 }}>Add custom header/footer text in the <strong>Branding</strong> tab</li>
+                    <li style={{ marginBottom: 6 }}>Include your business name, address, phone, email</li>
+                    <li style={{ marginBottom: 6 }}>Add tax information or terms & conditions</li>
+                    <li>This text appears on all receipts</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            {/* About INERTIA */}
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10, color: 'var(--app-text)' }}>About INERTIA</div>
+              <div style={{ 
+                padding: '16px', 
+                backgroundColor: colors.surface, 
+                borderRadius: '10px', 
+                border: `1px solid ${colors.border}`,
+                textAlign: 'center'
+              }}>
+                <div style={{ fontSize: 20, fontWeight: 900, color: colors.accent, marginBottom: 8 }}>
+                  INERTIA
+                </div>
+                <div style={{ color: colors.textSecondary, fontSize: 13 }}>
+                  Hotel & Business Management System
+                </div>
+                <div style={{ color: colors.textSecondary, fontSize: 12, marginTop: 12 }}>
+                  Version 1.0 • Powered by Tauri & React
+                </div>
+              </div>
             </div>
           </div>
         </div>

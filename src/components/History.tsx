@@ -1190,7 +1190,7 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
               background: colors.surface,
               borderRadius: '16px',
               border: `1px solid ${colors.border}`,
-              padding: '32px',
+              padding: '24px',
               color: colors.text,
               boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
             }}
@@ -1198,7 +1198,7 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
-                <div style={{ fontSize: '24px', fontWeight: 700 }}>Payments for Order #{paymentsModalSaleId}</div>
+                <div style={{ fontSize: '20px', fontWeight: 700 }}>Payments for Order #{paymentsModalSaleId}</div>
                 <div style={{ fontSize: '14px', color: colors.textSecondary, marginTop: '4px' }}>View and record payments</div>
               </div>
               <button

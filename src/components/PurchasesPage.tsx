@@ -58,6 +58,12 @@ const PurchasesPage: React.FC<PurchasesPageProps> = ({ onBack }) => {
   const [details, setDetails] = useState<PurchaseDetails | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
 
+  const [showQuickAddSupplier, setShowQuickAddSupplier] = useState(false);
+  const [quickSupplierName, setQuickSupplierName] = useState('');
+  const [quickSupplierPhone, setQuickSupplierPhone] = useState('');
+  const [addingSupplier, setAddingSupplier] = useState(false);
+  const [showAllProducts, setShowAllProducts] = useState(false);
+
   const loadCore = async () => {
     try {
       const [s, m] = await Promise.all([getSuppliers(false), getMenuItems()]);
@@ -66,6 +72,35 @@ const PurchasesPage: React.FC<PurchasesPageProps> = ({ onBack }) => {
     } catch (e) {
       console.error(e);
       showError('Load Failed', 'Failed to load suppliers/products');
+    }
+  };
+
+  const handleQuickAddSupplier = async () => {
+    if (!quickSupplierName.trim()) {
+      showWarning('Required', 'Please enter supplier name');
+      return;
+    }
+    setAddingSupplier(true);
+    try {
+      const { addSupplier } = await import('../api/client');
+      const newSupplier = await addSupplier({
+        name: quickSupplierName.trim(),
+        phone: quickSupplierPhone.trim(),
+        email: '',
+        address: '',
+        notes: ''
+      });
+      await loadCore();
+      setSupplierId(newSupplier.id);
+      setShowQuickAddSupplier(false);
+      setQuickSupplierName('');
+      setQuickSupplierPhone('');
+      showSuccess('Added', `Supplier "${newSupplier.name}" added successfully`);
+    } catch (e) {
+      console.error(e);
+      showError('Add Failed', e instanceof Error ? e.message : 'Failed to add supplier');
+    } finally {
+      setAddingSupplier(false);
     }
   };
 
@@ -94,10 +129,10 @@ const PurchasesPage: React.FC<PurchasesPageProps> = ({ onBack }) => {
 
   const filteredProducts = useMemo(() => {
     const q = productSearch.trim().toLowerCase();
-    if (!q) return [];
-    const rows = menuItems
-      .filter((m) => m.is_available)
-      .filter((m) => (m.name || '').toLowerCase().includes(q) || (m.category || '').toLowerCase().includes(q))
+    const availableItems = menuItems.filter((m) => m.is_available);
+    if (!q && !showAllProducts) return [];
+    const rows = availableItems
+      .filter((m) => !q || (m.name || '').toLowerCase().includes(q) || (m.category || '').toLowerCase().includes(q))
       .slice(0, 30);
     return rows;
   }, [menuItems, productSearch]);
@@ -341,22 +376,51 @@ const PurchasesPage: React.FC<PurchasesPageProps> = ({ onBack }) => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
             <div>
               <label style={labelStyle}>Supplier (optional)</label>
-              <select
-                value={supplierId ?? ''}
-                onChange={(e) => setSupplierId(e.target.value ? Number(e.target.value) : null)}
-                style={inputStyle}
-              >
-                <option value="">— None —</option>
-                {suppliers.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <select
+                  value={supplierId ?? ''}
+                  onChange={(e) => setSupplierId(e.target.value ? Number(e.target.value) : null)}
+                  style={{ ...inputStyle, flex: 1 }}
+                >
+                  <option value="">— None —</option>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setShowQuickAddSupplier(true)}
+                  style={{
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    border: `1px solid ${colors.accent}`,
+                    background: 'transparent',
+                    color: colors.accent,
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap'
+                  }}
+                  title="Quick add supplier"
+                >
+                  + Add
+                </button>
+              </div>
             </div>
             <div>
-              <label style={labelStyle}>Date *</label>
-              <input type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} style={inputStyle} />
+              <label style={labelStyle}><span style={{ color: '#ef4444' }}>*</span> Date</label>
+              <input 
+                type="date" 
+                value={purchaseDate} 
+                onChange={(e) => setPurchaseDate(e.target.value)} 
+                style={{
+                  ...inputStyle,
+                  cursor: 'pointer',
+                  colorScheme: theme === 'dark' ? 'dark' : 'light'
+                }} 
+                required
+              />
             </div>
             <div>
               <label style={labelStyle}>Reference</label>
@@ -399,13 +463,33 @@ const PurchasesPage: React.FC<PurchasesPageProps> = ({ onBack }) => {
 
               <div style={{ marginTop: '10px' }}>
                 <label style={labelStyle}>Add product</label>
-                <input
-                  value={productSearch}
-                  onChange={(e) => setProductSearch(e.target.value)}
-                  placeholder="Search product name…"
-                  style={inputStyle}
-                />
-                {filteredProducts.length > 0 && (
+                <div style={{ position: 'relative' }}>
+                  <input
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                    onFocus={() => setShowAllProducts(true)}
+                    placeholder="Search or select product…"
+                    style={{ ...inputStyle, paddingRight: '40px' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowAllProducts(!showAllProducts)}
+                    style={{
+                      position: 'absolute',
+                      right: '8px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: '18px',
+                      color: colors.textSecondary
+                    }}
+                  >
+                    {showAllProducts ? '▲' : '▼'}
+                  </button>
+                </div>
+                {(filteredProducts.length > 0 && (showAllProducts || productSearch.trim())) && (
                   <div style={{ border: `1px solid ${colors.border}`, borderRadius: '10px', marginTop: '8px', overflow: 'hidden' }}>
                     {filteredProducts.map((m) => (
                       <button
@@ -734,10 +818,10 @@ const PurchasesPage: React.FC<PurchasesPageProps> = ({ onBack }) => {
             if (e.target === e.currentTarget) setDetails(null);
           }}
         >
-          <div className="bc-card" style={{ width: 'min(980px, 96vw)', borderRadius: '16px', padding: '32px', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)' }}>
+          <div className="bc-card" style={{ width: 'min(980px, 96vw)', borderRadius: '16px', padding: '24px', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start' }}>
               <div>
-                <div style={{ fontSize: '24px', fontWeight: 700 }}>Purchase #{details.purchase.id}</div>
+                <div style={{ fontSize: '20px', fontWeight: 700 }}>Purchase #{details.purchase.id}</div>
                 <div style={{ fontSize: '14px', color: colors.textSecondary, marginTop: '6px' }}>
                   {details.purchase.purchase_date} • {details.purchase.supplier_name || 'No supplier'}
                 </div>
@@ -790,6 +874,121 @@ const PurchasesPage: React.FC<PurchasesPageProps> = ({ onBack }) => {
                 {details.purchase.reference ? `Ref: ${details.purchase.reference}` : ''}
               </div>
               <div style={{ fontWeight: 900 }}>Total: {formatMoney(details.purchase.total_amount || 0)}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Add Supplier Modal */}
+      {showQuickAddSupplier && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+            zIndex: 1001,
+          }}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowQuickAddSupplier(false);
+              setQuickSupplierName('');
+              setQuickSupplierPhone('');
+            }
+          }}
+        >
+          <div className="bc-card" style={{ width: 'min(480px, 96vw)', borderRadius: '16px', padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <div style={{ fontSize: '20px', fontWeight: 900 }}>Quick Add Supplier</div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowQuickAddSupplier(false);
+                  setQuickSupplierName('');
+                  setQuickSupplierPhone('');
+                }}
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
+                  border: `1px solid ${colors.border}`,
+                  background: 'transparent',
+                  color: colors.text,
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <label style={{ ...labelStyle, color: colors.text }}>
+                  <span style={{ color: '#ef4444' }}>*</span> Supplier Name
+                </label>
+                <input
+                  value={quickSupplierName}
+                  onChange={(e) => setQuickSupplierName(e.target.value)}
+                  placeholder="Enter supplier name"
+                  style={inputStyle}
+                  autoFocus
+                  required
+                />
+              </div>
+              <div>
+                <label style={{ ...labelStyle, color: colors.text }}>Phone (optional)</label>
+                <input
+                  value={quickSupplierPhone}
+                  onChange={(e) => setQuickSupplierPhone(e.target.value)}
+                  placeholder="Enter phone number"
+                  style={inputStyle}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', marginTop: '24px', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowQuickAddSupplier(false);
+                  setQuickSupplierName('');
+                  setQuickSupplierPhone('');
+                }}
+                style={{
+                  padding: '10px 16px',
+                  borderRadius: '10px',
+                  border: `1px solid ${colors.border}`,
+                  background: 'transparent',
+                  color: colors.text,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleQuickAddSupplier}
+                disabled={addingSupplier || !quickSupplierName.trim()}
+                style={{
+                  padding: '10px 16px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: colors.accent,
+                  color: theme === 'dark' ? 'black' : 'white',
+                  fontWeight: 800,
+                  cursor: addingSupplier || !quickSupplierName.trim() ? 'not-allowed' : 'pointer',
+                  opacity: addingSupplier || !quickSupplierName.trim() ? 0.6 : 1,
+                }}
+              >
+                {addingSupplier ? 'Adding...' : 'Add Supplier'}
+              </button>
             </div>
           </div>
         </div>

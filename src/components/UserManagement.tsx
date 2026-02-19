@@ -232,18 +232,18 @@ const UserManagement: React.FC<UserManagementProps> = ({ onBack, embedded = fals
           aria-modal="true"
           onClick={() => setShowCreateModal(false)}
         >
-          <div className="bc-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px', padding: '32px', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }}>
+          <div className="bc-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px', padding: '24px', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }}>
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 gap: 12,
-                marginBottom: '24px'
+                marginBottom: '20px'
               }}
             >
               <div>
-                <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--app-text)' }}>Create New User</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--app-text)' }}>Create New User</div>
                 <div style={{ fontSize: 14, color: 'var(--app-text-secondary)', marginTop: '4px' }}>Add a new user to the system</div>
               </div>
               <button type="button" className="bc-btn bc-btn-outline" onClick={() => setShowCreateModal(false)} style={{ width: 'auto' }}>

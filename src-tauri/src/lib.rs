@@ -58,6 +58,7 @@ use print_templates::{
     build_final_invoice_html,
     build_final_invoice_html_with_discount,
     print_order_receipt,
+    print_thermal_receipt,
     build_sale_return_receipt_html,
     print_sale_return_receipt,
 };
@@ -68,7 +69,7 @@ use settings::{
 
 use settings::{
     store_business_logo, get_business_logo_path,
-    get_business_logo_data_url,
+    get_business_logo_data_url, get_file_size, remove_business_logo,
     set_primary_color, get_primary_color,
     set_receipt_header, get_receipt_header,
     set_receipt_footer, get_receipt_footer
@@ -225,6 +226,7 @@ pub fn run() {
             build_final_invoice_html,
             build_final_invoice_html_with_discount,
             print_order_receipt,
+            print_thermal_receipt,
             build_sale_return_receipt_html,
             print_sale_return_receipt,
             // Settings
@@ -257,6 +259,8 @@ pub fn run() {
             store_business_logo,
             get_business_logo_path,
             get_business_logo_data_url,
+            get_file_size,
+            remove_business_logo,
             set_primary_color,
             get_primary_color,
             set_receipt_header,

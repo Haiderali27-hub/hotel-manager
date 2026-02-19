@@ -108,7 +108,7 @@ const ModernDashboard: React.FC = () => {
       }
 
       try {
-        const customers = await invoke<any[]>('get_guests');
+        const customers = await invoke<any[]>('get_active_customers');
         setTotalCustomers(customers.length);
       } catch (e) {
         console.error('Failed to load customers:', e);

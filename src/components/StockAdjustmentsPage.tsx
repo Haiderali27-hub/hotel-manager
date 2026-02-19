@@ -42,7 +42,6 @@ const StockAdjustmentsPage: React.FC<StockAdjustmentsPageProps> = ({ onBack }) =
 
   const [draftDate, setDraftDate] = useState(todayYmd());
   const [draftReason, setDraftReason] = useState('');
-  const [draftNotes, setDraftNotes] = useState('');
   const [lines, setLines] = useState<DraftLine[]>([
     { menu_item_id: null, mode: 'set', quantity: '0', note: '' },
   ]);
@@ -169,12 +168,11 @@ const StockAdjustmentsPage: React.FC<StockAdjustmentsPageProps> = ({ onBack }) =
       await addStockAdjustment({
         adjustment_date: date,
         reason,
-        notes: notes || undefined,
+        notes: undefined,
         items,
       });
       showSuccess('Saved', 'Stock adjustment recorded');
       setDraftReason('');
-      setDraftNotes('');
       setLines([{ menu_item_id: null, mode: 'set', quantity: '0', note: '' }]);
       await loadAll();
       await loadHistory();
@@ -223,34 +221,30 @@ const StockAdjustmentsPage: React.FC<StockAdjustmentsPageProps> = ({ onBack }) =
           <div style={{ marginTop: '12px', display: 'grid', gap: '10px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: '10px' }}>
               <div>
-                <div style={{ fontSize: '12px', fontWeight: 700, color: colors.textSecondary, marginBottom: '6px' }}>Date</div>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: colors.textSecondary, marginBottom: '6px' }}>
+                  <span style={{ color: '#ef4444' }}>* </span>Date
+                </div>
                 <input
                   className="bc-input"
+                  type="date"
                   value={draftDate}
                   onChange={(e) => setDraftDate(e.target.value)}
-                  placeholder="YYYY-MM-DD"
+                  style={{ colorScheme: theme === 'dark' ? 'dark' : 'light', cursor: 'pointer' }}
+                  required
                 />
               </div>
               <div>
-                <div style={{ fontSize: '12px', fontWeight: 700, color: colors.textSecondary, marginBottom: '6px' }}>Reason</div>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: colors.textSecondary, marginBottom: '6px' }}>
+                  <span style={{ color: '#ef4444' }}>* </span>Reason
+                </div>
                 <input
                   className="bc-input"
                   value={draftReason}
                   onChange={(e) => setDraftReason(e.target.value)}
                   placeholder="e.g. Stock count, damaged goods, correction"
+                  required
                 />
               </div>
-            </div>
-
-            <div>
-              <div style={{ fontSize: '12px', fontWeight: 700, color: colors.textSecondary, marginBottom: '6px' }}>Notes (optional)</div>
-              <textarea
-                className="bc-input"
-                value={draftNotes}
-                onChange={(e) => setDraftNotes(e.target.value)}
-                rows={2}
-                style={{ resize: 'vertical' }}
-              />
             </div>
 
             <div>
@@ -266,9 +260,11 @@ const StockAdjustmentsPage: React.FC<StockAdjustmentsPageProps> = ({ onBack }) =
                   const m = l.menu_item_id ? menuById.get(l.menu_item_id) : undefined;
                   const stock = m ? (m.stock_quantity ?? 0) : null;
                   return (
-                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px 1fr auto', gap: '10px', alignItems: 'end' }}>
+                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px auto', gap: '10px', alignItems: 'end' }}>
                       <div>
-                        <div style={{ fontSize: '12px', fontWeight: 700, color: colors.textSecondary, marginBottom: '6px' }}>Product</div>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: colors.textSecondary, marginBottom: '6px' }}>
+                          <span style={{ color: '#ef4444' }}>* </span>Product
+                        </div>
                         <select
                           className="bc-input"
                           value={l.menu_item_id ?? ''}
@@ -304,23 +300,16 @@ const StockAdjustmentsPage: React.FC<StockAdjustmentsPageProps> = ({ onBack }) =
                       </div>
 
                       <div>
-                        <div style={{ fontSize: '12px', fontWeight: 700, color: colors.textSecondary, marginBottom: '6px' }}>Qty</div>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: colors.textSecondary, marginBottom: '6px' }}>
+                          <span style={{ color: '#ef4444' }}>* </span>Qty
+                        </div>
                         <input
                           className="bc-input"
                           value={l.quantity}
                           onChange={(e) => setLines((prev) => prev.map((x, i) => (i === idx ? { ...x, quantity: e.target.value } : x)))}
                           onFocus={handleNumberInputFocus}
                           inputMode="numeric"
-                        />
-                      </div>
-
-                      <div>
-                        <div style={{ fontSize: '12px', fontWeight: 700, color: colors.textSecondary, marginBottom: '6px' }}>Note</div>
-                        <input
-                          className="bc-input"
-                          value={l.note}
-                          onChange={(e) => setLines((prev) => prev.map((x, i) => (i === idx ? { ...x, note: e.target.value } : x)))}
-                          placeholder="optional"
+                          required
                         />
                       </div>
 
@@ -401,10 +390,10 @@ const StockAdjustmentsPage: React.FC<StockAdjustmentsPageProps> = ({ onBack }) =
 
       {detailsOpen && (
         <div className="bc-modal-overlay">
-          <div className="bc-modal" style={{ maxWidth: '760px', padding: '32px', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+          <div className="bc-modal" style={{ maxWidth: '760px', padding: '24px', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
               <div>
-                <div style={{ fontSize: '24px', fontWeight: 700, color: colors.text }}>Adjustment Details</div>
+                <div style={{ fontSize: '20px', fontWeight: 700, color: colors.text }}>Adjustment Details</div>
                 <div style={{ fontSize: '14px', color: colors.textSecondary, marginTop: '4px' }}>Stock adjustment information</div>
               </div>
               <button type="button" className="bc-btn bc-btn-outline" onClick={closeDetails} style={{ width: 'auto' }}>

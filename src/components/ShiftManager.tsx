@@ -314,15 +314,15 @@ const ShiftManager: React.FC = () => {
             style={{
               background: colors.surface,
               borderRadius: '16px',
-              padding: '32px',
+              padding: '24px',
               boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
               maxWidth: '480px',
               width: '90%',
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 style={{ marginBottom: '8px', fontSize: '24px', fontWeight: '700' }}>Open New Shift</h3>
-            <p style={{ margin: '0 0 24px 0', color: colors.textSecondary, fontSize: '14px' }}>Enter the starting cash amount</p>
+            <h3 style={{ marginBottom: '8px', fontSize: '20px', fontWeight: '700' }}>Open New Shift</h3>
+            <p style={{ margin: '0 0 20px 0', color: colors.textSecondary, fontSize: '14px' }}>Enter the starting cash amount</p>
 
             <div style={{ marginBottom: '24px' }}>
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '600' }}>
@@ -406,14 +406,14 @@ const ShiftManager: React.FC = () => {
             style={{
               background: colors.surface,
               borderRadius: '16px',
-              padding: '32px',
+              padding: '24px',
               maxWidth: '500px',
               width: '90%',
               boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 style={{ margin: '0 0 8px 0', fontSize: '24px', fontWeight: 700 }}>Close Shift & Generate Z-Report</h3>
+            <h3 style={{ margin: '0 0 8px 0', fontSize: '20px', fontWeight: 700 }}>Close Shift & Generate Z-Report</h3>
             <div style={{ fontSize: '14px', color: colors.textSecondary, marginBottom: '20px' }}>
               Review the shift summary and confirm closing
             </div>

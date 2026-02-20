@@ -42,6 +42,7 @@ const StockAdjustmentsPage: React.FC<StockAdjustmentsPageProps> = ({ onBack }) =
 
   const [draftDate, setDraftDate] = useState(todayYmd());
   const [draftReason, setDraftReason] = useState('');
+  const [draftNotes, setDraftNotes] = useState('');
   const [lines, setLines] = useState<DraftLine[]>([
     { menu_item_id: null, mode: 'set', quantity: '0', note: '' },
   ]);
@@ -168,11 +169,12 @@ const StockAdjustmentsPage: React.FC<StockAdjustmentsPageProps> = ({ onBack }) =
       await addStockAdjustment({
         adjustment_date: date,
         reason,
-        notes: undefined,
+        notes: notes || undefined,
         items,
       });
       showSuccess('Saved', 'Stock adjustment recorded');
       setDraftReason('');
+      setDraftNotes('');
       setLines([{ menu_item_id: null, mode: 'set', quantity: '0', note: '' }]);
       await loadAll();
       await loadHistory();

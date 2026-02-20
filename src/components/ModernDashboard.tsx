@@ -55,7 +55,7 @@ const ModernDashboard: React.FC = () => {
   const [recentSales, setRecentSales] = useState<SaleSummary[]>([]);
   const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([]);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
-    new Set(['Sales & Customers', 'Inventory & Products', 'Financial', 'Management'])
+    new Set()
   );
   const [totalProducts, setTotalProducts] = useState(0);
   const [totalCustomers, setTotalCustomers] = useState(0);

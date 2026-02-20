@@ -467,8 +467,7 @@ const PurchasesPage: React.FC<PurchasesPageProps> = ({ onBack }) => {
                   <input
                     value={productSearch}
                     onChange={(e) => setProductSearch(e.target.value)}
-                    onFocus={() => setShowAllProducts(true)}
-                    placeholder="Search or select product…"
+                    placeholder="Search or type to filter products…"
                     style={{ ...inputStyle, paddingRight: '40px' }}
                   />
                   <button
@@ -489,8 +488,8 @@ const PurchasesPage: React.FC<PurchasesPageProps> = ({ onBack }) => {
                     {showAllProducts ? '▲' : '▼'}
                   </button>
                 </div>
-                {(filteredProducts.length > 0 && (showAllProducts || productSearch.trim())) && (
-                  <div style={{ border: `1px solid ${colors.border}`, borderRadius: '10px', marginTop: '8px', overflow: 'hidden' }}>
+                {filteredProducts.length > 0 && (showAllProducts || productSearch.trim().length > 0) && (
+                  <div style={{ border: `1px solid ${colors.border}`, borderRadius: '10px', marginTop: '8px', overflow: 'hidden', maxHeight: '300px', overflowY: 'auto' }}>
                     {filteredProducts.map((m) => (
                       <button
                         key={m.id}
@@ -902,8 +901,8 @@ const PurchasesPage: React.FC<PurchasesPageProps> = ({ onBack }) => {
             }
           }}
         >
-          <div className="bc-card" style={{ width: 'min(480px, 96vw)', borderRadius: '16px', padding: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <div className="bc-card" style={{ width: 'min(480px, 96vw)', borderRadius: '16px', padding: '28px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <div style={{ fontSize: '20px', fontWeight: 900 }}>Quick Add Supplier</div>
               <button
                 type="button"
@@ -927,9 +926,9 @@ const PurchasesPage: React.FC<PurchasesPageProps> = ({ onBack }) => {
               </button>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               <div>
-                <label style={{ ...labelStyle, color: colors.text }}>
+                <label style={{ ...labelStyle, color: colors.text, marginBottom: '8px', display: 'block' }}>
                   <span style={{ color: '#ef4444' }}>*</span> Supplier Name
                 </label>
                 <input
@@ -942,7 +941,7 @@ const PurchasesPage: React.FC<PurchasesPageProps> = ({ onBack }) => {
                 />
               </div>
               <div>
-                <label style={{ ...labelStyle, color: colors.text }}>Phone (optional)</label>
+                <label style={{ ...labelStyle, color: colors.text, marginBottom: '8px', display: 'block' }}>Phone (optional)</label>
                 <input
                   value={quickSupplierPhone}
                   onChange={(e) => setQuickSupplierPhone(e.target.value)}
@@ -952,7 +951,7 @@ const PurchasesPage: React.FC<PurchasesPageProps> = ({ onBack }) => {
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '10px', marginTop: '24px', justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', gap: '12px', marginTop: '28px', justifyContent: 'flex-end' }}>
               <button
                 type="button"
                 onClick={() => {

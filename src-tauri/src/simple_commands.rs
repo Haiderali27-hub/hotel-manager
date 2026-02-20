@@ -1258,7 +1258,7 @@ pub fn delete_menu_item(item_id: i64) -> Result<String, String> {
         // Soft delete by setting is_available = 0
         println!("🐛 DEBUG delete_menu_item - Item used in orders, doing soft delete...");
         let affected = conn.execute(
-            "UPDATE menu_items SET is_available = 0 WHERE id = ?1",
+            "UPDATE menu_items SET is_available = 0, is_active = 0 WHERE id = ?1",
             params![item_id],
         ).map_err(|e| {
             println!("❌ DEBUG delete_menu_item - Error in soft delete: {}", e);

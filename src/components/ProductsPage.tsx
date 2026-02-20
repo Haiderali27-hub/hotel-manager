@@ -1,18 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MenuItem, NewMenuItem } from '../api/client';
 import {
-    addMenuItem,
-    addProductCategory,
-    addProductCategoryWithStyle,
-    deleteMenuItem,
-    deleteProductCategory,
-    getBarcodeEnabled,
-    getMenuItems,
-    getProductCategories,
-    renameProductCategory,
-    updateMenuItem,
-    updateProductCategory,
-    type ProductCategory,
+  addMenuItem,
+  addProductCategory,
+  addProductCategoryWithStyle,
+  deleteMenuItem,
+  deleteProductCategory,
+  getBarcodeEnabled,
+  getMenuItems,
+  getProductCategories,
+  renameProductCategory,
+  updateMenuItem,
+  updateProductCategory,
+  type ProductCategory,
 } from '../api/client';
 import { useCurrency } from '../context/CurrencyContext';
 import { useNotification } from '../context/NotificationContext';
@@ -67,13 +67,59 @@ const ProductsPage: React.FC<ProductsPageProps> = ({ onBack }) => {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryEmoji, setNewCategoryEmoji] = useState('📦');
   const [newCategoryColor, setNewCategoryColor] = useState('#8B5CF6');
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
+    try {
+      const raw = localStorage.getItem('bm-products-expanded');
+      if (!raw) return {};
+      const parsed = JSON.parse(raw) as Record<string, boolean>;
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  });
 
   const [searchQuery, setSearchQuery] = useState('');
   const [categorySearchQuery, setCategorySearchQuery] = useState('');
   const categoryUpdateTimersRef = useRef<Record<number, number>>({});
 
+  // Confirmation modal states
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirmType, setConfirmType] = useState<'product' | 'category' | null>(null);
+  const [confirmTargetId, setConfirmTargetId] = useState<number | null>(null);
+  const [confirmMessage, setConfirmMessage] = useState('');
+  const [confirmTitle, setConfirmTitle] = useState('');
+
   const title = useMemo(() => (editingId ? 'Edit Product' : 'Add Product'), [editingId]);
+
+  const handleConfirm = async () => {
+    try {
+      if (confirmType === 'product' && confirmTargetId !== null) {
+        await deleteMenuItem(confirmTargetId);
+        // Immediately remove from UI
+        setProducts(prev => prev.filter(p => p.id !== confirmTargetId));
+        showSuccess('Deleted', 'Product removed');
+        // Also reload to ensure sync
+        void load();
+        void loadCategories();
+      } else if (confirmType === 'category' && confirmTargetId !== null) {
+        await deleteProductCategory(confirmTargetId);
+        await loadCategories();
+        showSuccess('Deleted', 'Category removed');
+      }
+    } catch (e) {
+      showError('Delete failed', e instanceof Error ? e.message : String(e));
+    } finally {
+      setShowConfirmModal(false);
+      setConfirmType(null);
+      setConfirmTargetId(null);
+    }
+  };
+
+  const handleCancelConfirm = () => {
+    setShowConfirmModal(false);
+    setConfirmType(null);
+    setConfirmTargetId(null);
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -103,6 +149,14 @@ const ProductsPage: React.FC<ProductsPageProps> = ({ onBack }) => {
     void load();
     void loadCategories();
   }, [load, loadCategories]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('bm-products-expanded', JSON.stringify(expanded));
+    } catch {
+      // Ignore storage errors.
+    }
+  }, [expanded]);
 
   useEffect(() => {
     const loadBarcodeSetting = async () => {
@@ -378,25 +432,19 @@ const ProductsPage: React.FC<ProductsPageProps> = ({ onBack }) => {
   };
 
   const removeCategory = async (c: ProductCategory) => {
-    if (!confirm(`Delete category "${c.name}"? Products will keep their current category text.`)) return;
-    try {
-      await deleteProductCategory(c.id);
-      await loadCategories();
-      showSuccess('Deleted', 'Category removed');
-    } catch (e) {
-      showError('Categories', e instanceof Error ? e.message : String(e));
-    }
+    setConfirmTitle('Delete Category');
+    setConfirmMessage(`Are you sure you want to delete "${c.name}"? Products will keep their current category text.`);
+    setConfirmType('category');
+    setConfirmTargetId(c.id);
+    setShowConfirmModal(true);
   };
 
   const remove = async (p: MenuItem) => {
-    if (!confirm(`Delete "${p.name}"?`)) return;
-    try {
-      await deleteMenuItem(p.id);
-      showSuccess('Deleted', 'Product removed');
-      await load();
-    } catch (e) {
-      showError('Delete failed', e instanceof Error ? e.message : String(e));
-    }
+    setConfirmTitle('Delete Product');
+    setConfirmMessage(`Are you sure you want to delete "${p.name}"?`);
+    setConfirmType('product');
+    setConfirmTargetId(p.id);
+    setShowConfirmModal(true);
   };
 
   return (
@@ -444,7 +492,7 @@ const ProductsPage: React.FC<ProductsPageProps> = ({ onBack }) => {
 
         {loading ? (
           <div style={{ color: colors.textSecondary, fontSize: '14px' }}>Loading…</div>
-        ) : products.length === 0 ? (
+        ) : products.length === 0 && allCategoryNames.length === 0 ? (
           <div style={{ color: colors.textSecondary, fontSize: '14px' }}>No products yet.</div>
         ) : (
           <div style={{ display: 'grid', gap: '12px' }}>
@@ -457,7 +505,7 @@ const ProductsPage: React.FC<ProductsPageProps> = ({ onBack }) => {
               const showAllProducts = normalizedSearch ? categoryMatchesQuery(categoryName) : true;
               const group = showAllProducts ? groupAll : groupAll.filter((p) => productMatchesQuery(p));
               // Always show categories even if empty (removed: if (group.length === 0) return null;)
-              const isOpen = normalizedSearch ? true : (expanded[categoryName] ?? true);
+              const isOpen = normalizedSearch ? true : (expanded[categoryName] ?? false);
               const style = categoryStyle(categoryName);
               const accent = style.color ?? '#94A3B8';
               const border = hexToRgba(accent, 0.35);
@@ -526,10 +574,23 @@ const ProductsPage: React.FC<ProductsPageProps> = ({ onBack }) => {
                               const stock = p.stock_quantity ?? 0;
                               const limit = p.low_stock_limit ?? 5;
                               const low = track && stock <= limit;
+                              const outOfStock = track && stock <= 0;
+                              const lowStock = track && !outOfStock && stock <= limit;
                               return (
                                 <tr key={p.id}>
                                   <td style={{ padding: '10px', borderBottom: `1px solid ${colors.border}` }}>
-                                    <div style={{ fontWeight: 900, color: colors.text }}>{p.name}</div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                      <div style={{ fontWeight: 900, color: colors.text }}>{p.name}</div>
+                                      {outOfStock ? (
+                                        <div style={{ fontSize: '10px', fontWeight: 900, color: '#b91c1c', background: '#fee2e2', padding: '2px 6px', borderRadius: '999px' }}>
+                                          OUT OF STOCK
+                                        </div>
+                                      ) : lowStock ? (
+                                        <div style={{ fontSize: '10px', fontWeight: 900, color: '#92400e', background: '#ffedd5', padding: '2px 6px', borderRadius: '999px' }}>
+                                          LOW STOCK
+                                        </div>
+                                      ) : null}
+                                    </div>
                                     {p.description ? (
                                       <div style={{ marginTop: '2px', fontSize: '12px', color: colors.textSecondary }}>{p.description}</div>
                                     ) : null}
@@ -736,16 +797,16 @@ const ProductsPage: React.FC<ProductsPageProps> = ({ onBack }) => {
 
       {isCategoriesModalOpen && (
         <div className="bc-modal-overlay">
-          <div className="bc-modal" style={{ maxWidth: '640px' }}>
-            <div style={{ fontSize: '18px', fontWeight: 900, color: colors.text }}>Categories</div>
-            <div style={{ fontSize: '13px', color: colors.textSecondary, marginTop: '6px' }}>
+          <div className="bc-modal" style={{ maxWidth: '720px', padding: '32px' }}>
+            <div style={{ fontSize: '20px', fontWeight: 900, color: colors.text, marginBottom: '8px' }}>Categories</div>
+            <div style={{ fontSize: '14px', color: colors.textSecondary, marginBottom: '24px' }}>
               Create categories for faster product entry (Accessories, Phones, Repairs, etc.).
             </div>
 
-            <div style={{ marginTop: '14px', display: 'grid', gap: '10px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px 110px auto', gap: '10px', alignItems: 'end' }}>
+            <div style={{ marginTop: '20px', display: 'grid', gap: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px 110px auto', gap: '12px', alignItems: 'end' }}>
                 <div>
-                  <div style={{ fontSize: '12px', fontWeight: 700, color: colors.textSecondary, marginBottom: '6px' }}>New category</div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: colors.textSecondary, marginBottom: '8px' }}>New category</div>
                   <input
                     className="bc-input"
                     value={newCategoryName}
@@ -754,7 +815,7 @@ const ProductsPage: React.FC<ProductsPageProps> = ({ onBack }) => {
                   />
                 </div>
                 <div>
-                  <div style={{ fontSize: '12px', fontWeight: 700, color: colors.textSecondary, marginBottom: '6px' }}>Emoji</div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: colors.textSecondary, marginBottom: '8px' }}>Emoji</div>
                   <select className="bc-input" value={newCategoryEmoji} onChange={(e) => setNewCategoryEmoji(e.target.value)}>
                     {['📦', '🔌', '📱', '🧰', '🎧', '⌚', '🖨️', '💳', '🧾', '🛒', '💡', '🔧', '🖥️'].map((em) => (
                       <option key={em} value={em}>
@@ -764,7 +825,7 @@ const ProductsPage: React.FC<ProductsPageProps> = ({ onBack }) => {
                   </select>
                 </div>
                 <div>
-                  <div style={{ fontSize: '12px', fontWeight: 700, color: colors.textSecondary, marginBottom: '6px' }}>Color</div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: colors.textSecondary, marginBottom: '8px' }}>Color</div>
                   <input className="bc-input" type="color" value={newCategoryColor} onChange={(e) => setNewCategoryColor(e.target.value)} style={{ padding: '6px' }} />
                 </div>
                 <button type="button" className="bc-btn bc-btn-primary" onClick={addCategory} style={{ width: 'auto' }}>
@@ -772,14 +833,16 @@ const ProductsPage: React.FC<ProductsPageProps> = ({ onBack }) => {
                 </button>
               </div>
 
-              <input
-                className="bc-input"
-                value={categorySearchQuery}
-                onChange={(e) => setCategorySearchQuery(e.target.value)}
-                placeholder="Search categories…"
-              />
+              <div style={{ marginTop: '4px' }}>
+                <input
+                  className="bc-input"
+                  value={categorySearchQuery}
+                  onChange={(e) => setCategorySearchQuery(e.target.value)}
+                  placeholder="Search categories…"
+                />
+              </div>
 
-              <div className="bc-card" style={{ padding: '0', overflow: 'hidden', borderRadius: '10px' }}>
+              <div className="bc-card" style={{ padding: '0', overflow: 'hidden', borderRadius: '10px', marginTop: '4px' }}>
                 {categoriesLoading ? (
                   <div style={{ padding: '12px', color: colors.textSecondary }}>Loading…</div>
                 ) : categories.length === 0 ? (
@@ -855,9 +918,41 @@ const ProductsPage: React.FC<ProductsPageProps> = ({ onBack }) => {
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '10px', marginTop: '16px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-              <button type="button" className="bc-btn bc-btn-outline" onClick={closeCategoriesManager} style={{ width: 'auto' }}>
+            <div style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              <button type="button" className="bc-btn bc-btn-outline" onClick={closeCategoriesManager} style={{ width: 'auto', padding: '10px 20px' }}>
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {showConfirmModal && (
+        <div className="bc-modal-overlay">
+          <div className="bc-modal" style={{ maxWidth: '480px', padding: '32px' }}>
+            <div style={{ fontSize: '20px', fontWeight: 900, color: colors.text, marginBottom: '12px' }}>
+              {confirmTitle}
+            </div>
+            <div style={{ fontSize: '14px', color: colors.textSecondary, marginBottom: '24px', lineHeight: '1.5' }}>
+              {confirmMessage}
+            </div>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button 
+                type="button" 
+                className="bc-btn bc-btn-outline" 
+                onClick={handleCancelConfirm}
+                style={{ width: 'auto', padding: '10px 20px' }}
+              >
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                className="bc-btn bc-btn-primary" 
+                onClick={() => void handleConfirm()}
+                style={{ width: 'auto', padding: '10px 20px', background: colors.error, borderColor: colors.error }}
+              >
+                Delete
               </button>
             </div>
           </div>

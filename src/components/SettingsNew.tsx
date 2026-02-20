@@ -42,6 +42,7 @@ const Settings: React.FC = () => {
   const [receiptFooter, setReceiptFooter] = useState<string>('');
   const [isSavingReceiptHeader, setIsSavingReceiptHeader] = useState(false);
   const [isSavingReceiptFooter, setIsSavingReceiptFooter] = useState(false);
+  const [receiptType, setReceiptType] = useState<string>('both');
 
   useEffect(() => {
     setPendingLocale(locale);
@@ -62,17 +63,19 @@ const Settings: React.FC = () => {
   useEffect(() => {
     const loadBranding = async () => {
       try {
-        const [logoPath, logoDataUrl, savedHeader, savedFooter] = await Promise.all([
+        const [logoPath, logoDataUrl, savedHeader, savedFooter, savedReceiptType] = await Promise.all([
           invoke<string | null>('get_business_logo_path'),
           invoke<string | null>('get_business_logo_data_url'),
           invoke<string | null>('get_receipt_header'),
-          invoke<string | null>('get_receipt_footer')
+          invoke<string | null>('get_receipt_footer'),
+          invoke<string | null>('get_setting', { key: 'receipt_type' }).catch(() => 'both')
         ]);
 
         if (logoPath) setBusinessLogoPath(logoPath);
         if (logoDataUrl) setBusinessLogoDataUrl(logoDataUrl);
         setReceiptHeader(savedHeader ?? '');
         setReceiptFooter(savedFooter ?? '');
+        setReceiptType(savedReceiptType ?? 'both');
       } catch (error) {
         // Branding is optional; don't block Settings if unavailable.
         console.warn('Branding settings not available:', error);
@@ -649,6 +652,31 @@ const Settings: React.FC = () => {
                 <button className="bc-btn bc-btn-primary" onClick={saveReceiptFooter} type="button" disabled={isSavingReceiptFooter}>
                   {isSavingReceiptFooter ? 'Saving…' : 'Save Footer'}
                 </button>
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--app-text-secondary)' }}>Receipt Print Type</div>
+              <select
+                className="bc-input"
+                value={receiptType}
+                onChange={async (e) => {
+                  const newType = e.target.value;
+                  setReceiptType(newType);
+                  try {
+                    await invoke('set_setting', { key: 'receipt_type', value: newType });
+                    showSuccess('Receipt Type Updated', `Default print type set to: ${newType === 'both' ? 'Both' : newType === 'thermal' ? 'Thermal Only' : 'Standard Only'}`);
+                  } catch (error) {
+                    showError('Update Failed', String(error));
+                  }
+                }}
+              >
+                <option value="both">Both (Standard + Thermal)</option>
+                <option value="standard">Standard Receipt Only</option>
+                <option value="thermal">Thermal Receipt Only</option>
+              </select>
+              <div style={{ marginTop: 6, color: 'var(--app-text-secondary)', fontSize: 12 }}>
+                Choose which receipt types to print by default after completing a sale.
               </div>
             </div>
           </div>

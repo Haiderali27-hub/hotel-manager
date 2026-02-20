@@ -1,15 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
     addSalePayment,
-    buildOrderReceiptHtml,
     deleteSale,
     getSaleDetails,
     getSalePaymentSummary,
     getSales,
     printOrderReceipt,
+    printThermalReceipt,
     type SaleDetails,
     type SalePaymentSummary,
-    type SaleSummary,
+    type SaleSummary
 } from '../api/client';
 import { useCurrency } from '../context/CurrencyContext';
 import { useLabels } from '../context/LabelContext';
@@ -44,6 +44,9 @@ const SalesHistoryPage: React.FC<SalesHistoryPageProps> = ({ onBack, onDuplicate
   const [paymentAmount, setPaymentAmount] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [paymentNote, setPaymentNote] = useState('');
+  const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -211,17 +214,38 @@ const SalesHistoryPage: React.FC<SalesHistoryPageProps> = ({ onBack, onDuplicate
     }
   };
 
-  const handleDelete = async (saleId: number) => {
-    const ok = window.confirm(`Delete sale #${saleId}? This cannot be undone.`);
-    if (!ok) return;
+  const handleThermalReprint = async (saleId: number) => {
     try {
-      await deleteSale(saleId);
-      showSuccess('Deleted', `Sale #${saleId} deleted`);
-      setSelectedSaleId((prev) => (prev === saleId ? null : prev));
+      await printThermalReceipt(saleId);
+      showSuccess('Printed', `Thermal receipt for sale #${saleId} sent to printer`);
+    } catch (e) {
+      showError('Print', e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const handleDelete = async (saleId: number) => {
+    setDeleteTargetId(saleId);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (deleteTargetId === null) return;
+    try {
+      await deleteSale(deleteTargetId);
+      showSuccess('Deleted', `Sale #${deleteTargetId} deleted`);
+      setSelectedSaleId((prev) => (prev === deleteTargetId ? null : prev));
       await load();
     } catch (e) {
       showError('Delete', e instanceof Error ? e.message : String(e));
+    } finally {
+      setShowDeleteConfirm(false);
+      setDeleteTargetId(null);
     }
+  };
+
+  const handleCancelDelete = () => {
+    setShowDeleteConfirm(false);
+    setDeleteTargetId(null);
   };
 
   const modalBg = theme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)';
@@ -350,13 +374,13 @@ const SalesHistoryPage: React.FC<SalesHistoryPageProps> = ({ onBack, onDuplicate
         ) : (
           <table className="bc-table" style={{ width: '100%' }}>
             <thead>
-              <tr>
-                <th>Sale</th>
-                <th>Date</th>
-                <th>{label.client}</th>
-                <th>Total</th>
-                <th>Status</th>
-                <th style={{ textAlign: 'right' }}>Actions</th>
+              <tr style={{ background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }}>
+                <th style={{ fontWeight: 800, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: colors.textSecondary }}>Sale</th>
+                <th style={{ fontWeight: 800, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: colors.textSecondary }}>Date</th>
+                <th style={{ fontWeight: 800, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: colors.textSecondary }}>{label.client}</th>
+                <th style={{ fontWeight: 800, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: colors.textSecondary }}>Total</th>
+                <th style={{ fontWeight: 800, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: colors.textSecondary }}>Status</th>
+                <th style={{ textAlign: 'right', fontWeight: 800, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: colors.textSecondary }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -388,51 +412,200 @@ const SalesHistoryPage: React.FC<SalesHistoryPageProps> = ({ onBack, onDuplicate
                         </span>
                       )}
                     </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                        <button
-                          type="button"
-                          className="bc-btn bc-btn-outline"
-                          onClick={() => void openDetails(s.id)}
-                          style={{ width: 'auto', minHeight: 40 }}
-                        >
-                          View
-                        </button>
-                        <button
-                          type="button"
-                          className="bc-btn bc-btn-outline"
-                          onClick={() => void handleReprint(s.id)}
-                          style={{ width: 'auto', minHeight: 40 }}
-                        >
-                          Reprint
-                        </button>
-                        <button
-                          type="button"
-                          className="bc-btn bc-btn-outline"
-                          onClick={() => onDuplicateSale(s.id)}
-                          style={{ width: 'auto', minHeight: 40 }}
-                        >
-                          Re-edit (Duplicate)
-                        </button>
-                        {isPartial && (
-                          <button
-                            type="button"
-                            className="bc-btn bc-btn-outline"
-                            onClick={() => void openPaymentsModal(s.id)}
-                            style={{ width: 'auto', minHeight: 40, color: '#FF9800' }}
+                    <td style={{ textAlign: 'right', position: 'relative' }}>
+                      <button
+                        type="button"
+                        onClick={() => setOpenMenuId(openMenuId === s.id ? null : s.id)}
+                        style={{
+                          width: '36px',
+                          height: '36px',
+                          borderRadius: '8px',
+                          border: `1px solid ${colors.border}`,
+                          background: openMenuId === s.id ? colors.border : 'transparent',
+                          color: colors.text,
+                          cursor: 'pointer',
+                          fontSize: '18px',
+                          fontWeight: 900,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        ⋯
+                      </button>
+                      
+                      {openMenuId === s.id && (
+                        <>
+                          <div
+                            style={{
+                              position: 'fixed',
+                              inset: 0,
+                              zIndex: 999,
+                            }}
+                            onClick={() => setOpenMenuId(null)}
+                          />
+                          <div
+                            style={{
+                              position: 'absolute',
+                              right: 0,
+                              top: '42px',
+                              minWidth: '200px',
+                              background: theme === 'dark' ? '#1e293b' : '#ffffff',
+                              border: `2px solid ${colors.border}`,
+                              borderRadius: '12px',
+                              boxShadow: theme === 'dark' ? '0 8px 24px rgba(0,0,0,0.4)' : '0 8px 24px rgba(0,0,0,0.2)',
+                              zIndex: 1000,
+                              overflow: 'hidden',
+                            }}
                           >
-                            Adjust Payment
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          className="bc-btn bc-btn-outline"
-                          onClick={() => void handleDelete(s.id)}
-                          style={{ width: 'auto', minHeight: 40, color: colors.error }}
-                        >
-                          Delete
-                        </button>
-                      </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenMenuId(null);
+                                void openDetails(s.id);
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '12px 16px',
+                                border: 'none',
+                                background: 'transparent',
+                                color: colors.text,
+                                fontSize: '14px',
+                                fontWeight: 600,
+                                textAlign: 'left',
+                                cursor: 'pointer',
+                                borderBottom: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+                                transition: 'background 0.15s',
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                            >
+                              👁️ View Details
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenMenuId(null);
+                                void handleReprint(s.id);
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '12px 16px',
+                                border: 'none',
+                                background: 'transparent',
+                                color: colors.text,
+                                fontSize: '14px',
+                                fontWeight: 600,
+                                textAlign: 'left',
+                                cursor: 'pointer',
+                                borderBottom: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+                                transition: 'background 0.15s',
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                            >
+                              🖨️ Reprint Receipt
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenMenuId(null);
+                                void handleThermalReprint(s.id);
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '12px 16px',
+                                border: 'none',
+                                background: 'transparent',
+                                color: colors.text,
+                                fontSize: '14px',
+                                fontWeight: 600,
+                                textAlign: 'left',
+                                cursor: 'pointer',
+                                borderBottom: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+                                transition: 'background 0.15s',
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                            >
+                              🧾 Thermal Print
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenMenuId(null);
+                                onDuplicateSale(s.id);
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '12px 16px',
+                                border: 'none',
+                                background: 'transparent',
+                                color: colors.text,
+                                fontSize: '14px',
+                                fontWeight: 600,
+                                textAlign: 'left',
+                                cursor: 'pointer',
+                                borderBottom: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+                                transition: 'background 0.15s',
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                            >
+                              📋 Re-edit (Duplicate)
+                            </button>
+                            {isPartial && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenMenuId(null);
+                                  void openPaymentsModal(s.id);
+                                }}
+                                style={{
+                                  width: '100%',
+                                  padding: '12px 16px',
+                                  border: 'none',
+                                  background: 'transparent',
+                                  color: '#FF9800',
+                                  fontSize: '14px',
+                                  fontWeight: 600,
+                                  textAlign: 'left',
+                                  cursor: 'pointer',
+                                  borderBottom: `1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+                                  transition: 'background 0.15s',
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                              >
+                                💳 Adjust Payment
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenMenuId(null);
+                                void handleDelete(s.id);
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '12px 16px',
+                                border: 'none',
+                                background: 'transparent',
+                                color: colors.error,
+                                fontSize: '14px',
+                                fontWeight: 600,
+                                textAlign: 'left',
+                                cursor: 'pointer',
+                                transition: 'background 0.15s',
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                            >
+                              🗑️ Delete
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </td>
                   </tr>
                 );
@@ -543,6 +716,27 @@ const SalesHistoryPage: React.FC<SalesHistoryPageProps> = ({ onBack, onDuplicate
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {showDeleteConfirm && (
+        <div className="bc-modal-overlay" onClick={handleCancelDelete}>
+          <div className="bc-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px', padding: '24px', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }}>
+            <div style={{ fontSize: '20px', fontWeight: 800, color: colors.text, marginBottom: '10px' }}>
+              Delete Sale
+            </div>
+            <div style={{ fontSize: '14px', color: colors.textSecondary, marginBottom: '22px', lineHeight: 1.5 }}>
+              Are you sure you want to delete sale #{deleteTargetId}? This cannot be undone.
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button type="button" className="bc-btn bc-btn-outline" onClick={handleCancelDelete} style={{ width: 'auto' }}>
+                Cancel
+              </button>
+              <button type="button" className="bc-btn bc-btn-primary" onClick={() => void handleConfirmDelete()} style={{ width: 'auto', background: colors.error, borderColor: colors.error }}>
+                Delete
+              </button>
+            </div>
           </div>
         </div>
       )}

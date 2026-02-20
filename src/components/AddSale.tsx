@@ -424,6 +424,13 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded, onNavigateToAcco
       return;
     }
 
+    const trackStock = (menuItem.track_stock ?? 0) === 1;
+    const available = menuItem.stock_quantity ?? 0;
+    if (trackStock && available <= 0) {
+      showWarning('Out of Stock', `${menuItem.name} is out of stock`);
+      return;
+    }
+
     // Check if item already exists in order
     const existingItemIndex = orderItems.findIndex(
       item => item.menu_item_id === menuItemId
@@ -432,7 +439,12 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded, onNavigateToAcco
     if (existingItemIndex >= 0) {
       // Update existing item quantity
       const updatedItems = [...orderItems];
-      updatedItems[existingItemIndex].quantity += qty;
+      const nextQty = updatedItems[existingItemIndex].quantity + qty;
+      if (trackStock && nextQty > available) {
+        showWarning('Stock Limit', `Only ${available} in stock for ${menuItem.name}`);
+        return;
+      }
+      updatedItems[existingItemIndex].quantity = nextQty;
       updatedItems[existingItemIndex].total_price = 
         updatedItems[existingItemIndex].quantity * menuItem.price;
       setOrderItems(updatedItems);
@@ -455,6 +467,13 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded, onNavigateToAcco
 
   const handleIncreaseQty = (index: number) => {
     const updated = [...orderItems];
+    const current = updated[index];
+    const trackStock = (current.menu_item.track_stock ?? 0) === 1;
+    const available = current.menu_item.stock_quantity ?? 0;
+    if (trackStock && current.quantity + 1 > available) {
+      showWarning('Stock Limit', `Only ${available} in stock for ${current.menu_item.name}`);
+      return;
+    }
     updated[index].quantity += 1;
     updated[index].total_price = updated[index].quantity * updated[index].unit_price;
     setOrderItems(updated);
@@ -462,7 +481,15 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded, onNavigateToAcco
 
   const handleIncreaseQtyBy = (index: number, amount: number) => {
     const updated = [...orderItems];
-    updated[index].quantity = Math.max(1, updated[index].quantity + amount);
+    const current = updated[index];
+    const trackStock = (current.menu_item.track_stock ?? 0) === 1;
+    const available = current.menu_item.stock_quantity ?? 0;
+    const nextQty = Math.max(1, current.quantity + amount);
+    if (trackStock && nextQty > available) {
+      showWarning('Stock Limit', `Only ${available} in stock for ${current.menu_item.name}`);
+      return;
+    }
+    updated[index].quantity = nextQty;
     updated[index].total_price = updated[index].quantity * updated[index].unit_price;
     setOrderItems(updated);
   };
@@ -881,25 +908,45 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded, onNavigateToAcco
                 </div>
               ) : null}
 
-              {cappedLeftItems.map((item) => (
+              {cappedLeftItems.map((item) => {
+                const trackStock = (item.track_stock ?? 0) === 1;
+                const available = item.stock_quantity ?? 0;
+                const outOfStock = trackStock && available <= 0;
+                const lowStock = trackStock && !outOfStock && available <= (item.low_stock_limit ?? 0);
+                return (
                 <button
                   key={item.id}
                   type="button"
                   className="bc-btn bc-btn-outline"
                   onClick={() => addItemToOrder(item.id, 1)}
+                  disabled={outOfStock}
                   style={{
                     textAlign: 'left',
                     padding: '12px',
                     borderRadius: '10px',
                     display: 'block',
+                    opacity: outOfStock ? 0.6 : 1,
+                    cursor: outOfStock ? 'not-allowed' : 'pointer',
                   }}
                 >
-                  <div style={{ fontWeight: 800, color: colors.text, fontSize: '14px' }}>{item.name}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                    <div style={{ fontWeight: 800, color: colors.text, fontSize: '14px' }}>{item.name}</div>
+                    {outOfStock ? (
+                      <div style={{ fontSize: '10px', fontWeight: 900, color: '#b91c1c', background: '#fee2e2', padding: '2px 6px', borderRadius: '999px' }}>
+                        OUT OF STOCK
+                      </div>
+                    ) : lowStock ? (
+                      <div style={{ fontSize: '10px', fontWeight: 900, color: '#92400e', background: '#ffedd5', padding: '2px 6px', borderRadius: '999px' }}>
+                        LOW STOCK
+                      </div>
+                    ) : null}
+                  </div>
                   <div style={{ marginTop: '4px', color: colors.textSecondary, fontSize: '12px' }}>
                     {formatMoney(item.price)}
                   </div>
                 </button>
-              ))}
+              );
+              })}
             </div>
 
             {leftItems.length > 36 && !showAllBrowse && (
@@ -1143,58 +1190,6 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded, onNavigateToAcco
               )}
             </div>
 
-            {/* Discount Section */}
-            {orderItems.length > 0 && (
-              <div style={{ marginTop: '14px', padding: '12px', borderRadius: '10px', background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', border: `1px solid ${colors.border}` }}>
-                <div style={{ fontSize: '12px', fontWeight: 700, color: colors.text, marginBottom: '10px' }}>Apply Discount</div>
-                
-                <div style={{ display: 'grid', gap: '10px' }}>
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      className={discountType === 'none' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'}
-                      onClick={() => { setDiscountType('none'); setDiscountValue(0); }}
-                      style={{ flex: 1, minWidth: '80px', padding: '8px 12px', fontSize: '13px' }}
-                    >
-                      None
-                    </button>
-                    <button
-                      type="button"
-                      className={discountType === 'percentage' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'}
-                      onClick={() => setDiscountType('percentage')}
-                      style={{ flex: 1, minWidth: '80px', padding: '8px 12px', fontSize: '13px' }}
-                    >
-                      % Off
-                    </button>
-                    <button
-                      type="button"
-                      className={discountType === 'fixed' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'}
-                      onClick={() => setDiscountType('fixed')}
-                      style={{ flex: 1, minWidth: '80px', padding: '8px 12px', fontSize: '13px' }}
-                    >
-                      Fixed
-                    </button>
-                  </div>
-
-                  {discountType !== 'none' && (
-                    <div>
-                      <input
-                        type="number"
-                        min="0"
-                        max={discountType === 'percentage' ? 100 : getSubtotal()}
-                        step={discountType === 'percentage' ? 1 : 0.01}
-                        value={discountValue}
-                        onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)}
-                        placeholder={discountType === 'percentage' ? 'Discount %' : 'Discount amount'}
-                        className="bc-input"
-                        style={{ width: '100%', padding: '10px', fontSize: '14px' }}
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
             {/* Total Summary */}
             <div style={{ marginTop: '14px', borderTop: `1px solid ${colors.border}`, paddingTop: '12px' }}>
               {discountType !== 'none' && getDiscountAmount() > 0 && (
@@ -1294,6 +1289,76 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded, onNavigateToAcco
               )}
             </div>
 
+            {/* Compact Discount Section - Before Checkout */}
+            {orderItems.length > 0 && (
+              <div style={{ marginTop: '14px', padding: '10px', borderRadius: '10px', background: theme === 'dark' ? 'rgba(255, 193, 7, 0.1)' : 'rgba(255, 193, 7, 0.08)', border: `1px solid ${theme === 'dark' ? 'rgba(255, 193, 7, 0.3)' : 'rgba(255, 193, 7, 0.4)'}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: colors.text, marginRight: '4px' }}>Discount:</span>
+                  <button
+                    type="button"
+                    onClick={() => { setDiscountType('none'); setDiscountValue(0); }}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      border: discountType === 'none' ? '2px solid #F59E0B' : `1px solid ${colors.border}`,
+                      background: discountType === 'none' ? '#F59E0B' : 'transparent',
+                      color: discountType === 'none' ? '#fff' : colors.text,
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    None
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDiscountType('percentage')}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      border: discountType === 'percentage' ? '2px solid #F59E0B' : `1px solid ${colors.border}`,
+                      background: discountType === 'percentage' ? '#F59E0B' : 'transparent',
+                      color: discountType === 'percentage' ? '#fff' : colors.text,
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    % Off
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDiscountType('fixed')}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      border: discountType === 'fixed' ? '2px solid #F59E0B' : `1px solid ${colors.border}`,
+                      background: discountType === 'fixed' ? '#F59E0B' : 'transparent',
+                      color: discountType === 'fixed' ? '#fff' : colors.text,
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Fixed
+                  </button>
+                  {discountType !== 'none' && (
+                    <input
+                      type="number"
+                      min="0"
+                      max={discountType === 'percentage' ? 100 : getSubtotal()}
+                      step={discountType === 'percentage' ? 1 : 0.01}
+                      value={discountValue}
+                      onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)}
+                      placeholder={discountType === 'percentage' ? '%' : 'Amount'}
+                      className="bc-input"
+                      style={{ width: '85px', padding: '4px 8px', fontSize: '12px', flexShrink: 0 }}
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+
             <button
               type="submit"
               className="bc-btn bc-btn-primary"
@@ -1331,22 +1396,22 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded, onNavigateToAcco
       {/* Quick Add Customer Modal */}
       {showQuickAddCustomer && (
         <div className="bc-modal-overlay">
-          <div className="bc-modal" style={{ maxWidth: '520px' }}>
-            <div style={{ fontSize: '20px', fontWeight: 800, color: colors.text, marginBottom: '6px' }}>
+          <div className="bc-modal" style={{ maxWidth: '520px', padding: '32px' }}>
+            <div style={{ fontSize: '20px', fontWeight: 800, color: colors.text, marginBottom: '8px' }}>
               Quick Add {label.client}
             </div>
-            <div style={{ fontSize: '13px', color: colors.textSecondary, marginBottom: '20px' }}>
+            <div style={{ fontSize: '13px', color: colors.textSecondary, marginBottom: '24px' }}>
               Add a new customer quickly
             </div>
             
-            <div style={{ display: 'grid', gap: '16px' }}>
+            <div style={{ display: 'grid', gap: '20px' }}>
               <div>
                 <label style={{ 
                   display: 'block',
                   fontSize: '13px', 
                   fontWeight: 600, 
                   color: colors.text, 
-                  marginBottom: '6px' 
+                  marginBottom: '8px' 
                 }}>
                   Name *
                 </label>
@@ -1366,7 +1431,7 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded, onNavigateToAcco
                   fontSize: '13px', 
                   fontWeight: 600, 
                   color: colors.text, 
-                  marginBottom: '6px' 
+                  marginBottom: '8px' 
                 }}>
                   Phone (Optional)
                 </label>
@@ -1380,7 +1445,7 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded, onNavigateToAcco
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '10px', marginTop: '20px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '12px', marginTop: '24px', flexWrap: 'wrap' }}>
               <button 
                 type="button" 
                 className="bc-btn bc-btn-primary" 
@@ -1409,28 +1474,60 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded, onNavigateToAcco
       {/* Success Modal */}
       {showSuccessModal && (
         <div className="bc-modal-overlay">
-          <div className="bc-modal" style={{ maxWidth: '520px' }}>
-            <div style={{ fontSize: '18px', fontWeight: 900, color: colors.text }}>Sale created</div>
-            <div style={{ marginTop: '8px', fontSize: '13px', color: colors.textSecondary }}>
+          <div className="bc-modal" style={{ maxWidth: '520px', padding: '32px' }}>
+            <div style={{ fontSize: '20px', fontWeight: 900, color: colors.text, marginBottom: '6px' }}>Sale created</div>
+            <div style={{ fontSize: '14px', color: colors.textSecondary, marginBottom: '20px' }}>
               Payment status: <strong style={{ color: colors.text }}>{paymentStatus.toUpperCase()}</strong>
             </div>
 
             {lastPaymentSummary && (
-              <div style={{ marginTop: '8px', fontSize: '13px', color: colors.textSecondary }}>
-                Total: <strong style={{ color: colors.text }}>{formatMoney(lastPaymentSummary.total_amount)}</strong>
-                {'  '}Paid: <strong style={{ color: colors.text }}>{formatMoney(lastPaymentSummary.amount_paid)}</strong>
-                {'  '}Balance: <strong style={{ color: colors.text }}>{formatMoney(lastPaymentSummary.balance_due)}</strong>
+              <div style={{ 
+                padding: '14px', 
+                borderRadius: '10px', 
+                background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+                border: `1px solid ${colors.border}`,
+                marginBottom: '20px',
+                fontSize: '14px',
+                color: colors.text
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span>Total:</span>
+                  <strong>{formatMoney(lastPaymentSummary.total_amount)}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span>Paid:</span>
+                  <strong>{formatMoney(lastPaymentSummary.amount_paid)}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Balance:</span>
+                  <strong>{formatMoney(lastPaymentSummary.balance_due)}</strong>
+                </div>
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: '10px', marginTop: '16px', flexWrap: 'wrap' }}>
-              <button type="button" className="bc-btn bc-btn-primary" onClick={handlePrintReceipt} style={{ width: 'auto' }}>
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+              <button 
+                type="button" 
+                className="bc-btn bc-btn-primary" 
+                onClick={handlePrintReceipt} 
+                style={{ flex: 1, minWidth: '140px' }}
+              >
                 🖨️ Print Receipt
               </button>
-              <button type="button" className="bc-btn bc-btn-secondary" onClick={handlePrintThermal} style={{ width: 'auto' }}>
+              <button 
+                type="button" 
+                className="bc-btn bc-btn-outline" 
+                onClick={handlePrintThermal} 
+                style={{ flex: 1, minWidth: '140px' }}
+              >
                 📄 Thermal Print
               </button>
-              <button type="button" className="bc-btn bc-btn-outline" onClick={closeSuccessModal} style={{ width: 'auto' }}>
+              <button 
+                type="button" 
+                className="bc-btn bc-btn-outline" 
+                onClick={closeSuccessModal} 
+                style={{ width: 'auto', padding: '10px 20px' }}
+              >
                 Close
               </button>
             </div>

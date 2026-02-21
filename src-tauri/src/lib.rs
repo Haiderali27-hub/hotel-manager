@@ -63,8 +63,9 @@ use print_templates::{
     print_sale_return_receipt,
 };
 use settings::{
-    backup_database, export_json_backup, restore_database_from_backup, get_reset_security_question, 
-    validate_security_answer, reset_application_data, select_backup_file, browse_backup_file
+    backup_database, backup_database_default, export_json_backup, restore_database_from_backup, get_reset_security_question,
+    validate_security_answer, reset_application_data, select_backup_file, browse_backup_file, list_recent_backups,
+    set_reset_security_question
 };
 
 use settings::{
@@ -255,12 +256,15 @@ pub fn run() {
             // Backup & Reset
             get_business_mode_status,
             backup_database,
+            backup_database_default,
             export_json_backup,
             restore_database_from_backup,
             select_backup_file,
             browse_backup_file,
+            list_recent_backups,
             get_reset_security_question,
             validate_security_answer,
+            set_reset_security_question,
             reset_application_data
             ,
             // White-labeling (Phase 3)

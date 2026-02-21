@@ -31,10 +31,15 @@ const Settings: React.FC = () => {
   const [securityAnswer, setSecurityAnswer] = useState('');
   const [finalConfirmation, setFinalConfirmation] = useState('');
   const [securityQuestion, setSecurityQuestion] = useState<SecurityQuestion | null>(null);
+  const [resetQuestionInput, setResetQuestionInput] = useState('');
+  const [resetAnswerInput, setResetAnswerInput] = useState('');
+  const [isSavingResetQuestion, setIsSavingResetQuestion] = useState(false);
   const [showRestoreDialog, setShowRestoreDialog] = useState(false);
   const [restoreStep, setRestoreStep] = useState(1); // 1: Warning, 2: File Selection, 3: Confirmation
   const [restoreFilePath, setRestoreFilePath] = useState('');
   const [isRestoring, setIsRestoring] = useState(false);
+  const [recentBackups, setRecentBackups] = useState<string[]>([]);
+  const [isLoadingBackups, setIsLoadingBackups] = useState(false);
 
   const [businessLogoPath, setBusinessLogoPath] = useState<string>('');
   const [businessLogoDataUrl, setBusinessLogoDataUrl] = useState<string>('');
@@ -60,6 +65,66 @@ const Settings: React.FC = () => {
   useEffect(() => {
     setTipState({ id: null, pinned: false });
   }, [activeTab]);
+
+  const loadRecentBackups = async () => {
+    setIsLoadingBackups(true);
+    try {
+      const backups = await invoke<string[]>('list_recent_backups', { limit: 5 });
+      setRecentBackups(backups);
+    } catch {
+      setRecentBackups([]);
+    } finally {
+      setIsLoadingBackups(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'database') {
+      loadRecentBackups();
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    const loadResetQuestion = async () => {
+      try {
+        const question = await invoke<SecurityQuestion>('get_reset_security_question');
+        setResetQuestionInput(question.question || '');
+      } catch {
+        setResetQuestionInput('');
+      }
+    };
+
+    loadResetQuestion();
+  }, []);
+
+  const getBackupFileName = (path: string) => {
+    const parts = path.split(/[\\/]/);
+    return parts[parts.length - 1] || path;
+  };
+
+  const getBackupTimestamp = (fileName: string) => {
+    const match = fileName.match(/(\d{8})_(\d{6})/);
+    if (!match) return '';
+    const datePart = match[1];
+    const timePart = match[2];
+    const year = datePart.slice(0, 4);
+    const month = datePart.slice(4, 6);
+    const day = datePart.slice(6, 8);
+    const hour = timePart.slice(0, 2);
+    const minute = timePart.slice(2, 4);
+    const second = timePart.slice(4, 6);
+    return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+  };
+
+  const formatBackupLabel = (path: string) => {
+    const fileName = getBackupFileName(path);
+    const timestamp = getBackupTimestamp(fileName);
+    const isAuto = fileName.includes('before_reset');
+    if (timestamp) {
+      return `${isAuto ? 'Auto (Before Reset)' : 'Manual'} - ${timestamp}`;
+    }
+    return isAuto ? 'Auto (Before Reset)' : 'Manual Backup';
+  };
 
   const InfoTip = ({ id, text }: { id: string; text: string }) => (
     <span
@@ -250,8 +315,22 @@ const Settings: React.FC = () => {
         return;
       }
 
-      const result = await invoke<string>('backup_database', { backup_path: destination });
-      showSuccess('Backup Created', result);
+      await invoke<string>('backup_database', { backupPath: destination });
+      showSuccess('Backup Created', 'Backup folder saved successfully.');
+      loadRecentBackups();
+    } catch (error) {
+      showError('Backup Failed', String(error));
+    } finally {
+      setIsBackingUp(false);
+    }
+  };
+
+  const handleQuickBackup = async () => {
+    try {
+      setIsBackingUp(true);
+      await invoke<string>('backup_database_default');
+      showSuccess('Backup Created', 'Backup folder saved successfully.');
+      loadRecentBackups();
     } catch (error) {
       showError('Backup Failed', String(error));
     } finally {
@@ -263,6 +342,12 @@ const Settings: React.FC = () => {
     setRestoreStep(1);
     setRestoreFilePath('');
     setIsRestoring(false);
+    setShowRestoreDialog(true);
+  };
+
+  const useBackupForRestore = (path: string) => {
+    setRestoreFilePath(path);
+    setRestoreStep(2);
     setShowRestoreDialog(true);
   };
 
@@ -295,7 +380,7 @@ const Settings: React.FC = () => {
 
     try {
       const isValid = await invoke<boolean>('validate_security_answer', {
-        question_id: securityQuestion.id,
+        questionId: securityQuestion.id,
         answer: securityAnswer,
       });
 
@@ -320,8 +405,30 @@ const Settings: React.FC = () => {
       const result = await invoke<string>('reset_application_data');
       showSuccess('Reset Complete', result);
       cancelReset();
+      setTimeout(() => window.location.reload(), 800);
     } catch (error) {
       showError('Reset Failed', String(error));
+    }
+  };
+
+  const saveResetQuestion = async () => {
+    if (!resetQuestionInput.trim() || !resetAnswerInput.trim()) {
+      showError('Missing Info', 'Please enter both a question and an answer.');
+      return;
+    }
+
+    try {
+      setIsSavingResetQuestion(true);
+      await invoke('set_reset_security_question', {
+        question: resetQuestionInput,
+        answer: resetAnswerInput,
+      });
+      setResetAnswerInput('');
+      showSuccess('Saved', 'Reset security question updated.');
+    } catch (error) {
+      showError('Save Failed', String(error));
+    } finally {
+      setIsSavingResetQuestion(false);
     }
   };
 
@@ -364,7 +471,18 @@ const Settings: React.FC = () => {
 
   const browseBackupFile = async () => {
     try {
-      await invoke<string>('browse_backup_file');
+      const selected = await open({
+        multiple: false,
+        directory: false,
+        title: 'Select Backup File',
+        filters: [
+          { name: 'Database Backup', extensions: ['db'] },
+        ],
+      });
+
+      if (!selected || Array.isArray(selected)) return;
+
+      setRestoreFilePath(selected);
     } catch (error) {
       showError('Browse Backup', String(error));
     }
@@ -375,9 +493,10 @@ const Settings: React.FC = () => {
 
     try {
       setIsRestoring(true);
-      const result = await invoke<string>('restore_database_from_backup', { backup_file_path: restoreFilePath });
-      showSuccess('Restore Complete', result);
+      await invoke<string>('restore_database_from_backup', { backupFilePath: restoreFilePath });
+      showSuccess('Restore Complete', 'Database restored successfully.');
       cancelRestore();
+      setTimeout(() => window.location.reload(), 800);
     } catch (error) {
       showError('Restore Failed', String(error));
     } finally {
@@ -678,6 +797,53 @@ const Settings: React.FC = () => {
                 <button className="bc-btn bc-btn-primary" onClick={handleBackupData} disabled={isBackingUp}>
                   {isBackingUp ? 'Creating Backup…' : 'Create Backup'}
                 </button>
+                <button className="bc-btn bc-btn-outline" onClick={handleQuickBackup} disabled={isBackingUp} style={{ marginLeft: 10 }}>
+                  Quick Backup (Default Folder)
+                </button>
+                <div style={{ marginTop: 10, color: 'var(--app-text-secondary)', fontSize: 12 }}>
+                  Tip: Each backup creates a folder with both the .db and JSON export.
+                </div>
+              </div>
+            </div>
+
+            <div className="bc-card" style={{ borderRadius: 10, padding: 16 }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--app-text)' }}>
+                Backup and Restore Steps
+              </div>
+              <div style={{ marginTop: 10, color: 'var(--app-text-secondary)', fontSize: 13 }}>
+                <div>1) Click Create Backup and choose a safe folder.</div>
+                <div>2) A backup folder is created with a .db file and JSON export.</div>
+                <div>3) To restore, open Restore and select the .db file inside that folder.</div>
+                <div>4) Confirm the restore steps and wait for completion.</div>
+              </div>
+            </div>
+
+            <div className="bc-card" style={{ borderRadius: 10, padding: 16 }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--app-text)' }}>
+                Recent Backups
+              </div>
+              <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+                {isLoadingBackups ? (
+                  <div style={{ color: 'var(--app-text-secondary)', fontSize: 12 }}>Loading backups...</div>
+                ) : recentBackups.length === 0 ? (
+                  <div style={{ color: 'var(--app-text-secondary)', fontSize: 12 }}>No backups found yet.</div>
+                ) : (
+                  recentBackups.map((path) => (
+                    <div key={path} style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <div style={{ flex: '1 1 360px', minWidth: 240 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--app-text)' }}>
+                          {formatBackupLabel(path)}
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--app-text-secondary)', wordBreak: 'break-word' }}>
+                          {getBackupFileName(path)}
+                        </div>
+                      </div>
+                      <button className="bc-btn bc-btn-outline" onClick={() => useBackupForRestore(path)} type="button">
+                        Use for Restore
+                      </button>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 
@@ -701,6 +867,41 @@ const Settings: React.FC = () => {
                 <button className="bc-btn bc-btn-primary" onClick={startResetProcess}>
                   Reset Application Data
                 </button>
+              </div>
+            </div>
+
+            <div className="bc-card" style={{ borderRadius: 10, padding: 16 }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--app-text)' }}>
+                Reset Security Question
+              </div>
+              <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6, color: 'var(--app-text-secondary)' }}>
+                    Question
+                  </div>
+                  <input
+                    className="bc-input"
+                    value={resetQuestionInput}
+                    onChange={(e) => setResetQuestionInput(e.target.value)}
+                    placeholder="e.g., What city is your business located in?"
+                  />
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6, color: 'var(--app-text-secondary)' }}>
+                    Answer
+                  </div>
+                  <input
+                    className="bc-input"
+                    value={resetAnswerInput}
+                    onChange={(e) => setResetAnswerInput(e.target.value)}
+                    placeholder="Type the answer"
+                  />
+                </div>
+                <div>
+                  <button className="bc-btn bc-btn-primary" onClick={saveResetQuestion} disabled={isSavingResetQuestion}>
+                    {isSavingResetQuestion ? 'Saving...' : 'Save Security Question'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -884,7 +1085,7 @@ const Settings: React.FC = () => {
                         type="text"
                         value={restoreFilePath}
                         onChange={(e) => setRestoreFilePath(e.target.value)}
-                        placeholder="C:\\Users\\YourName\\Desktop\\business_backup_20250905_143022.db"
+                        placeholder="C:\\Backups\\backup_20250905_143022\\business_backup_20250905_143022.db"
                         className="bc-input"
                         style={{ flex: '1 1 360px' }}
                       />
@@ -896,6 +1097,19 @@ const Settings: React.FC = () => {
                       </button>
                     </div>
                     <div style={{ marginTop: 6, color: 'var(--app-text-secondary)', fontSize: 12 }}>File must end with .db</div>
+                  </div>
+
+                  <div className="bc-card" style={{ borderRadius: 8, padding: 10, marginBottom: 12 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6, color: 'var(--app-text)' }}>Restore steps</div>
+                    <div style={{ color: 'var(--app-text-secondary)', fontSize: 12 }}>
+                      1) Choose the .db file created by Create Backup.
+                    </div>
+                    <div style={{ color: 'var(--app-text-secondary)', fontSize: 12 }}>
+                      2) Click Continue and review the confirmation details.
+                    </div>
+                    <div style={{ color: 'var(--app-text-secondary)', fontSize: 12 }}>
+                      3) Confirm to replace current data with the backup.
+                    </div>
                   </div>
 
                   <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>

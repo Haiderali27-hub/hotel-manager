@@ -1,9 +1,9 @@
 use tauri::command;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::fs;
 use serde_json::{json, Value};
 use rusqlite::{Connection, OptionalExtension};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use base64::Engine;
 
 fn is_valid_hex_color(value: &str) -> bool {
@@ -270,6 +270,46 @@ pub struct SecurityQuestion {
     pub answer: String,
 }
 
+fn is_backup_db_file(path: &Path) -> bool {
+    if let Some(file_name) = path.file_name().and_then(|name| name.to_str()) {
+        return file_name.ends_with(".db")
+            && (file_name.contains("business_backup") || file_name.contains("hotel_backup"));
+    }
+    false
+}
+
+fn collect_backup_files(backup_dirs: Vec<PathBuf>) -> Vec<PathBuf> {
+    let mut backups = Vec::new();
+
+    for backup_dir in backup_dirs {
+        if !backup_dir.exists() {
+            continue;
+        }
+
+        if let Ok(entries) = std::fs::read_dir(&backup_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() {
+                    if is_backup_db_file(&path) {
+                        backups.push(path);
+                    }
+                } else if path.is_dir() {
+                    if let Ok(child_entries) = std::fs::read_dir(&path) {
+                        for child in child_entries.flatten() {
+                            let child_path = child.path();
+                            if child_path.is_file() && is_backup_db_file(&child_path) {
+                                backups.push(child_path);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    backups
+}
+
 // Backup database to external location
 #[command]
 pub async fn backup_database(backup_path: String) -> Result<String, String> {
@@ -282,10 +322,13 @@ pub async fn backup_database(backup_path: String) -> Result<String, String> {
         return Err("Backup directory does not exist".to_string());
     }
     
-    // Create timestamp for backup file
+    // Create a folder per backup
     let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
+    let backup_folder = backup_dir.join(format!("backup_{}", timestamp));
+    fs::create_dir_all(&backup_folder)
+        .map_err(|e| format!("Failed to create backup folder: {}", e))?;
     let backup_file_name = format!("business_backup_{}.db", timestamp);
-    let backup_file_path = backup_dir.join(&backup_file_name);
+    let backup_file_path = backup_folder.join(&backup_file_name);
     
     // Copy database file
     if let Err(e) = fs::copy(&db_path, &backup_file_path) {
@@ -293,12 +336,43 @@ pub async fn backup_database(backup_path: String) -> Result<String, String> {
     }
     
     // Also create a JSON export for data portability
-    match export_data_to_json(&backup_dir, &timestamp) {
+    match export_data_to_json(&backup_folder, &timestamp) {
         Ok(_) => println!("JSON export created successfully"),
         Err(e) => println!("Warning: JSON export failed: {}", e),
     }
     
-    Ok(format!("Backup created successfully at: {}", backup_file_path.display()))
+    Ok(format!("Backup created successfully in folder: {}", backup_folder.display()))
+}
+
+// Quick backup to app default backups folder
+#[command]
+pub async fn backup_database_default() -> Result<String, String> {
+    use crate::db::get_db_path;
+
+    let db_path = get_db_path();
+    let app_dir = db_path.parent().ok_or("Failed to get app directory")?;
+    let backup_dir = app_dir.join("backups");
+
+    if !backup_dir.exists() {
+        fs::create_dir_all(&backup_dir)
+            .map_err(|e| format!("Failed to create backup directory: {}", e))?;
+    }
+
+    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
+    let backup_folder = backup_dir.join(format!("backup_{}", timestamp));
+    fs::create_dir_all(&backup_folder)
+        .map_err(|e| format!("Failed to create backup folder: {}", e))?;
+    let backup_file_name = format!("business_backup_{}.db", timestamp);
+    let backup_file_path = backup_folder.join(&backup_file_name);
+
+    fs::copy(&db_path, &backup_file_path)
+        .map_err(|e| format!("Failed to copy database: {}", e))?;
+
+    if let Err(e) = export_data_to_json(&backup_folder, &timestamp) {
+        println!("Warning: JSON export failed: {}", e);
+    }
+
+    Ok(format!("Quick backup created in folder: {}", backup_folder.display()))
 }
 
 // Export JSON backup specifically
@@ -647,12 +721,18 @@ fn test_database_functionality(db_path: &Path) -> Result<(), String> {
 // Get security question for reset validation
 #[command]
 pub async fn get_reset_security_question() -> Result<SecurityQuestion, String> {
-    // For now, return a hardcoded security question
-    // In a real app, this might be stored in the database or config
+    use crate::db::get_db_connection;
+
+    let conn = get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+    let saved_question = get_setting(&conn, "reset_question")?
+        .unwrap_or_else(|| "What country is your business located in?".to_string());
+    let saved_answer = get_setting(&conn, "reset_answer")?
+        .unwrap_or_else(|| "pakistan".to_string());
+
     Ok(SecurityQuestion {
         id: "location".to_string(),
-        question: "What country is your hotel located in?".to_string(),
-        answer: "pakistan".to_string(), // This would normally be hashed
+        question: saved_question,
+        answer: saved_answer,
     })
 }
 
@@ -667,7 +747,24 @@ pub async fn validate_security_answer(question_id: String, answer: String) -> Re
     }
     
     // Compare answers (case-insensitive)
-    Ok(answer.trim().to_lowercase() == security_question.answer.to_lowercase())
+    Ok(answer.trim().to_lowercase() == security_question.answer.trim().to_lowercase())
+}
+
+#[command]
+pub async fn set_reset_security_question(question: String, answer: String) -> Result<(), String> {
+    use crate::db::get_db_connection;
+
+    let conn = get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+    let cleaned_question = question.trim();
+    let cleaned_answer = answer.trim();
+
+    if cleaned_question.is_empty() || cleaned_answer.is_empty() {
+        return Err("Question and answer are required.".to_string());
+    }
+
+    upsert_setting(&conn, "reset_question", cleaned_question)?;
+    upsert_setting(&conn, "reset_answer", &cleaned_answer.to_lowercase())?;
+    Ok(())
 }
 
 // Reset all application data with automatic backup
@@ -676,11 +773,8 @@ pub async fn reset_application_data() -> Result<String, String> {
     use crate::db::get_db_path;
     
     // Create automatic backup before reset
-    let backup_result = create_automatic_backup_before_reset().await;
-    match backup_result {
-        Ok(backup_path) => println!("Automatic backup created at: {}", backup_path),
-        Err(e) => return Err(format!("Failed to create backup before reset: {}", e)),
-    }
+    let backup_path = create_automatic_backup_before_reset().await
+        .map_err(|e| format!("Failed to create backup before reset: {}", e))?;
     
     let db_path = get_db_path();
     let conn = Connection::open(&db_path)
@@ -706,13 +800,13 @@ pub async fn reset_application_data() -> Result<String, String> {
     // List of tables to clear (preserve structure, clear data)
     // This comment is for reference - tables are handled in the correct order below
     
+    // Disable foreign keys at the connection level to avoid FK violations during reset
+    conn.execute("PRAGMA foreign_keys = OFF", [])
+        .map_err(|e| format!("Failed to disable foreign keys: {}", e))?;
+
     // Start transaction
     let tx = conn.unchecked_transaction()
         .map_err(|e| format!("Failed to start transaction: {}", e))?;
-    
-    // Disable foreign key constraints temporarily for reset
-    tx.execute("PRAGMA foreign_keys = OFF", [])
-        .map_err(|e| format!("Failed to disable foreign keys: {}", e))?;
     
     // Clear data tables in correct order (child tables first)
     let tables_to_clear = vec![
@@ -761,6 +855,10 @@ pub async fn reset_application_data() -> Result<String, String> {
     // Commit transaction
     tx.commit()
         .map_err(|e| format!("Failed to commit reset transaction: {}", e))?;
+
+    // Re-enable foreign key constraints
+    conn.execute("PRAGMA foreign_keys = ON", [])
+        .map_err(|e| format!("Failed to re-enable foreign keys: {}", e))?;
     
     // Verify database integrity after reset
     let final_integrity_check: Result<String, _> = conn.query_row(
@@ -779,7 +877,10 @@ pub async fn reset_application_data() -> Result<String, String> {
         _ => {} // OK
     }
     
-    Ok("Application data has been reset successfully. Backup created automatically.".to_string())
+    Ok(format!(
+        "Application data has been reset successfully. Backup created automatically at: {}",
+        backup_path
+    ))
 }
 
 // Create automatic backup before reset
@@ -797,21 +898,24 @@ async fn create_automatic_backup_before_reset() -> Result<String, String> {
             .map_err(|e| format!("Failed to create backup directory: {}", e))?;
     }
     
-    // Create timestamp for backup file
+    // Create a folder per backup
     let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
+    let backup_folder = backup_dir.join(format!("before_reset_{}", timestamp));
+    fs::create_dir_all(&backup_folder)
+        .map_err(|e| format!("Failed to create backup folder: {}", e))?;
     let backup_file_name = format!("business_backup_before_reset_{}.db", timestamp);
-    let backup_file_path = backup_dir.join(&backup_file_name);
+    let backup_file_path = backup_folder.join(&backup_file_name);
     
     // Copy database file
     fs::copy(&db_path, &backup_file_path)
         .map_err(|e| format!("Failed to copy database: {}", e))?;
     
     // Also create a JSON export for data portability
-    if let Err(e) = export_data_to_json(&backup_dir, &format!("before_reset_{}", timestamp)) {
+    if let Err(e) = export_data_to_json(&backup_folder, &format!("before_reset_{}", timestamp)) {
         println!("Warning: JSON export failed: {}", e);
     }
     
-    Ok(backup_file_path.to_string_lossy().to_string())
+    Ok(backup_folder.to_string_lossy().to_string())
 }
 
 // Seed default data after reset
@@ -837,23 +941,7 @@ pub async fn select_backup_file() -> Result<String, String> {
         app_dir.join("..").join("backups").canonicalize().unwrap_or(app_dir.join("backups")),
     ];
     
-    let mut all_backup_files = Vec::new();
-    
-    for backup_dir in backup_dirs {
-        if backup_dir.exists() {
-            if let Ok(entries) = std::fs::read_dir(&backup_dir) {
-                for entry in entries.flatten() {
-                    if let Some(file_name) = entry.file_name().to_str() {
-                        if file_name.ends_with(".db")
-                            && (file_name.contains("business_backup") || file_name.contains("hotel_backup"))
-                        {
-                            all_backup_files.push(entry.path());
-                        }
-                    }
-                }
-            }
-        }
-    }
+    let mut all_backup_files = collect_backup_files(backup_dirs);
     
     // Sort by modification time and return the most recent
     all_backup_files.sort_by_key(|path| {
@@ -885,26 +973,13 @@ pub async fn browse_backup_file() -> Result<String, String> {
         app_dir.join("..").join("backups").canonicalize().unwrap_or(app_dir.join("backups")),
     ];
     
-    let mut available_backups = Vec::new();
-    
-    for backup_dir in backup_dirs {
-        if backup_dir.exists() {
-            if let Ok(entries) = std::fs::read_dir(&backup_dir) {
-                for entry in entries.flatten() {
-                    if let Some(file_name) = entry.file_name().to_str() {
-                        if file_name.ends_with(".db")
-                            && (file_name.contains("business_backup") || file_name.contains("hotel_backup"))
-                        {
-                            available_backups.push(entry.path().to_string_lossy().to_string());
-                        }
-                    }
-                }
-            }
-        }
-    }
+    let mut available_backups: Vec<String> = collect_backup_files(backup_dirs)
+        .into_iter()
+        .map(|path| path.to_string_lossy().to_string())
+        .collect();
     
     if available_backups.is_empty() {
-        Err("No backup files found. Please use the 'Find Latest' button to automatically find your latest backup, or manually enter the full path to your backup file.\n\nBackup files should be named like 'business_backup_YYYYMMDD_HHMMSS.db'".to_string())
+        Err("No backup files found. Please use the 'Find Latest' button to automatically find your latest backup, or manually enter the full path to your backup file.\n\nBackups are stored in folders like 'backup_YYYYMMDD_HHMMSS' and include a .db file.".to_string())
     } else {
         // Sort by modification time and show available files
         let mut backup_info = String::from("✅ Found backup files! Please copy and paste one of these paths:\n\n");
@@ -925,4 +1000,42 @@ pub async fn browse_backup_file() -> Result<String, String> {
         
         Err(backup_info)
     }
+}
+
+#[command]
+pub async fn list_recent_backups(limit: Option<usize>) -> Result<Vec<String>, String> {
+    use crate::db::get_db_path;
+
+    let db_path = get_db_path();
+    let app_dir = db_path.parent().ok_or("Failed to get app directory")?;
+
+    let backup_dirs = vec![
+        app_dir.join("backups"),
+        app_dir.join("..").join("backups").canonicalize().unwrap_or(app_dir.join("backups")),
+    ];
+
+    let mut all_backup_files = collect_backup_files(backup_dirs);
+
+    all_backup_files.sort_by_key(|path| {
+        std::fs::metadata(path)
+            .and_then(|m| m.modified())
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+    });
+    all_backup_files.reverse();
+
+    let max_items = limit.unwrap_or(5).max(1);
+    let mut seen = HashSet::new();
+    let mut result = Vec::new();
+
+    for path in all_backup_files {
+        let path_str = path.to_string_lossy().to_string();
+        if seen.insert(path_str.clone()) {
+            result.push(path_str);
+        }
+        if result.len() >= max_items {
+            break;
+        }
+    }
+
+    Ok(result)
 }

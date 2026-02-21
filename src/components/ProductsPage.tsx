@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FiChevronsDown, FiChevronsUp } from 'react-icons/fi';
 import type { MenuItem, NewMenuItem } from '../api/client';
 import {
   addMenuItem,
@@ -18,10 +19,6 @@ import { useCurrency } from '../context/CurrencyContext';
 import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
 import { handleNumberInputFocus } from '../utils/inputHelpers';
-
-interface ProductsPageProps {
-  onBack: () => void;
-}
 
 type ProductDraft = {
   name: string;
@@ -47,7 +44,7 @@ const defaultDraft: ProductDraft = {
   low_stock_limit: '5',
 };
 
-const ProductsPage: React.FC<ProductsPageProps> = ({ onBack }) => {
+const ProductsPage: React.FC = () => {
   const { colors, theme } = useTheme();
   const { formatMoney } = useCurrency();
   const { showError, showSuccess } = useNotification();
@@ -398,6 +395,11 @@ const ProductsPage: React.FC<ProductsPageProps> = ({ onBack }) => {
     });
   }, [allCategoryNames, categoryMatchesQuery, normalizedSearch, productMatchesQuery, products]);
 
+  const allExpanded = useMemo(
+    () => visibleCategoryNames.length > 0 && visibleCategoryNames.every((name) => expanded[name]),
+    [expanded, visibleCategoryNames]
+  );
+
   const expandAll = () => {
     setExpanded((prev) => {
       const next = { ...prev };
@@ -412,6 +414,14 @@ const ProductsPage: React.FC<ProductsPageProps> = ({ onBack }) => {
       for (const name of visibleCategoryNames) next[name] = false;
       return next;
     });
+  };
+
+  const toggleAll = () => {
+    if (allExpanded) {
+      collapseAll();
+    } else {
+      expandAll();
+    }
   };
 
   const categoryStyle = useCallback(
@@ -450,14 +460,9 @@ const ProductsPage: React.FC<ProductsPageProps> = ({ onBack }) => {
   return (
     <div style={{ padding: '24px', minHeight: '100vh', background: theme === 'dark' ? colors.primary : '#c7e2eb', color: colors.text }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button type="button" className="bc-btn bc-btn-outline" onClick={onBack} style={{ width: 'auto' }}>
-            Back
-          </button>
-          <div>
-            <div style={{ fontSize: '28px', fontWeight: 800, color: colors.text }}>Products</div>
-            <div style={{ fontSize: '14px', color: colors.textSecondary }}>Inventory and services</div>
-          </div>
+        <div>
+          <div style={{ fontSize: '28px', fontWeight: 800, color: colors.text }}>Products</div>
+          <div style={{ fontSize: '14px', color: colors.textSecondary }}>Inventory and services</div>
         </div>
 
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -481,11 +486,14 @@ const ProductsPage: React.FC<ProductsPageProps> = ({ onBack }) => {
           />
 
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            <button type="button" className="bc-btn bc-btn-outline" onClick={expandAll} style={{ width: 'auto' }}>
-              Expand All
-            </button>
-            <button type="button" className="bc-btn bc-btn-outline" onClick={collapseAll} style={{ width: 'auto' }}>
-              Collapse All
+            <button
+              type="button"
+              className="bc-btn bc-btn-outline"
+              onClick={toggleAll}
+              style={{ width: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+              {allExpanded ? <FiChevronsUp size={16} /> : <FiChevronsDown size={16} />}
+              <span>{allExpanded ? 'Collapse All' : 'Expand All'}</span>
             </button>
           </div>
         </div>

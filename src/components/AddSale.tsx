@@ -1,22 +1,22 @@
 import { invoke } from '@tauri-apps/api/core';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  addCustomer,
-  addSale,
-  addSalePayment,
-  buildKitchenTicketHtml,
-  getActiveCustomers,
-  getBarcodeEnabled,
-  getMenuItems,
-  printOrderReceipt,
-  printThermalReceipt,
-  type ActiveCustomerRow,
-  type KitchenTicket,
-  type KitchenTicketItem,
-  type MenuItem,
-  type NewCustomer,
-  type NewSale,
-  type OrderItem
+    addCustomer,
+    addSale,
+    addSalePayment,
+    buildKitchenTicketHtml,
+    getActiveCustomers,
+    getBarcodeEnabled,
+    getMenuItems,
+    printOrderReceipt,
+    printThermalReceipt,
+    type ActiveCustomerRow,
+    type KitchenTicket,
+    type KitchenTicketItem,
+    type MenuItem,
+    type NewCustomer,
+    type NewSale,
+    type OrderItem
 } from '../api/client';
 import { useCurrency } from '../context/CurrencyContext';
 import { useLabels } from '../context/LabelContext';
@@ -24,7 +24,6 @@ import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
 
 interface AddSaleProps {
-  onBack: () => void;
   onSaleAdded: () => void;
   onNavigateToAccounts?: () => void;
 }
@@ -40,7 +39,7 @@ type PosDraft = {
   items: Array<{ menu_item_id: number; quantity: number; unit_price: number; item_name: string }>;
 };
 
-const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded, onNavigateToAccounts }) => {
+const AddSale: React.FC<AddSaleProps> = ({ onSaleAdded, onNavigateToAccounts }) => {
   const { colors, theme } = useTheme();
   const { showSuccess, showError, showWarning } = useNotification();
   const { formatMoney } = useCurrency();
@@ -164,7 +163,6 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded, onNavigateToAcco
     } catch {
       // ignore
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -765,9 +763,6 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded, onNavigateToAcco
   return (
     <div style={{ padding: '24px', backgroundColor: theme === 'dark' ? colors.primary : '#c7e2eb', color: colors.text, minHeight: '100vh' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-        <button type="button" className="bc-btn bc-btn-outline" onClick={onBack} style={{ width: 'auto' }}>
-          Back
-        </button>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: '28px', fontWeight: 800, color: colors.text }}>{posTitle}</div>
           <div style={{ fontSize: '14px', color: colors.textSecondary }}>Create a new sale</div>

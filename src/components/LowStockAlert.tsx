@@ -9,6 +9,15 @@ interface LowStockItem {
   low_stock_limit: number;
 }
 
+type LowStockRow = Partial<{
+  id: number;
+  name: string;
+  stock_quantity: number;
+  stockQuantity: number;
+  low_stock_limit: number;
+  lowStockLimit: number;
+}>;
+
 const LowStockAlert: React.FC = () => {
   const { theme, colors } = useTheme();
   const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([]);
@@ -16,13 +25,15 @@ const LowStockAlert: React.FC = () => {
 
   const fetchLowStockItems = async () => {
     try {
-      const rows: any[] = await invoke('get_low_stock_items');
-      const items: LowStockItem[] = rows.map((raw) => ({
-        id: raw.id,
-        name: raw.name,
-        stock_quantity: raw.stock_quantity ?? raw.stockQuantity ?? 0,
-        low_stock_limit: raw.low_stock_limit ?? raw.lowStockLimit ?? 0,
-      }));
+      const rows = await invoke<LowStockRow[]>('get_low_stock_items');
+      const items: LowStockItem[] = rows
+        .filter((raw) => typeof raw.id === 'number' && typeof raw.name === 'string')
+        .map((raw) => ({
+          id: raw.id as number,
+          name: raw.name as string,
+          stock_quantity: Number(raw.stock_quantity ?? raw.stockQuantity ?? 0),
+          low_stock_limit: Number(raw.low_stock_limit ?? raw.lowStockLimit ?? 0),
+        }));
       setLowStockItems(items);
     } catch (error) {
       console.error('Failed to fetch low stock items:', error);

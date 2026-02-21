@@ -1057,34 +1057,7 @@ const History: React.FC<HistoryProps> = ({ onBack }) => {
             </>
           )}
 
-          {/* Legacy sales toggle (kept for compatibility) */}
-          {activeTab === 'food-orders' && false && (
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>Sales Filter</label>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowUnpaidOnly((prev) => !prev);
-                  setCurrentPage(1);
-                }}
-                style={{
-                  width: '100%',
-                  padding: '0.55rem 0.75rem',
-                  backgroundColor: showUnpaidOnly ? colors.success : colors.border,
-                  color: showUnpaidOnly ? 'white' : colors.text,
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontWeight: 700,
-                }}
-              >
-                {showUnpaidOnly ? 'Showing: Unpaid Only' : 'Showing: All Sales'}
-              </button>
-              <div style={{ marginTop: '6px', fontSize: '0.8rem', color: colors.textSecondary }}>
-                Unpaid includes partial payments (balance &gt; 0).
-              </div>
-            </div>
-          )}
+          {/* Legacy sales toggle removed (unused). */}
         </div>
 
         {/* Filter Actions */}

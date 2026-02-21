@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { FiChevronsDown, FiChevronsUp, FiHome } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
 import { useCurrency } from '../context/CurrencyContext';
 import { useLabels } from '../context/LabelContext';
@@ -35,6 +36,26 @@ interface LowStockItem {
   low_stock_limit: number;
 }
 
+type LowStockRow = Partial<{
+  id: number;
+  name: string;
+  stock_quantity: number;
+  stockQuantity: number;
+  low_stock_limit: number;
+  lowStockLimit: number;
+}>;
+
+type MenuItemRow = Partial<{
+  stock_quantity: number;
+  stockQuantity: number;
+}>;
+
+type ActiveCustomerRow = Partial<{ id: number }>;
+
+type SaleDetails = Partial<{
+  items: Array<Partial<{ menu_item_id: number; quantity: number; unit_price: number; item_name: string }>>;
+}>;
+
 const ModernDashboard: React.FC = () => {
   const { logout, userRole, adminId } = useAuth();
   const { colors, theme } = useTheme();
@@ -52,6 +73,17 @@ const ModernDashboard: React.FC = () => {
     return true;
   });
   const [businessName, setBusinessName] = useState('INERTIA');
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    try {
+      const raw = localStorage.getItem('bm-sidebar-width');
+      const parsed = raw ? Number(raw) : NaN;
+      if (Number.isFinite(parsed) && parsed >= 220 && parsed <= 420) return parsed;
+    } catch {
+      // Ignore storage errors.
+    }
+    return 280;
+  });
+  const resizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const [recentSales, setRecentSales] = useState<SaleSummary[]>([]);
   const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([]);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
@@ -61,7 +93,6 @@ const ModernDashboard: React.FC = () => {
   const [totalCustomers, setTotalCustomers] = useState(0);
   const [totalStock, setTotalStock] = useState(0);
   const [outOfStock, setOutOfStock] = useState(0);
-  const [searchQuery, setSearchQuery] = useState('');
   const [chartDateRange, setChartDateRange] = useState<'6months' | '3months' | '1month'>('6months');
   const [hoveredDataPoint, setHoveredDataPoint] = useState<number | null>(null);
 
@@ -78,37 +109,70 @@ const ModernDashboard: React.FC = () => {
     }
   }, [sidebarVisible]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem('bm-sidebar-width', String(sidebarWidth));
+    } catch {
+      // Ignore storage errors.
+    }
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    const handleMouseMove = (event: MouseEvent) => {
+      if (!resizeRef.current) return;
+      const delta = event.clientX - resizeRef.current.startX;
+      const next = Math.min(420, Math.max(220, resizeRef.current.startWidth + delta));
+      setSidebarWidth(next);
+    };
+
+    const handleMouseUp = () => {
+      resizeRef.current = null;
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
   const loadDashboardData = async () => {
     try {
       // Used for "Recent Activity" and today's revenue/order counts.
       const sales = await invoke<SaleSummary[]>('get_sales');
       setRecentSales(sales);
 
-      const rows: any[] = await invoke('get_low_stock_items');
-      const lowStock: LowStockItem[] = rows.map((raw) => ({
-        id: raw.id,
-        name: raw.name,
-        stock_quantity: raw.stock_quantity ?? raw.stockQuantity ?? 0,
-        low_stock_limit: raw.low_stock_limit ?? raw.lowStockLimit ?? 0,
-      }));
+      const rows = await invoke<LowStockRow[]>('get_low_stock_items');
+      const lowStock: LowStockItem[] = rows
+        .filter((raw) => typeof raw.id === 'number' && typeof raw.name === 'string')
+        .map((raw) => ({
+          id: raw.id as number,
+          name: raw.name as string,
+          stock_quantity: Number(raw.stock_quantity ?? raw.stockQuantity ?? 0),
+          low_stock_limit: Number(raw.low_stock_limit ?? raw.lowStockLimit ?? 0),
+        }));
       setLowStockItems(lowStock);
 
       // Fetch additional dashboard metrics
       try {
-        const products = await invoke<any[]>('get_menu_items');
+        const products = await invoke<MenuItemRow[]>('get_menu_items');
         setTotalProducts(products.length);
-        
-        const totalStockQty = products.reduce((sum, p) => sum + (p.stock_quantity || 0), 0);
+
+        const totalStockQty = products.reduce(
+          (sum, p) => sum + Number(p.stock_quantity ?? p.stockQuantity ?? 0),
+          0
+        );
         setTotalStock(totalStockQty);
-        
-        const outOfStockCount = products.filter(p => (p.stock_quantity || 0) === 0).length;
+
+        const outOfStockCount = products.filter((p) => Number(p.stock_quantity ?? p.stockQuantity ?? 0) === 0).length;
         setOutOfStock(outOfStockCount);
       } catch (e) {
         console.error('Failed to load products:', e);
       }
 
       try {
-        const customers = await invoke<any[]>('get_active_customers');
+        const customers = await invoke<ActiveCustomerRow[]>('get_active_customers');
         setTotalCustomers(customers.length);
       } catch (e) {
         console.error('Failed to load customers:', e);
@@ -136,6 +200,12 @@ const ModernDashboard: React.FC = () => {
 
   type NavItem = { id: string; label: string; managerOnly?: boolean; adminOnly?: boolean };
   type NavCategory = { category: string; items: NavItem[] };
+
+  const canViewItem = (item: NavItem) => {
+    if (item.adminOnly && userRole !== 'admin') return false;
+    if (item.managerOnly && userRole !== 'admin' && userRole !== 'manager') return false;
+    return true;
+  };
   
   const navigationCategories: NavCategory[] = [
     {
@@ -166,7 +236,8 @@ const ModernDashboard: React.FC = () => {
     {
       category: 'Management',
       items: [
-        { id: 'settings', label: 'Settings', adminOnly: true },
+        { id: 'settings-database', label: 'Restore & Backup', adminOnly: true },
+        { id: 'settings-users', label: 'Users', adminOnly: true },
       ],
     },
   ];
@@ -198,6 +269,8 @@ const ModernDashboard: React.FC = () => {
 
   const isDark = theme === 'dark';
   const hoverBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+  const roleLabel = userRole ? userRole.charAt(0).toUpperCase() + userRole.slice(1) : 'Staff';
+  const allCategoriesExpanded = navigationCategories.every((c) => expandedCategories.has(c.category));
 
   const startOfToday = () => {
     const d = new Date();
@@ -212,8 +285,6 @@ const ModernDashboard: React.FC = () => {
 
   const grossRevenueToday = todaySales.reduce((sum, s) => sum + (s.total_amount || 0), 0);
   const totalOrdersToday = todaySales.length;
-  const lowStockCount = lowStockItems.length;
-
   const startOfDay = (d: Date) => {
     const x = new Date(d);
     x.setHours(0, 0, 0, 0);
@@ -257,15 +328,24 @@ const ModernDashboard: React.FC = () => {
 
   const prepareDuplicateSale = async (saleId: number) => {
     try {
-      const details = await invoke<any>('get_sale_details', { orderId: saleId });
-      const items = (details?.items ?? []) as Array<{ menu_item_id?: number; quantity: number; unit_price: number; item_name: string }>;
+      const details = await invoke<SaleDetails>('get_sale_details', { orderId: saleId });
+      const items = (details?.items ?? []) as Array<
+        Partial<{ menu_item_id: number; quantity: number; unit_price: number; item_name: string }>
+      >;
       const draft = {
         sourceSaleId: saleId,
         createdAt: new Date().toISOString(),
         items: items
-          .filter((it) => typeof it.menu_item_id === 'number' && it.menu_item_id)
+          .filter(
+            (it): it is { menu_item_id: number; quantity: number; unit_price: number; item_name: string } =>
+              typeof it.menu_item_id === 'number' &&
+              it.menu_item_id > 0 &&
+              typeof it.quantity === 'number' &&
+              typeof it.unit_price === 'number' &&
+              typeof it.item_name === 'string'
+          )
           .map((it) => ({
-            menu_item_id: it.menu_item_id as number,
+            menu_item_id: it.menu_item_id,
             quantity: it.quantity,
             unit_price: it.unit_price,
             item_name: it.item_name,
@@ -279,9 +359,9 @@ const ModernDashboard: React.FC = () => {
   };
 
   const renderDashboard = () => (
-    <div style={{ padding: '24px' }}>
+    <div style={{ padding: '24px', paddingLeft: sidebarVisible ? '24px' : '70px' }}>
       {/* Welcome Header */}
-      <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ marginBottom: '18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 700, color: colors.text }}>
             Welcome {businessName}!
@@ -290,24 +370,27 @@ const ModernDashboard: React.FC = () => {
             Overview of your business performance
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <input
-            type="text"
-            placeholder="Search"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              padding: '10px 16px',
-              borderRadius: '8px',
-              border: `1px solid ${colors.border}`,
-              backgroundColor: colors.surface,
-              color: colors.text,
-              fontSize: '14px',
-              width: '250px',
-              outline: 'none'
-            }}
-          />
-        </div>
+      </div>
+
+      <div style={{ marginBottom: '20px', display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+        {[
+          { id: 'pos', label: posNavLabel },
+          { id: 'returns', label: 'Return Screen', managerOnly: true },
+          { id: 'products', label: 'Products' },
+          { id: 'sales-history', label: 'History' },
+        ]
+          .filter(canViewItem)
+          .map((item) => (
+            <button
+              key={item.id}
+              className="bc-btn bc-btn-outline"
+              onClick={() => setCurrentPage(item.id)}
+              type="button"
+              style={{ padding: '8px 14px' }}
+            >
+              {item.label}
+            </button>
+          ))}
       </div>
 
       {/* Key Metrics - 4 Cards */}
@@ -833,9 +916,9 @@ const ModernDashboard: React.FC = () => {
       case 'dashboard':
         return renderDashboard();
       case 'pos':
-        return <AddSale onBack={() => setCurrentPage('dashboard')} onSaleAdded={loadDashboardData} onNavigateToAccounts={() => setCurrentPage('accounts')} />;
+        return <AddSale onSaleAdded={loadDashboardData} onNavigateToAccounts={() => setCurrentPage('accounts')} />;
       case 'products':
-        return <ProductsPage onBack={() => setCurrentPage('dashboard')} />;
+        return <ProductsPage />;
       case 'purchases':
         return (
           <ProtectedRoute requiredRole="manager">
@@ -851,7 +934,7 @@ const ModernDashboard: React.FC = () => {
       case 'returns':
         return (
           <ProtectedRoute requiredRole="manager">
-            <ReturnsPage onBack={() => setCurrentPage('dashboard')} />
+            <ReturnsPage />
           </ProtectedRoute>
         );
       case 'suppliers':
@@ -891,6 +974,18 @@ const ModernDashboard: React.FC = () => {
             <Settings />
           </ProtectedRoute>
         );
+      case 'settings-database':
+        return (
+          <ProtectedRoute requiredRole="admin">
+            <Settings initialTab="database" />
+          </ProtectedRoute>
+        );
+      case 'settings-users':
+        return (
+          <ProtectedRoute requiredRole="admin">
+            <Settings initialTab="users" />
+          </ProtectedRoute>
+        );
       default:
         return renderDashboard();
     }
@@ -905,7 +1000,7 @@ const ModernDashboard: React.FC = () => {
     }}>
       {/* Modern Sidebar */}
       <div style={{
-        width: sidebarVisible ? '280px' : '0px',
+        width: sidebarVisible ? `${sidebarWidth}px` : '0px',
         backgroundColor: theme === 'dark' ? colors.surface : '#ffffff',
         borderRight: sidebarVisible ? `1px solid ${colors.border}` : 'none',
         display: 'flex',
@@ -915,52 +1010,44 @@ const ModernDashboard: React.FC = () => {
         transition: 'width 0.22s ease, padding 0.22s ease',
         position: 'relative'
       }}>
+        {sidebarVisible && (
+          <div
+            onMouseDown={(event) => {
+              resizeRef.current = { startX: event.clientX, startWidth: sidebarWidth };
+            }}
+            style={{
+              position: 'absolute',
+              top: 0,
+              right: 0,
+              width: '6px',
+              height: '100%',
+              cursor: 'col-resize',
+              background: 'transparent',
+              zIndex: 5,
+            }}
+          />
+        )}
         {/* User Profile at Top */}
         <div style={{
           marginBottom: '24px',
           paddingBottom: '20px',
           borderBottom: `1px solid ${colors.border}`
         }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            marginBottom: '12px'
-          }}>
-            <div style={{
-              width: '50px',
-              height: '50px',
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, #052659 0%, #5483B3 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '20px',
-              fontWeight: '700',
-              color: 'white'
-            }}>
-              {businessName.charAt(0).toUpperCase()}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+            <div style={{ minWidth: 0 }}>
               <div style={{
                 fontSize: '15px',
                 fontWeight: '700',
                 color: colors.text,
-                marginBottom: '2px',
+                marginBottom: '4px',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap'
               }}>
-                Admin #{adminId}
+                User {adminId ? `#${adminId}` : ''}
               </div>
-              <div style={{
-                fontSize: '13px',
-                color: colors.textSecondary,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap'
-              }}>
-                admin@{businessName.toLowerCase().replace(/\s+/g, '')}.com
+              <div style={{ fontSize: '12px', color: colors.textSecondary }}>
+                {roleLabel}
               </div>
             </div>
           </div>
@@ -1002,54 +1089,22 @@ const ModernDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Collapse/Expand All Button */}
-        <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'flex-end' }}>
-          <button
-            onClick={toggleAllCategories}
-            title={navigationCategories.every(c => expandedCategories.has(c.category)) ? 'Collapse All' : 'Expand All'}
-            style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '8px',
-              border: `1px solid ${colors.border}`,
-              backgroundColor: 'transparent',
-              color: colors.textSecondary,
-              cursor: 'pointer',
-              fontSize: '16px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.2s'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = hoverBg;
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-            }}
-          >
-            {navigationCategories.every(c => expandedCategories.has(c.category)) ? '⊟' : '⊞'}
-          </button>
-        </div>
-
-        {/* Categorized Navigation */}
-        <nav style={{ flex: 1, overflowY: 'auto', position: 'relative' }}>
-          {/* Dashboard - Always first */}
-          <div style={{ position: 'relative', marginBottom: '20px' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
             <button
               onClick={() => setCurrentPage('dashboard')}
               style={{
-                width: '100%',
+                flex: 1,
                 display: 'flex',
                 alignItems: 'center',
-                gap: '12px',
-                padding: '14px 16px',
+                gap: '10px',
+                padding: '10px 12px',
                 backgroundColor: currentPage === 'dashboard' ? (theme === 'dark' ? 'rgba(84, 131, 179, 0.15)' : '#E8F4FD') : 'transparent',
                 border: 'none',
-                borderRadius: '12px',
+                borderRadius: '10px',
                 borderLeft: currentPage === 'dashboard' ? `4px solid ${colors.accent}` : '4px solid transparent',
                 color: currentPage === 'dashboard' ? colors.accent : colors.text,
-                fontSize: '15px',
+                fontSize: '14px',
                 fontWeight: currentPage === 'dashboard' ? '700' : '600',
                 cursor: 'pointer',
                 transition: 'all 0.2s',
@@ -1066,13 +1121,34 @@ const ModernDashboard: React.FC = () => {
                 }
               }}
             >
-              <span style={{ fontSize: '18px' }}>🏠</span>
+              <FiHome size={16} />
               <span>Dashboard</span>
+            </button>
+            <button
+              onClick={toggleAllCategories}
+              title={allCategoriesExpanded ? 'Collapse All' : 'Expand All'}
+              style={{
+                width: '38px',
+                height: '32px',
+                borderRadius: '10px',
+                border: `1px solid ${colors.border}`,
+                backgroundColor: colors.surface,
+                color: colors.textSecondary,
+                cursor: 'pointer',
+                fontSize: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: `0 2px 6px ${colors.shadow}`
+              }}
+            >
+              {allCategoriesExpanded ? <FiChevronsUp size={16} /> : <FiChevronsDown size={16} />}
             </button>
           </div>
 
           {/* Categorized Navigation */}
-          {navigationCategories.map((category) => {
+          <nav style={{ flex: 1, overflowY: 'auto', position: 'relative' }}>
+            {navigationCategories.map((category) => {
             const filteredItems = category.items.filter((item) => {
               if (item.adminOnly) return userRole === 'admin';
               if (item.managerOnly) return userRole === 'admin' || userRole === 'manager';
@@ -1154,8 +1230,9 @@ const ModernDashboard: React.FC = () => {
                 ))}
               </div>
             );
-          })}
-        </nav>
+            })}
+          </nav>
+        </div>
 
         {/* Logout at Bottom */}
         <div style={{
@@ -1229,6 +1306,27 @@ const ModernDashboard: React.FC = () => {
           >
             ☰
           </button>
+        )}
+        {currentPage !== 'dashboard' && (
+          <div
+            style={{
+              position: 'sticky',
+              top: 0,
+              zIndex: 20,
+              backgroundColor: theme === 'dark' ? colors.primary : '#c7e2eb',
+              padding: '12px 24px 0',
+              paddingLeft: sidebarVisible ? '24px' : '70px'
+            }}
+          >
+            <button
+              type="button"
+              className="bc-btn bc-btn-outline"
+              onClick={() => setCurrentPage('dashboard')}
+              style={{ width: 'auto' }}
+            >
+              Back
+            </button>
+          </div>
         )}
         {renderContent()}
       </div>

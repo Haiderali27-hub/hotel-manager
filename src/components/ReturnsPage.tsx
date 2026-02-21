@@ -16,13 +16,9 @@ import { useNotification } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
 import { handleNumberInputFocus } from '../utils/inputHelpers';
 
-interface ReturnsPageProps {
-  onBack: () => void;
-}
-
 type Tab = 'process' | 'history';
 
-const ReturnsPage: React.FC<ReturnsPageProps> = ({ onBack }) => {
+const ReturnsPage: React.FC = () => {
   const { colors, theme } = useTheme();
   const { formatMoney } = useCurrency();
   const { showError, showSuccess, showInfo } = useNotification();
@@ -353,11 +349,6 @@ const ReturnsPage: React.FC<ReturnsPageProps> = ({ onBack }) => {
             Process a return from an existing sale and automatically restock tracked items.
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button onClick={onBack} style={secondaryButtonStyle}>
-            Back
-          </button>
-        </div>
       </div>
 
       <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
@@ -551,7 +542,7 @@ const ReturnsPage: React.FC<ReturnsPageProps> = ({ onBack }) => {
                 <div style={{ flex: '0 0 140px' }}>
                   <select 
                     value={dateFilterType} 
-                    onChange={(e) => setDateFilterType(e.target.value as any)}
+                    onChange={(e) => setDateFilterType(e.target.value as 'all' | 'day' | 'month' | 'range')}
                     style={{ ...inputStyle, padding: '8px 10px' }}
                   >
                     <option value="all">All dates</option>

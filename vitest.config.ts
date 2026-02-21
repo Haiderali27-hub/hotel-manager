@@ -6,7 +6,7 @@ import { defineConfig } from 'vitest/config';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
-  plugins: [react()] as any,
+  plugins: [react()],
   test: {
     // Test environment
     environment: 'jsdom',

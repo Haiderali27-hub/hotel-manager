@@ -674,17 +674,27 @@ export const updateCustomer = (customerId: number, updates: Partial<NewCustomer>
   updateGuest(customerId, updates);
 
 // Menu Management APIs
+type MenuItemRow = Partial<MenuItem> & {
+  SKU?: string;
+  barCode?: string;
+  Barcode?: string;
+  isAvailable?: boolean;
+  trackStock?: boolean;
+  stockQuantity?: number;
+  lowStockLimit?: number;
+};
+
 /**
  * Get all menu items
  * @returns Array of all menu items
  */
 export const getMenuItems = (): Promise<MenuItem[]> => 
-  invoke<unknown[]>("get_menu_items").then((rows) =>
-    rows.map((raw: any) => {
+  invoke<MenuItemRow[]>("get_menu_items").then((rows) =>
+    rows.map((raw) => {
       // Tauri commonly serializes struct fields / command params as camelCase.
       // Normalize to the app's snake_case `MenuItem` shape.
       const normalized: MenuItem = {
-        ...raw,
+        ...(raw as MenuItem),
         sku: raw.sku ?? raw.SKU ?? undefined,
         barcode: raw.barcode ?? raw.barCode ?? raw.Barcode ?? undefined,
         is_available: raw.is_available ?? raw.isAvailable ?? false,
@@ -782,6 +792,25 @@ export interface StockAdjustmentDetails {
   items: StockAdjustmentItemRow[];
 }
 
+type StockAdjustmentRow = Partial<StockAdjustmentSummary> & {
+  adjustmentDate?: string;
+  itemCount?: number;
+  createdAt?: string;
+};
+
+type StockAdjustmentDetailsRow = Partial<{
+  adjustment: StockAdjustmentRow;
+  stockAdjustment: StockAdjustmentRow;
+  items: Array<Partial<StockAdjustmentItemRow> & {
+    adjustmentId?: number;
+    menuItemId?: number;
+    itemName?: string;
+    previousStock?: number;
+    quantityChange?: number;
+    newStock?: number;
+  }>;
+}>;
+
 export const addStockAdjustment = (args: {
   adjustment_date: string;
   reason?: string;
@@ -801,7 +830,7 @@ export const addStockAdjustment = (args: {
   });
 
 export const getStockAdjustments = (): Promise<StockAdjustmentSummary[]> =>
-  invoke<any[]>('get_stock_adjustments').then((rows) =>
+  invoke<StockAdjustmentRow[]>('get_stock_adjustments').then((rows) =>
     rows.map((raw) => ({
       id: raw.id,
       adjustment_date: raw.adjustment_date ?? raw.adjustmentDate,
@@ -813,9 +842,9 @@ export const getStockAdjustments = (): Promise<StockAdjustmentSummary[]> =>
   );
 
 export const getStockAdjustmentDetails = (adjustmentId: number): Promise<StockAdjustmentDetails> =>
-  invoke<any>('get_stock_adjustment_details', { adjustmentId }).then((raw) => {
+  invoke<StockAdjustmentDetailsRow>('get_stock_adjustment_details', { adjustmentId }).then((raw) => {
     const a = raw.adjustment ?? raw.stockAdjustment ?? raw;
-    const items = (raw.items ?? []) as any[];
+    const items = raw.items ?? [];
     return {
       adjustment: {
         id: a.id,

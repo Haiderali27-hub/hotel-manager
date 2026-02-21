@@ -591,7 +591,11 @@ const SuppliersPage: React.FC<SuppliersPageProps> = ({ onBack }) => {
                   </div>
                   <div>
                     <label style={labelStyle}>Method</label>
-                    <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as any)} style={inputStyle}>
+                    <select
+                      value={paymentMethod}
+                      onChange={(e) => setPaymentMethod(e.target.value as 'cash' | 'card' | 'mobile' | 'bank')}
+                      style={inputStyle}
+                    >
                       <option value="cash">Cash</option>
                       <option value="card">Card</option>
                       <option value="mobile">Mobile</option>

@@ -135,7 +135,7 @@ const PurchasesPage: React.FC<PurchasesPageProps> = ({ onBack }) => {
       .filter((m) => !q || (m.name || '').toLowerCase().includes(q) || (m.category || '').toLowerCase().includes(q))
       .slice(0, 30);
     return rows;
-  }, [menuItems, productSearch]);
+  }, [menuItems, productSearch, showAllProducts]);
 
   const total = useMemo(() => {
     return draftItems.reduce((sum, it) => sum + (it.quantity || 0) * (it.unit_cost || 0), 0);
@@ -226,7 +226,7 @@ const PurchasesPage: React.FC<PurchasesPageProps> = ({ onBack }) => {
         purchaseDate,
         reference: reference.trim() || undefined,
         notes: notes.trim() || undefined,
-        items: draftItems.map(({ key, ...rest }) => rest),
+        items: draftItems.map(({ key: _key, ...rest }) => rest),
         paymentMode,
         paymentAmount: paymentMode === 'pay_now' ? total : paymentMode === 'pay_partial' ? paymentAmount : undefined,
         paymentMethod: paymentMode === 'pay_later' ? undefined : paymentMethod,
@@ -628,7 +628,11 @@ const PurchasesPage: React.FC<PurchasesPageProps> = ({ onBack }) => {
                   <>
                     <div style={{ marginTop: '10px' }}>
                       <label style={labelStyle}>Method</label>
-                      <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as any)} style={inputStyle}>
+                      <select
+                        value={paymentMethod}
+                        onChange={(e) => setPaymentMethod(e.target.value as 'cash' | 'card' | 'mobile' | 'bank')}
+                        style={inputStyle}
+                      >
                         <option value="cash">Cash</option>
                         <option value="card">Card</option>
                         <option value="mobile">Mobile</option>

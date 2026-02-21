@@ -15,12 +15,16 @@ interface SecurityQuestion {
 
 type SettingsTab = 'general' | 'branding' | 'database' | 'users' | 'support';
 
-const Settings: React.FC = () => {
+interface SettingsProps {
+  initialTab?: SettingsTab;
+}
+
+const Settings: React.FC<SettingsProps> = ({ initialTab = 'general' }) => {
   const { colors } = useTheme();
   const { showSuccess, showError } = useNotification();
   const { currencyCode, locale, supportedCurrencies, setCurrencyCode, setLocale, formatMoney } = useCurrency();
   const { current: label, mode: businessMode, setMode: setBusinessMode } = useLabels();
-  const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
   const [barcodeEnabled, setBarcodeEnabled] = useState(false);
   const [businessModeLocked, setBusinessModeLocked] = useState<boolean>(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
@@ -65,6 +69,10 @@ const Settings: React.FC = () => {
   useEffect(() => {
     setTipState({ id: null, pinned: false });
   }, [activeTab]);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   const loadRecentBackups = async () => {
     setIsLoadingBackups(true);
@@ -345,7 +353,7 @@ const Settings: React.FC = () => {
     setShowRestoreDialog(true);
   };
 
-  const useBackupForRestore = (path: string) => {
+  const queueBackupForRestore = (path: string) => {
     setRestoreFilePath(path);
     setRestoreStep(2);
     setShowRestoreDialog(true);
@@ -838,7 +846,7 @@ const Settings: React.FC = () => {
                           {getBackupFileName(path)}
                         </div>
                       </div>
-                      <button className="bc-btn bc-btn-outline" onClick={() => useBackupForRestore(path)} type="button">
+                      <button className="bc-btn bc-btn-outline" onClick={() => queueBackupForRestore(path)} type="button">
                         Use for Restore
                       </button>
                     </div>

@@ -1,15 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import './App.css';
 
-import ModernDashboard from './components/ModernDashboard';
-import NotificationToast from './components/NotificationToast';
-import OfflineLoginPage from './components/OfflineLoginPage';
 import SetupWizard from './components/SetupWizard';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CurrencyProvider } from './context/CurrencyContext';
 import { LabelProvider } from './context/LabelContext';
 import { NotificationProvider } from './context/NotificationContext';
 import { ThemeProvider } from './context/ThemeContext';
+import ModernDashboard from './modules/retail/components/ModernDashboard';
+import NotificationToast from './modules/retail/components/NotificationToast';
+import OfflineLoginPage from './modules/retail/components/OfflineLoginPage';
 
 const AppContent: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth();

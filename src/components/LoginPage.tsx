@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import logoImage from '../assets/Logo/logo.png';
+﻿import React, { useState } from 'react';
+import logoImage from '/src/assets/Logo/logo.png';
 import { useAuth } from '../context/AuthContext';
 import '../styles/LoginPage.css';
 
@@ -136,7 +136,7 @@ export const LoginPage: React.FC = () => {
                 Username
               </label>
               <div className="input-wrapper">
-                <span className="input-icon">👤</span>
+                <span className="input-icon">ðŸ‘¤</span>
                 <input
                   type="text"
                   id="username"
@@ -156,7 +156,7 @@ export const LoginPage: React.FC = () => {
                 Password
               </label>
               <div className="input-wrapper">
-                <span className="input-icon">🔒</span>
+                <span className="input-icon">ðŸ”’</span>
                 <input
                   type={showPassword ? 'text' : 'password'}
                   id="password"
@@ -184,7 +184,7 @@ export const LoginPage: React.FC = () => {
 
             {error && (
               <div className="error-message">
-                <span className="error-icon">⚠️</span>
+                <span className="error-icon">âš ï¸</span>
                 {error}
               </div>
             )}
@@ -207,7 +207,7 @@ export const LoginPage: React.FC = () => {
 
           <div className="login-footer">
             <div className="security-note">
-              <span className="security-icon">🔐</span>
+              <span className="security-icon">ðŸ”</span>
               <span>Secure Admin Access</span>
             </div>
           </div>
@@ -216,3 +216,4 @@ export const LoginPage: React.FC = () => {
     </div>
   );
 };
+

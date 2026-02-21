@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { getDashboardStats, type DashboardStats } from '../api/client';
-import logoImage from '../assets/Logo/logo.png';
+import logoImage from '/src/assets/Logo/logo.png';
 import { useAuth } from '../context/AuthContext';
 import { useCurrency } from '../context/CurrencyContext';
 import { useLabels } from '../context/LabelContext';
@@ -89,28 +89,28 @@ const Dashboard: React.FC = () => {
         { 
           title: 'Total Customers This Month', 
           value: dbStats.total_guests_this_month.toString(), 
-          icon: '👥', 
+          icon: 'ðŸ‘¥', 
           color: gradients.primary,
           change: 'Real Data' 
         },
         { 
           title: 'Total Income', 
           value: formatMoney(dbStats.total_income, { maximumFractionDigits: 0 }),
-          icon: '💰', 
+          icon: 'ðŸ’°', 
           color: gradients.success,
           change: 'Real Data' 
         },
         { 
           title: 'Total Expenses', 
           value: formatMoney(dbStats.total_expenses, { maximumFractionDigits: 0 }),
-          icon: '💸', 
+          icon: 'ðŸ’¸', 
           color: gradients.error,
           change: 'Real Data' 
         },
         { 
           title: 'Profit/Loss', 
           value: formatMoney(dbStats.profit_loss, { maximumFractionDigits: 0 }),
-          icon: dbStats.profit_loss >= 0 ? '📈' : '📉', 
+          icon: dbStats.profit_loss >= 0 ? 'ðŸ“ˆ' : 'ðŸ“‰', 
           color: dbStats.profit_loss >= 0 
             ? gradients.info
             : gradients.error,
@@ -119,14 +119,14 @@ const Dashboard: React.FC = () => {
         { 
           title: 'Total Sales', 
           value: dbStats.total_food_orders.toString(), 
-          icon: '🍽️', 
+          icon: 'ðŸ½ï¸', 
           color: gradients.warning,
           change: 'Real Data' 
         },
         { 
           title: `Active ${label.client}s`, 
           value: dbStats.active_guests.toString(), 
-          icon: '👥', 
+          icon: 'ðŸ‘¥', 
           color: gradients.accent,
           change: 'Real Data' 
         }
@@ -138,42 +138,42 @@ const Dashboard: React.FC = () => {
       { 
         title: `Total ${label.client}s This Month`, 
         value: '42', 
-        icon: '👥', 
+        icon: 'ðŸ‘¥', 
         color: gradients.primary,
         change: '+12%' 
       },
       { 
         title: 'Total Income', 
         value: '84,500', 
-        icon: '💰', 
+        icon: 'ðŸ’°', 
         color: gradients.success,
         change: '+8%' 
       },
       { 
         title: 'Total Expenses', 
         value: '12,300', 
-        icon: '💸', 
+        icon: 'ðŸ’¸', 
         color: gradients.error,
         change: '-4%' 
       },
       { 
         title: 'Profit/Loss', 
         value: '72,200', 
-        icon: '📈', 
+        icon: 'ðŸ“ˆ', 
         color: gradients.info,
         change: '+15%' 
       },
       { 
         title: 'Total Sales', 
         value: '156', 
-        icon: '🍽️', 
+        icon: 'ðŸ½ï¸', 
         color: gradients.warning,
         change: '+23%' 
       },
       { 
         title: `Active ${label.client}s`, 
         value: '8', 
-        icon: '👥', 
+        icon: 'ðŸ‘¥', 
         color: gradients.accent,
         change: '+5%' 
       }
@@ -184,33 +184,33 @@ const Dashboard: React.FC = () => {
     { 
       category: 'Sales & Customers',
       items: [
-        { page: 'add-sale', title: 'POS / Add Sale', icon: '🧾' },
-        { page: 'add-customer', title: 'Add Customer', icon: '➕' },
-        { page: 'active-customers', title: 'Active Customers', icon: '👥' },
-        { page: 'history', title: 'Sales History', icon: '📋' }
+        { page: 'add-sale', title: 'POS / Add Sale', icon: 'ðŸ§¾' },
+        { page: 'add-customer', title: 'Add Customer', icon: 'âž•' },
+        { page: 'active-customers', title: 'Active Customers', icon: 'ðŸ‘¥' },
+        { page: 'history', title: 'Sales History', icon: 'ðŸ“‹' }
       ]
     },
     {
       category: 'Inventory & Products',
       items: [
-        { page: 'manage-catalog-resources', title: 'Products & Stock', icon: '📦' },
-        { page: 'purchases', title: 'Purchases (Stock In)', icon: '📥' }
+        { page: 'manage-catalog-resources', title: 'Products & Stock', icon: 'ðŸ“¦' },
+        { page: 'purchases', title: 'Purchases (Stock In)', icon: 'ðŸ“¥' }
       ]
     },
     {
       category: 'Financial',
       items: [
-        { page: 'financial-report', title: 'Financial Report', icon: '📊' },
-        { page: 'add-expense', title: 'Add Expense', icon: '💵' },
-        { page: 'accounts', title: 'Accounts & Payables', icon: '💰' }
+        { page: 'financial-report', title: 'Financial Report', icon: 'ðŸ“Š' },
+        { page: 'add-expense', title: 'Add Expense', icon: 'ðŸ’µ' },
+        { page: 'accounts', title: 'Accounts & Payables', icon: 'ðŸ’°' }
       ]
     },
     {
       category: 'Management',
       items: [
-        { page: 'shifts', title: 'Shift Management', icon: '💼' },
-        { page: 'user-management', title: 'User Management', icon: '👥' },
-        { page: 'settings', title: 'Settings', icon: '⚙️' }
+        { page: 'shifts', title: 'Shift Management', icon: 'ðŸ’¼' },
+        { page: 'user-management', title: 'User Management', icon: 'ðŸ‘¥' },
+        { page: 'settings', title: 'Settings', icon: 'âš™ï¸' }
       ]
     }
   ];
@@ -333,7 +333,7 @@ const Dashboard: React.FC = () => {
               justifyContent: 'center'
             }}
           >
-            ☰
+            â˜°
           </button>
         </div>
 
@@ -410,7 +410,7 @@ const Dashboard: React.FC = () => {
                   }
                 }}
               >
-                🏠 Dashboard
+                ðŸ  Dashboard
               </div>
               
               <div style={{ height: '1px', backgroundColor: colors.border, margin: '0.5rem 0' }} />
@@ -487,7 +487,7 @@ const Dashboard: React.FC = () => {
             }}
             title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
           >
-            {theme === 'dark' ? '☀️' : '🌙'}
+            {theme === 'dark' ? 'â˜€ï¸' : 'ðŸŒ™'}
           </button>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
             <span style={{ color: colors.text, fontSize: '0.875rem', fontWeight: '600' }}>Admin #{adminId}</span>
@@ -563,7 +563,7 @@ const Dashboard: React.FC = () => {
                   cursor: 'pointer'
                 }}
               >
-                ✕
+                âœ•
               </button>
             </div>
 
@@ -738,3 +738,4 @@ const Dashboard: React.FC = () => {
 };
 
 export default Dashboard;
+

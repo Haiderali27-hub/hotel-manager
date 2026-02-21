@@ -4,15 +4,19 @@ import './App.css';
 import SetupWizard from './components/SetupWizard';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CurrencyProvider } from './context/CurrencyContext';
-import { LabelProvider } from './context/LabelContext';
+import { LabelProvider, useLabels } from './context/LabelContext';
 import { NotificationProvider } from './context/NotificationContext';
 import { ThemeProvider } from './context/ThemeContext';
+import CafeModuleHome from './modules/cafe/components/CafeModuleHome';
+import HotelRestaurantDashboard from './modules/hotel_restaurant/components/HotelRestaurantDashboard';
 import ModernDashboard from './modules/retail/components/ModernDashboard';
 import NotificationToast from './modules/retail/components/NotificationToast';
 import OfflineLoginPage from './modules/retail/components/OfflineLoginPage';
+import SalonModuleHome from './modules/salon/components/SalonModuleHome';
 
 const AppContent: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth();
+  const { mode } = useLabels();
   const [showSetupWizard, setShowSetupWizard] = useState(false);
   const [checkingSetup, setCheckingSetup] = useState(true);
 
@@ -60,10 +64,19 @@ const AppContent: React.FC = () => {
   }
   
   if (isAuthenticated) {
+    const dashboard =
+      mode === 'hotel' || mode === 'restaurant'
+        ? <HotelRestaurantDashboard />
+        : mode === 'salon'
+          ? <SalonModuleHome />
+          : mode === 'cafe'
+            ? <CafeModuleHome />
+            : <ModernDashboard />;
+
     return (
       <>
         {showSetupWizard && <SetupWizard onComplete={() => setShowSetupWizard(false)} />}
-        <ModernDashboard />
+        {dashboard}
         <NotificationToast />
       </>
     );

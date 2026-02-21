@@ -43,6 +43,9 @@ pub fn initialize_database() -> SqliteResult<()> {
     
     // Create initial schema if not exists
     create_initial_schema(&conn)?;
+
+    // Apply versioned migrations for module-specific schema
+    crate::db_migrations::run_migrations(&conn)?;
     
     // Verify and fix database schema
     verify_and_fix_schema(&conn)?;

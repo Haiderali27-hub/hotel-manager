@@ -3449,33 +3449,6 @@ pub fn set_business_mode(mode: String) -> Result<String, String> {
         }
     };
 
-    // If a business mode was already set previously, do not allow switching.
-    let existing: Option<String> = conn
-        .query_row(
-            "SELECT value FROM settings WHERE key = 'business_mode'",
-            [],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()
-        .map_err(|e| e.to_string())?
-        .map(|v| v.trim().to_lowercase());
-
-    if let Some(existing_mode) = existing {
-        // Legacy / merged mode
-        let existing_mode = if existing_mode == "barbershop" {
-            "salon".to_string()
-        } else {
-            existing_mode
-        };
-
-        if existing_mode != normalized {
-            return Err(
-                "Business type is locked after first-time setup. To change it, use Settings → Reset Application Data and set up again.".to_string(),
-            );
-        }
-        return Ok("Business mode already set".to_string());
-    }
-
     let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
     conn.execute(
         "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('business_mode', ?1, ?2)",
@@ -3483,7 +3456,7 @@ pub fn set_business_mode(mode: String) -> Result<String, String> {
     )
     .map_err(|e| e.to_string())?;
 
-    Ok("Business mode set".to_string())
+    Ok("Business mode updated".to_string())
 }
 
 #[command]

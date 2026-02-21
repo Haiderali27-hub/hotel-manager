@@ -236,6 +236,7 @@ const ModernDashboard: React.FC = () => {
     {
       category: 'Management',
       items: [
+        { id: 'settings', label: 'Settings', adminOnly: true },
         { id: 'settings-database', label: 'Restore & Backup', adminOnly: true },
         { id: 'settings-users', label: 'Users', adminOnly: true },
       ],

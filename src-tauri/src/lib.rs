@@ -8,6 +8,7 @@ mod print_templates;
 mod validation;
 mod settings;
 mod store_profiles;
+mod db_migrations;
 
 use tauri::Manager;
 use db::initialize_database;

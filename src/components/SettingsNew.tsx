@@ -25,8 +25,9 @@ const Settings: React.FC<SettingsProps> = ({ initialTab = 'general' }) => {
   const { currencyCode, locale, supportedCurrencies, setCurrencyCode, setLocale, formatMoney } = useCurrency();
   const { current: label, mode: businessMode, setMode: setBusinessMode } = useLabels();
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
+  const standaloneTab: SettingsTab | null = initialTab === 'database' || initialTab === 'users' ? initialTab : null;
+  const visibleTabs: SettingsTab[] = standaloneTab ? [standaloneTab] : ['general', 'branding', 'support'];
   const [barcodeEnabled, setBarcodeEnabled] = useState(false);
-  const [businessModeLocked, setBusinessModeLocked] = useState<boolean>(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [pendingLocale, setPendingLocale] = useState(locale);
   const [showResetDialog, setShowResetDialog] = useState(false);
@@ -71,8 +72,14 @@ const Settings: React.FC<SettingsProps> = ({ initialTab = 'general' }) => {
   }, [activeTab]);
 
   useEffect(() => {
-    setActiveTab(initialTab);
-  }, [initialTab]);
+    if (standaloneTab) {
+      setActiveTab(standaloneTab);
+      return;
+    }
+    if (!visibleTabs.includes(activeTab)) {
+      setActiveTab('general');
+    }
+  }, [initialTab, standaloneTab, activeTab]);
 
   const loadRecentBackups = async () => {
     setIsLoadingBackups(true);
@@ -190,18 +197,6 @@ const Settings: React.FC<SettingsProps> = ({ initialTab = 'general' }) => {
       )}
     </span>
   );
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const status = await invoke<{ mode: string; locked: boolean }>('get_business_mode_status');
-        setBusinessModeLocked(Boolean(status?.locked));
-      } catch {
-        // If command not available (older backend / web mode), default to unlocked.
-        setBusinessModeLocked(false);
-      }
-    })();
-  }, []);
 
   useEffect(() => {
     const loadBranding = async () => {
@@ -516,21 +511,31 @@ const Settings: React.FC<SettingsProps> = ({ initialTab = 'general' }) => {
     <div style={{ padding: 24, display: 'grid', gap: 14 }}>
       <div className="bc-card" style={{ borderRadius: 10, padding: 10 }}>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button type="button" className={activeTab === 'general' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'} onClick={() => setActiveTab('general')}>
-            General
-          </button>
-          <button type="button" className={activeTab === 'branding' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'} onClick={() => setActiveTab('branding')}>
-            Branding
-          </button>
-          <button type="button" className={activeTab === 'database' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'} onClick={() => setActiveTab('database')}>
-            Database
-          </button>
-          <button type="button" className={activeTab === 'users' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'} onClick={() => setActiveTab('users')}>
-            Users
-          </button>
-          <button type="button" className={activeTab === 'support' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'} onClick={() => setActiveTab('support')}>
-            Support
-          </button>
+          {visibleTabs.includes('general') && (
+            <button type="button" className={activeTab === 'general' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'} onClick={() => setActiveTab('general')}>
+              General
+            </button>
+          )}
+          {visibleTabs.includes('branding') && (
+            <button type="button" className={activeTab === 'branding' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'} onClick={() => setActiveTab('branding')}>
+              Branding
+            </button>
+          )}
+          {visibleTabs.includes('database') && (
+            <button type="button" className={activeTab === 'database' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'} onClick={() => setActiveTab('database')}>
+              Database
+            </button>
+          )}
+          {visibleTabs.includes('users') && (
+            <button type="button" className={activeTab === 'users' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'} onClick={() => setActiveTab('users')}>
+              Users
+            </button>
+          )}
+          {visibleTabs.includes('support') && (
+            <button type="button" className={activeTab === 'support' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'} onClick={() => setActiveTab('support')}>
+              Support
+            </button>
+          )}
         </div>
       </div>
 
@@ -611,24 +616,14 @@ const Settings: React.FC<SettingsProps> = ({ initialTab = 'general' }) => {
                     value={businessMode}
                     onChange={async (e) => {
                       const newMode = e.target.value as BusinessMode;
-                      if (businessModeLocked) {
-                        showError(
-                          'Business Type Locked',
-                          'Business type is locked after first-time setup. Use Reset Application Data to change it.'
-                        );
-                        return;
-                      }
-
                       try {
                         await invoke('set_business_mode', { mode: newMode });
                         setBusinessMode(newMode);
-                        setBusinessModeLocked(true);
-                        showSuccess('Business Type Set', `Set to ${newMode}. This is now locked to prevent conflicts.`);
+                        showSuccess('Business Type Updated', `Switched to ${newMode}. Interface updated.`);
                       } catch (error) {
                         showError('Business Type Update Failed', String(error));
                       }
                     }}
-                    disabled={businessModeLocked}
                   >
                     {Object.entries(labels).map(([mode, modeLabels]) => (
                       <option key={mode} value={mode}>
@@ -636,11 +631,9 @@ const Settings: React.FC<SettingsProps> = ({ initialTab = 'general' }) => {
                       </option>
                     ))}
                   </select>
-                  {businessModeLocked ? (
-                    <div style={{ marginTop: 6, color: 'var(--app-text-secondary)', fontSize: 12 }}>
-                      Locked after first setup. Use Reset Application Data to change.
-                    </div>
-                  ) : null}
+                  <div style={{ marginTop: 6, color: 'var(--app-text-secondary)', fontSize: 12 }}>
+                    Changing business type switches the interface immediately.
+                  </div>
                 </div>
               </div>
             </div>

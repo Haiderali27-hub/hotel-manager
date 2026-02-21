@@ -1,21 +1,22 @@
+import { invoke } from '@tauri-apps/api/core';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    addCustomer,
-    addSale,
-    addSalePayment,
-    buildKitchenTicketHtml,
-    getActiveCustomers,
-    getBarcodeEnabled,
-    getMenuItems,
-    printOrderReceipt,
-    printThermalReceipt,
-    type ActiveCustomerRow,
-    type KitchenTicket,
-    type KitchenTicketItem,
-    type MenuItem,
-    type NewCustomer,
-    type NewSale,
-    type OrderItem
+  addCustomer,
+  addSale,
+  addSalePayment,
+  buildKitchenTicketHtml,
+  getActiveCustomers,
+  getBarcodeEnabled,
+  getMenuItems,
+  printOrderReceipt,
+  printThermalReceipt,
+  type ActiveCustomerRow,
+  type KitchenTicket,
+  type KitchenTicketItem,
+  type MenuItem,
+  type NewCustomer,
+  type NewSale,
+  type OrderItem
 } from '../api/client';
 import { useCurrency } from '../context/CurrencyContext';
 import { useLabels } from '../context/LabelContext';
@@ -78,6 +79,8 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded, onNavigateToAcco
   const [paymentStatus, setPaymentStatus] = useState<'paid' | 'unpaid'>('unpaid');
   const [paymentMode, setPaymentMode] = useState<'pay_now' | 'pay_later' | 'pay_partial'>('pay_now');
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'mobile' | 'bank'>('cash');
+  const [receiptType, setReceiptType] = useState<'both' | 'standard' | 'thermal'>('both');
+  const [receiptAutoPrint, setReceiptAutoPrint] = useState(false);
   const [partialAmount, setPartialAmount] = useState<number>(0);
   const [lastPaymentSummary, setLastPaymentSummary] = useState<{
     total_amount: number;
@@ -306,6 +309,33 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded, onNavigateToAcco
       }
     };
     void loadBarcodeSetting();
+  }, []);
+
+  useEffect(() => {
+    const loadReceiptType = async () => {
+      try {
+        const saved = await invoke<string | null>('get_receipt_type');
+        const normalized = (saved ?? '').toLowerCase();
+        if (normalized === 'standard' || normalized === 'thermal' || normalized === 'both') {
+          setReceiptType(normalized);
+        }
+      } catch {
+        // Optional setting; default to both.
+      }
+    };
+    void loadReceiptType();
+  }, []);
+
+  useEffect(() => {
+    const loadReceiptAutoPrint = async () => {
+      try {
+        const enabled = await invoke<boolean>('get_receipt_auto_print');
+        setReceiptAutoPrint(!!enabled);
+      } catch {
+        setReceiptAutoPrint(false);
+      }
+    };
+    void loadReceiptAutoPrint();
   }, []);
 
   const retailMatches = useMemo(() => {
@@ -624,6 +654,22 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded, onNavigateToAcco
       
       setLastOrderId(orderId);
       setShowSuccessModal(true);
+
+      if (receiptAutoPrint) {
+        // Auto-print based on settings (best-effort)
+        void (async () => {
+          try {
+            if (receiptType === 'standard' || receiptType === 'both') {
+              await printOrderReceipt(orderId);
+            }
+            if (receiptType === 'thermal' || receiptType === 'both') {
+              await printThermalReceipt(orderId);
+            }
+          } catch (err) {
+            console.warn('Auto print failed:', err);
+          }
+        })();
+      }
       
       // Reset form
       setOrderItems([]);
@@ -1506,22 +1552,26 @@ const AddSale: React.FC<AddSaleProps> = ({ onBack, onSaleAdded, onNavigateToAcco
             )}
 
             <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-              <button 
-                type="button" 
-                className="bc-btn bc-btn-primary" 
-                onClick={handlePrintReceipt} 
-                style={{ flex: 1, minWidth: '140px' }}
-              >
-                🖨️ Print Receipt
-              </button>
-              <button 
-                type="button" 
-                className="bc-btn bc-btn-outline" 
-                onClick={handlePrintThermal} 
-                style={{ flex: 1, minWidth: '140px' }}
-              >
-                📄 Thermal Print
-              </button>
+              {(receiptType === 'standard' || receiptType === 'both') && (
+                <button 
+                  type="button" 
+                  className="bc-btn bc-btn-primary" 
+                  onClick={handlePrintReceipt} 
+                  style={{ flex: 1, minWidth: '140px' }}
+                >
+                  🖨️ Print Receipt
+                </button>
+              )}
+              {(receiptType === 'thermal' || receiptType === 'both') && (
+                <button 
+                  type="button" 
+                  className="bc-btn bc-btn-outline" 
+                  onClick={handlePrintThermal} 
+                  style={{ flex: 1, minWidth: '140px' }}
+                >
+                  📄 Thermal Print
+                </button>
+              )}
               <button 
                 type="button" 
                 className="bc-btn bc-btn-outline" 

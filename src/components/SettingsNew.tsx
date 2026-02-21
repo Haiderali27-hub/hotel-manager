@@ -13,10 +13,10 @@ interface SecurityQuestion {
   answer: string;
 }
 
-type SettingsTab = 'general' | 'users' | 'branding' | 'database' | 'support';
+type SettingsTab = 'general' | 'branding' | 'database' | 'users' | 'support';
 
 const Settings: React.FC = () => {
-  const { colors, theme } = useTheme();
+  const { colors } = useTheme();
   const { showSuccess, showError } = useNotification();
   const { currencyCode, locale, supportedCurrencies, setCurrencyCode, setLocale, formatMoney } = useCurrency();
   const { current: label, mode: businessMode, setMode: setBusinessMode } = useLabels();
@@ -43,10 +43,80 @@ const Settings: React.FC = () => {
   const [isSavingReceiptHeader, setIsSavingReceiptHeader] = useState(false);
   const [isSavingReceiptFooter, setIsSavingReceiptFooter] = useState(false);
   const [receiptType, setReceiptType] = useState<string>('both');
+  const [receiptAutoPrint, setReceiptAutoPrint] = useState(false);
 
   useEffect(() => {
     setPendingLocale(locale);
   }, [locale]);
+
+  const [tipState, setTipState] = useState<{ id: string | null; pinned: boolean }>({ id: null, pinned: false });
+
+  useEffect(() => {
+    const clearTip = () => setTipState({ id: null, pinned: false });
+    window.addEventListener('click', clearTip);
+    return () => window.removeEventListener('click', clearTip);
+  }, []);
+
+  useEffect(() => {
+    setTipState({ id: null, pinned: false });
+  }, [activeTab]);
+
+  const InfoTip = ({ id, text }: { id: string; text: string }) => (
+    <span
+      style={{ position: 'relative', display: 'inline-flex' }}
+      onMouseEnter={() => {
+        if (!tipState.pinned) setTipState({ id, pinned: false });
+      }}
+      onMouseLeave={() => {
+        if (!tipState.pinned) setTipState({ id: null, pinned: false });
+      }}
+      onClick={(e) => {
+        e.stopPropagation();
+        setTipState((prev) => (prev.id === id && prev.pinned ? { id: null, pinned: false } : { id, pinned: true }));
+      }}
+    >
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 16,
+          height: 16,
+          borderRadius: '999px',
+          border: `1px solid ${colors.border}`,
+          color: colors.textSecondary,
+          fontSize: 11,
+          fontWeight: 800,
+          cursor: 'pointer',
+          userSelect: 'none',
+        }}
+      >
+        i
+      </span>
+      {tipState.id === id && (
+        <span
+          style={{
+            position: 'absolute',
+            top: '120%',
+            left: 0,
+            background: colors.surface,
+            color: colors.textSecondary,
+            border: `1px solid ${colors.border}`,
+            borderRadius: 8,
+            padding: '8px 10px',
+            fontSize: 12,
+            width: 220,
+            maxWidth: '80vw',
+            wordBreak: 'break-word',
+            boxShadow: `0 8px 24px ${colors.shadow}`,
+            zIndex: 5,
+          }}
+        >
+          {text}
+        </span>
+      )}
+    </span>
+  );
 
   useEffect(() => {
     (async () => {
@@ -63,12 +133,13 @@ const Settings: React.FC = () => {
   useEffect(() => {
     const loadBranding = async () => {
       try {
-        const [logoPath, logoDataUrl, savedHeader, savedFooter, savedReceiptType] = await Promise.all([
+        const [logoPath, logoDataUrl, savedHeader, savedFooter, savedReceiptType, savedAutoPrint] = await Promise.all([
           invoke<string | null>('get_business_logo_path'),
           invoke<string | null>('get_business_logo_data_url'),
           invoke<string | null>('get_receipt_header'),
           invoke<string | null>('get_receipt_footer'),
-          invoke<string | null>('get_setting', { key: 'receipt_type' }).catch(() => 'both')
+          invoke<string | null>('get_receipt_type').catch(() => 'both'),
+          invoke<boolean>('get_receipt_auto_print').catch(() => false),
         ]);
 
         if (logoPath) setBusinessLogoPath(logoPath);
@@ -76,6 +147,7 @@ const Settings: React.FC = () => {
         setReceiptHeader(savedHeader ?? '');
         setReceiptFooter(savedFooter ?? '');
         setReceiptType(savedReceiptType ?? 'both');
+        setReceiptAutoPrint(!!savedAutoPrint);
       } catch (error) {
         // Branding is optional; don't block Settings if unavailable.
         console.warn('Branding settings not available:', error);
@@ -105,284 +177,154 @@ const Settings: React.FC = () => {
         directory: false,
         title: 'Select Business Logo',
         filters: [
-          { name: 'Image', extensions: ['png', 'jpg', 'jpeg', 'svg', 'webp'] }
-        ]
+          { name: 'Image', extensions: ['png', 'jpg', 'jpeg', 'svg', 'webp'] },
+        ],
       });
 
       if (!selected || Array.isArray(selected)) return;
 
-      // Check file size before uploading (max 1MB)
-      try {
-        const fileStats = await invoke<{ size: number }>('get_file_size', { path: selected });
-        const MAX_SIZE = 1024 * 1024; // 1MB
-        if (fileStats.size > MAX_SIZE) {
-          const sizeMB = (fileStats.size / 1_048_576).toFixed(2);
-          showError(
-            'File Too Large',
-            `Logo is ${sizeMB} MB. Maximum size is 1 MB. Please compress or resize your image using tools like TinyPNG.com or Squoosh.app`
-          );
-          return;
-        }
-      } catch (err) {
-        console.warn('Could not check file size:', err);
-        // Continue anyway, backend will validate
+      const fileStats = await invoke<{ size: number }>('get_file_size', { path: selected });
+      const MAX_SIZE = 1024 * 1024; // 1MB
+      if (fileStats.size > MAX_SIZE) {
+        showError('Logo Too Large', 'Max logo size is 1 MB. Please compress or resize your image.');
+        return;
       }
 
-      const storedPath = await invoke<string>('store_business_logo', {
-        sourcePath: selected
-      });
+      const savedPath = await invoke<string>('store_business_logo', { source_path: selected });
+      const dataUrl = await invoke<string | null>('get_business_logo_data_url');
 
-      setBusinessLogoPath(storedPath);
-      try {
-        const logoDataUrl = await invoke<string | null>('get_business_logo_data_url');
-        setBusinessLogoDataUrl(logoDataUrl ?? '');
-      } catch {
-        // optional
-      }
-      showSuccess('Logo Updated', 'Business logo saved successfully');
+      setBusinessLogoPath(savedPath ?? '');
+      setBusinessLogoDataUrl(dataUrl ?? '');
+      showSuccess('Logo Updated', 'Business logo saved successfully.');
     } catch (error) {
-      console.error('Logo upload failed:', error);
-      showError('Logo Upload Failed', `${error}`);
+      showError('Logo Upload Failed', String(error));
     }
   };
 
   const handleRemoveLogo = async () => {
     try {
-      await invoke('remove_business_logo');
+      await invoke<string>('remove_business_logo');
       setBusinessLogoPath('');
       setBusinessLogoDataUrl('');
-      showSuccess('Logo Removed', 'Business logo has been removed. Receipts will now show only the INERTIA logo.');
+      showSuccess('Logo Removed', 'Business logo removed.');
     } catch (error) {
-      console.error('Logo removal failed:', error);
-      showError('Removal Failed', `${error}`);
+      showError('Remove Failed', String(error));
     }
   };
 
   const saveReceiptHeader = async () => {
-    setIsSavingReceiptHeader(true);
     try {
+      setIsSavingReceiptHeader(true);
       await invoke('set_receipt_header', { value: receiptHeader });
-      showSuccess('Saved', 'Receipt header saved successfully');
+      showSuccess('Saved', 'Receipt header updated.');
     } catch (error) {
-      console.error('Failed to save receipt header:', error);
-      showError('Save Failed', `${error}`);
+      showError('Save Failed', String(error));
     } finally {
       setIsSavingReceiptHeader(false);
     }
   };
 
   const saveReceiptFooter = async () => {
-    setIsSavingReceiptFooter(true);
     try {
+      setIsSavingReceiptFooter(true);
       await invoke('set_receipt_footer', { value: receiptFooter });
-      showSuccess('Saved', 'Receipt footer saved successfully');
+      showSuccess('Saved', 'Receipt footer updated.');
     } catch (error) {
-      console.error('Failed to save receipt footer:', error);
-      showError('Save Failed', `${error}`);
+      showError('Save Failed', String(error));
     } finally {
       setIsSavingReceiptFooter(false);
     }
   };
 
-  // Handle restore database with safety steps
-  const handleRestoreDatabase = async () => {
-    setShowRestoreDialog(true);
-    setRestoreStep(1);
-  };
-
-  // Validate restore file path
-  const validateRestoreFile = () => {
-    if (!restoreFilePath.trim()) {
-      showError('No File Path', 'Please provide the path to your backup file');
-      return false;
-    }
-
-    if (!restoreFilePath.toLowerCase().endsWith('.db')) {
-      showError('Invalid File Type', 'Backup file must have .db extension');
-      return false;
-    }
-
-    return true;
-  };
-
-  // Perform the actual restore
-  const performRestore = async () => {
-    if (!validateRestoreFile()) return;
-
-    setIsRestoring(true);
-    try {
-      const result = await invoke<string>('restore_database_from_backup', {
-        backupFilePath: restoreFilePath.trim()
-      });
-      
-      showSuccess('Restore Complete', result);
-      setShowRestoreDialog(false);
-      
-      // Reset state
-      setRestoreStep(1);
-      setRestoreFilePath('');
-      
-      // Reload app after successful restore
-      setTimeout(() => {
-        window.location.reload();
-      }, 4000); // Give user time to read the success message
-      
-    } catch (error) {
-      console.error('Restore failed:', error);
-      showError('Restore Failed', `Failed to restore database: ${error}. Your current database is safe and unchanged.`);
-    } finally {
-      setIsRestoring(false);
-    }
-  };
-
-  // Cancel restore process
-  const cancelRestore = () => {
-    setShowRestoreDialog(false);
-    setRestoreStep(1);
-    setRestoreFilePath('');
-    setIsRestoring(false);
-  };
-
-  // Find latest backup file
-  const findLatestBackup = async () => {
-    try {
-      const latestBackup = await invoke<string>('select_backup_file');
-      setRestoreFilePath(latestBackup);
-      showSuccess('Latest Backup Found', 'Most recent backup file has been selected automatically.');
-    } catch (error) {
-      console.error('Failed to find backup:', error);
-      showError('No Backups Found', `${error}`);
-    }
-  };
-
-  // Browse for backup file
-  const browseBackupFile = async () => {
-    try {
-      const selectedFile = await invoke<string>('browse_backup_file');
-      setRestoreFilePath(selectedFile);
-      showSuccess('Backup File Selected', 'Backup file has been selected successfully.');
-    } catch (error) {
-      console.error('Browse backup result:', error);
-      // The "error" actually contains helpful information about available files
-      showSuccess('Available Backup Files', `${error}`);
-    }
-  };
-
-  // Handle database backup
-  const handleBackupDB = async () => {
-    try {
-      await invoke('backup_database', {
-        backupPath: `C:\\Users\\DELL\\Desktop`
-      });
-      showSuccess('Database Backup', 'Database backup saved successfully');
-    } catch (error) {
-      console.error('Backup failed:', error);
-      showError('Backup Failed', 'Failed to create database backup');
-    }
-  };
-
-  // Handle JSON backup
-  const handleBackupJSON = async () => {
-    try {
-      await invoke('export_json_backup', {
-        backupPath: `C:\\Users\\DELL\\Desktop`
-      });
-      showSuccess('JSON Backup', 'JSON backup saved successfully');
-    } catch (error) {
-      console.error('JSON backup failed:', error);
-      showError('Backup Failed', 'Failed to create JSON backup');
-    }
-  };
-
-  // Handle combined backup (both DB and JSON)
   const handleBackupData = async () => {
-    setIsBackingUp(true);
     try {
-      await handleBackupDB();
-      await handleBackupJSON();
-      showSuccess('Backup Complete', 'Both database and JSON backups created successfully');
+      setIsBackingUp(true);
+      const destination = await open({
+        multiple: false,
+        directory: true,
+        title: 'Select Backup Folder',
+      });
+
+      if (!destination || Array.isArray(destination)) {
+        setIsBackingUp(false);
+        return;
+      }
+
+      const result = await invoke<string>('backup_database', { backup_path: destination });
+      showSuccess('Backup Created', result);
     } catch (error) {
-      console.error('Backup failed:', error);
-      showError('Backup Failed', 'Failed to create backups');
+      showError('Backup Failed', String(error));
     } finally {
       setIsBackingUp(false);
     }
   };
 
-  // Start reset process
-  const startResetProcess = async () => {
-    try {
-      // Get security question from backend
-      const question = await invoke('get_reset_security_question') as SecurityQuestion;
-      setSecurityQuestion(question);
-      setShowResetDialog(true);
-      setResetStep(1);
-    } catch (error) {
-      console.error('Failed to get security question:', error);
-      showError('Failed to initialize reset process', 'Failed to get security question');
-    }
+  const handleRestoreDatabase = () => {
+    setRestoreStep(1);
+    setRestoreFilePath('');
+    setIsRestoring(false);
+    setShowRestoreDialog(true);
   };
 
-  // Validate safety phrase
-  const validateSafetyPhrase = () => {
-    const requiredPhrase = "I UNDERSTAND THE RISKS";
-    
-    if (safetyPhrase.trim().toUpperCase() === requiredPhrase) {
-      setResetStep(2);
-      setSafetyPhrase('');
-    } else {
-      showError('Incorrect safety phrase', `Please type "${requiredPhrase}" exactly to proceed`);
-    }
+  const startResetProcess = () => {
+    setResetStep(1);
+    setSafetyPhrase('');
+    setSecurityAnswer('');
+    setFinalConfirmation('');
+    setSecurityQuestion(null);
+    setShowResetDialog(true);
   };
 
-  // Validate security question
-  const validateSecurityQuestion = async () => {
-    try {
-      const isValid = await invoke('validate_security_answer', {
-        questionId: securityQuestion?.id,
-        answer: securityAnswer
-      });
-
-      if (isValid) {
-        setResetStep(3);
-        setSecurityAnswer('');
-      } else {
-        showError('Incorrect security answer', 'Please provide the correct answer');
-      }
-    } catch (error) {
-      console.error('Security validation failed:', error);
-      showError('Security validation failed', 'An error occurred during validation');
-    }
-  };
-
-  // Final reset confirmation
-  const performReset = async () => {
-    if (finalConfirmation !== 'DELETE ALL DATA') {
-      showError('Invalid confirmation', 'Please type "DELETE ALL DATA" exactly to confirm');
+  const validateSafetyPhrase = async () => {
+    if (safetyPhrase.trim() !== 'I UNDERSTAND THE RISKS') {
+      showError('Safety Phrase Incorrect', 'Please type the exact safety phrase to continue.');
       return;
     }
 
     try {
-      // Show processing message
-      showSuccess('Processing', 'Creating backup and resetting data...');
-      
-      // Call the enhanced reset function (it will create backup automatically)
-      const result = await invoke<string>('reset_application_data');
-      
-      showSuccess('Reset Complete', `${result} You can find the automatic backup in the app's backup folder.`);
-      
-      // Close dialog and refresh app
-      setShowResetDialog(false);
-      setTimeout(() => {
-        window.location.reload();
-      }, 3000); // Give user time to read the backup message
+      const question = await invoke<SecurityQuestion>('get_reset_security_question');
+      setSecurityQuestion(question);
+      setResetStep(2);
     } catch (error) {
-      console.error('Reset failed:', error);
-      showError('Reset Failed', `Reset failed: ${error}. Your data is safe - no changes were made.`);
+      showError('Security Check Failed', String(error));
     }
   };
 
-  // Cancel reset process
+  const validateSecurityQuestion = async () => {
+    if (!securityQuestion) return;
+
+    try {
+      const isValid = await invoke<boolean>('validate_security_answer', {
+        question_id: securityQuestion.id,
+        answer: securityAnswer,
+      });
+
+      if (!isValid) {
+        showError('Incorrect Answer', 'Please try again.');
+        return;
+      }
+
+      setResetStep(3);
+    } catch (error) {
+      showError('Validation Failed', String(error));
+    }
+  };
+
+  const performReset = async () => {
+    if (finalConfirmation !== 'DELETE ALL DATA') {
+      showError('Confirmation Required', 'Please type DELETE ALL DATA to confirm.');
+      return;
+    }
+
+    try {
+      const result = await invoke<string>('reset_application_data');
+      showSuccess('Reset Complete', result);
+      cancelReset();
+    } catch (error) {
+      showError('Reset Failed', String(error));
+    }
+  };
+
   const cancelReset = () => {
     setShowResetDialog(false);
     setResetStep(1);
@@ -392,215 +334,280 @@ const Settings: React.FC = () => {
     setSecurityQuestion(null);
   };
 
-  return (
-    <div style={{ padding: '24px', height: '100%', overflow: 'auto', minHeight: '100vh', backgroundColor: theme === 'dark' ? colors.primary : '#c7e2eb' }}>
-      <div className="bc-card" style={{ borderRadius: 10, padding: 16, marginBottom: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-          <div>
-            <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: 'var(--app-text)' }}>Settings</h1>
-            <div style={{ marginTop: 4, fontSize: 14, color: 'var(--app-text-secondary)' }}>
-              Manage your application settings
-            </div>
-          </div>
-        </div>
-      </div>
+  const cancelRestore = () => {
+    setShowRestoreDialog(false);
+    setRestoreStep(1);
+    setRestoreFilePath('');
+    setIsRestoring(false);
+  };
 
-      <div className="bc-card" style={{ borderRadius: 10, padding: 10, marginBottom: 12 }}>
+  const validateRestoreFile = () => {
+    if (!restoreFilePath.trim()) {
+      showError('Missing File', 'Please enter a backup file path.');
+      return false;
+    }
+    if (!restoreFilePath.toLowerCase().endsWith('.db')) {
+      showError('Invalid File', 'Backup file must end with .db');
+      return false;
+    }
+    return true;
+  };
+
+  const findLatestBackup = async () => {
+    try {
+      const latest = await invoke<string>('select_backup_file');
+      setRestoreFilePath(latest);
+    } catch (error) {
+      showError('Find Latest Failed', String(error));
+    }
+  };
+
+  const browseBackupFile = async () => {
+    try {
+      await invoke<string>('browse_backup_file');
+    } catch (error) {
+      showError('Browse Backup', String(error));
+    }
+  };
+
+  const performRestore = async () => {
+    if (!validateRestoreFile()) return;
+
+    try {
+      setIsRestoring(true);
+      const result = await invoke<string>('restore_database_from_backup', { backup_file_path: restoreFilePath });
+      showSuccess('Restore Complete', result);
+      cancelRestore();
+    } catch (error) {
+      showError('Restore Failed', String(error));
+    } finally {
+      setIsRestoring(false);
+    }
+  };
+
+  return (
+    <div style={{ padding: 24, display: 'grid', gap: 14 }}>
+      <div className="bc-card" style={{ borderRadius: 10, padding: 10 }}>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            className={activeTab === 'general' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'}
-            onClick={() => setActiveTab('general')}
-          >
+          <button type="button" className={activeTab === 'general' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'} onClick={() => setActiveTab('general')}>
             General
           </button>
-          <button
-            type="button"
-            className={activeTab === 'users' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'}
-            onClick={() => setActiveTab('users')}
-          >
-            Users
-          </button>
-          <button
-            type="button"
-            className={activeTab === 'branding' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'}
-            onClick={() => setActiveTab('branding')}
-          >
+          <button type="button" className={activeTab === 'branding' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'} onClick={() => setActiveTab('branding')}>
             Branding
           </button>
-          <button
-            type="button"
-            className={activeTab === 'database' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'}
-            onClick={() => setActiveTab('database')}
-          >
+          <button type="button" className={activeTab === 'database' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'} onClick={() => setActiveTab('database')}>
             Database
           </button>
-          <button
-            type="button"
-            className={activeTab === 'support' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'}
-            onClick={() => setActiveTab('support')}
-          >
+          <button type="button" className={activeTab === 'users' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'} onClick={() => setActiveTab('users')}>
+            Users
+          </button>
+          <button type="button" className={activeTab === 'support' ? 'bc-btn bc-btn-primary' : 'bc-btn bc-btn-outline'} onClick={() => setActiveTab('support')}>
             Support
           </button>
         </div>
       </div>
 
-      {activeTab === 'general' && (
-        <div className="bc-card" style={{ borderRadius: 10, padding: 16 }}>
-          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 12, color: 'var(--app-text)' }}>General</div>
-
-          <div style={{ display: 'grid', gap: 14 }}>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--app-text-secondary)' }}>Currency</div>
-              <select
-                className="bc-input"
-                value={currencyCode}
-                onChange={async (e) => {
-                  try {
-                    await setCurrencyCode(e.target.value);
-                    showSuccess('Currency Updated', `Currency set to ${e.target.value}`);
-                  } catch (error) {
-                    showError('Currency Update Failed', String(error));
-                  }
-                }}
-              >
-                {supportedCurrencies.map((code) => (
-                  <option key={code} value={code}>
-                    {code}
-                  </option>
-                ))}
-              </select>
-              <div style={{ marginTop: 6, color: 'var(--app-text-secondary)', fontSize: 12 }}>
-                Preview: {formatMoney(1234.56)}
+      <div>
+        {activeTab === 'general' && (
+          <div style={{ display: 'grid', gap: 12 }}>
+            <div className="bc-card" style={{ borderRadius: 10, padding: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 16, fontWeight: 800, color: 'var(--app-text)' }}>
+                General
+                <InfoTip id="general" text="Core app defaults like currency, locale, and business type." />
               </div>
-            </div>
-
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--app-text-secondary)' }}>Locale (Language & Region)</div>
-              <select
-                className="bc-input"
-                value={pendingLocale}
-                onChange={(e) => {
-                  setPendingLocale(e.target.value);
-                  setLocale(e.target.value).catch((error) => {
-                    showError('Locale Update Failed', String(error));
-                  });
-                }}
-              >
-                <option value="en-US">English (United States)</option>
-                <option value="en-GB">English (United Kingdom)</option>
-                <option value="en-AU">English (Australia)</option>
-                <option value="fr-FR">Français (France)</option>
-                <option value="de-DE">Deutsch (Germany)</option>
-                <option value="es-ES">Español (Spain)</option>
-                <option value="it-IT">Italiano (Italy)</option>
-                <option value="pt-BR">Português (Brazil)</option>
-                <option value="pt-PT">Português (Portugal)</option>
-                <option value="ja-JP">日本語 (Japan)</option>
-                <option value="zh-CN">中文 (Simplified)</option>
-                <option value="zh-TW">中文 (Traditional)</option>
-                <option value="ko-KR">한국어 (Korea)</option>
-                <option value="ar-SA">العربية (Saudi Arabia)</option>
-                <option value="hi-IN">हिन्दी (India)</option>
-                <option value="ur-PK">اردو (Pakistan)</option>
-                <option value="th-TH">ไทย (Thailand)</option>
-                <option value="vi-VN">Tiếng Việt (Vietnam)</option>
-                <option value="id-ID">Bahasa Indonesia (Indonesia)</option>
-                <option value="ms-MY">Bahasa Melayu (Malaysia)</option>
-                <option value="tl-PH">Tagalog (Philippines)</option>
-              </select>
-              <div style={{ marginTop: 6, color: 'var(--app-text-secondary)', fontSize: 12 }}>
-                This sets the language and regional format for dates, numbers, and currency display throughout the app.
-              </div>
-            </div>
-
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--app-text-secondary)' }}>Business Type</div>
-              <select
-                className="bc-input"
-                value={businessMode}
-                onChange={async (e) => {
-                  const newMode = e.target.value as BusinessMode;
-                  if (businessModeLocked) {
-                    showError(
-                      'Business Type Locked',
-                      'Business type is locked after first-time setup to avoid conflicts. Use Reset Application Data to change it.'
-                    );
-                    return;
-                  }
-
-                  try {
-                    await invoke('set_business_mode', { mode: newMode });
-                    setBusinessMode(newMode);
-                    setBusinessModeLocked(true);
-                    showSuccess('Business Type Set', `Set to ${newMode}. This is now locked to prevent conflicts.`);
-                  } catch (error) {
-                    showError('Business Type Update Failed', String(error));
-                  }
-                }}
-                disabled={businessModeLocked}
-              >
-                {Object.entries(labels).map(([mode, modeLabels]) => (
-                  <option key={mode} value={mode}>
-                    {mode.charAt(0).toUpperCase() + mode.slice(1)} ({modeLabels.unit}, {modeLabels.client})
-                  </option>
-                ))}
-              </select>
-              <div style={{ marginTop: 6, color: 'var(--app-text-secondary)', fontSize: 12 }}>
-                This changes terminology throughout the app: {label.unit}, {label.client}, {label.action}, {label.actionOut}
-              </div>
-              {businessModeLocked ? (
-                <div style={{ marginTop: 6, color: 'var(--app-text-secondary)', fontSize: 12 }}>
-                  Business type is locked to prevent UI/data conflicts. To change it, use <strong>Reset Application Data</strong>.
+              <div style={{ display: 'grid', gap: 14, marginTop: 12 }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--app-text-secondary)' }}>Currency</div>
+                  <select
+                    className="bc-input"
+                    value={currencyCode}
+                    onChange={async (e) => {
+                      try {
+                        await setCurrencyCode(e.target.value);
+                        showSuccess('Currency Updated', `Currency set to ${e.target.value}`);
+                      } catch (error) {
+                        showError('Currency Update Failed', String(error));
+                      }
+                    }}
+                  >
+                    {supportedCurrencies.map((code) => (
+                      <option key={code} value={code}>
+                        {code}
+                      </option>
+                    ))}
+                  </select>
+                  <div style={{ marginTop: 6, color: 'var(--app-text-secondary)', fontSize: 12 }}>
+                    Preview: {formatMoney(1234.56)}
+                  </div>
                 </div>
-              ) : null}
+
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--app-text-secondary)' }}>Locale (Language & Region)</div>
+                  <select
+                    className="bc-input"
+                    value={pendingLocale}
+                    onChange={(e) => {
+                      setPendingLocale(e.target.value);
+                      setLocale(e.target.value).catch((error) => {
+                        showError('Locale Update Failed', String(error));
+                      });
+                    }}
+                  >
+                    <option value="en-US">English (United States)</option>
+                    <option value="en-GB">English (United Kingdom)</option>
+                    <option value="en-AU">English (Australia)</option>
+                    <option value="fr-FR">Français (France)</option>
+                    <option value="de-DE">Deutsch (Germany)</option>
+                    <option value="es-ES">Español (Spain)</option>
+                    <option value="it-IT">Italiano (Italy)</option>
+                    <option value="pt-BR">Português (Brazil)</option>
+                    <option value="pt-PT">Português (Portugal)</option>
+                    <option value="ja-JP">日本語 (Japan)</option>
+                    <option value="zh-CN">中文 (Simplified)</option>
+                    <option value="zh-TW">中文 (Traditional)</option>
+                    <option value="ko-KR">한국어 (Korea)</option>
+                    <option value="ar-SA">العربية (Saudi Arabia)</option>
+                    <option value="hi-IN">हिन्दी (India)</option>
+                    <option value="ur-PK">اردو (Pakistan)</option>
+                    <option value="th-TH">ไทย (Thailand)</option>
+                    <option value="vi-VN">Tiếng Việt (Vietnam)</option>
+                    <option value="id-ID">Bahasa Indonesia (Indonesia)</option>
+                    <option value="ms-MY">Bahasa Melayu (Malaysia)</option>
+                    <option value="tl-PH">Tagalog (Philippines)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--app-text-secondary)' }}>Business Type</div>
+                  <select
+                    className="bc-input"
+                    value={businessMode}
+                    onChange={async (e) => {
+                      const newMode = e.target.value as BusinessMode;
+                      if (businessModeLocked) {
+                        showError(
+                          'Business Type Locked',
+                          'Business type is locked after first-time setup. Use Reset Application Data to change it.'
+                        );
+                        return;
+                      }
+
+                      try {
+                        await invoke('set_business_mode', { mode: newMode });
+                        setBusinessMode(newMode);
+                        setBusinessModeLocked(true);
+                        showSuccess('Business Type Set', `Set to ${newMode}. This is now locked to prevent conflicts.`);
+                      } catch (error) {
+                        showError('Business Type Update Failed', String(error));
+                      }
+                    }}
+                    disabled={businessModeLocked}
+                  >
+                    {Object.entries(labels).map(([mode, modeLabels]) => (
+                      <option key={mode} value={mode}>
+                        {mode.charAt(0).toUpperCase() + mode.slice(1)} ({modeLabels.unit}, {modeLabels.client})
+                      </option>
+                    ))}
+                  </select>
+                  {businessModeLocked ? (
+                    <div style={{ marginTop: 6, color: 'var(--app-text-secondary)', fontSize: 12 }}>
+                      Locked after first setup. Use Reset Application Data to change.
+                    </div>
+                  ) : null}
+                </div>
+              </div>
             </div>
 
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--app-text-secondary)' }}>Retail Options</div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={barcodeEnabled}
-                  onChange={async (e) => {
-                    const next = e.target.checked;
-                    setBarcodeEnabled(next);
-                    try {
-                      await invoke<string>('set_barcode_enabled', { enabled: next });
-                      showSuccess('Saved', next ? 'Barcode/SKU enabled' : 'Barcode/SKU disabled');
-                    } catch (error) {
-                      setBarcodeEnabled(!next);
-                      showError('Save Failed', String(error));
-                    }
-                  }}
-                />
-                <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--app-text)' }}>
-                  Enable barcode/SKU fields and scanner search
-                </span>
-              </label>
-              <div style={{ marginTop: 6, color: 'var(--app-text-secondary)', fontSize: 12 }}>
-                Turn this off if your shop does not use barcodes. Product SKU/barcode fields will be hidden and POS will stop matching on barcode.
+            <div className="bc-card" style={{ borderRadius: 10, padding: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 16, fontWeight: 800, color: 'var(--app-text)' }}>
+                Receipts
+                <InfoTip id="receipts" text="Receipt buttons and auto-print behavior." />
+              </div>
+              <div style={{ display: 'grid', gap: 12, marginTop: 12 }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--app-text-secondary)' }}>Default Receipt Type</div>
+                  <select
+                    className="bc-input"
+                    value={receiptType}
+                    onChange={async (e) => {
+                      const newType = e.target.value;
+                      setReceiptType(newType);
+                      try {
+                        await invoke('set_receipt_type', { value: newType });
+                        showSuccess('Receipt Type Updated', `Default print type set to: ${newType === 'both' ? 'Both' : newType === 'thermal' ? 'Thermal Only' : 'Standard Only'}`);
+                      } catch (error) {
+                        showError('Update Failed', String(error));
+                      }
+                    }}
+                  >
+                    <option value="both">Both (Standard + Thermal)</option>
+                    <option value="standard">Standard Receipt Only</option>
+                    <option value="thermal">Thermal Receipt Only</option>
+                  </select>
+                </div>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={receiptAutoPrint}
+                    onChange={async (e) => {
+                      const next = e.target.checked;
+                      setReceiptAutoPrint(next);
+                      try {
+                        await invoke('set_receipt_auto_print', { enabled: next });
+                        showSuccess('Saved', next ? 'Auto-print enabled' : 'Auto-print disabled');
+                      } catch (error) {
+                        setReceiptAutoPrint(!next);
+                        showError('Save Failed', String(error));
+                      }
+                    }}
+                  />
+                  <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--app-text)' }}>
+                    Auto-print after checkout
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            <div className="bc-card" style={{ borderRadius: 10, padding: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 16, fontWeight: 800, color: 'var(--app-text)' }}>
+                Retail Options
+                <InfoTip id="retail" text="Barcode/SKU tools for fast scanning in POS." />
+              </div>
+              <div style={{ marginTop: 12 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={barcodeEnabled}
+                    onChange={async (e) => {
+                      const next = e.target.checked;
+                      setBarcodeEnabled(next);
+                      try {
+                        await invoke<string>('set_barcode_enabled', { enabled: next });
+                        showSuccess('Saved', next ? 'Barcode/SKU enabled' : 'Barcode/SKU disabled');
+                      } catch (error) {
+                        setBarcodeEnabled(!next);
+                        showError('Save Failed', String(error));
+                      }
+                    }}
+                  />
+                  <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--app-text)' }}>
+                    Enable barcode/SKU fields and scanner search
+                  </span>
+                </label>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {activeTab === 'users' && (
-        <div className="bc-card" style={{ borderRadius: 10, padding: 16 }}>
-          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 12, color: 'var(--app-text)' }}>Users</div>
-          <UserManagement embedded />
-        </div>
-      )}
-
-      {activeTab === 'branding' && (
-        <div className="bc-card" style={{ borderRadius: 10, padding: 16 }}>
-          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 12, color: 'var(--app-text)' }}>Branding</div>
-
-          <div style={{ display: 'grid', gap: 14 }}>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--app-text-secondary)' }}>Business Logo</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        {activeTab === 'branding' && (
+          <div style={{ display: 'grid', gap: 12 }}>
+            <div className="bc-card" style={{ borderRadius: 10, padding: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 16, fontWeight: 800, color: 'var(--app-text)' }}>
+                Business Logo
+                <InfoTip id="branding-logo" text="Logo shown on receipts. Max size 1 MB." />
+              </div>
+              <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                 <button className="bc-btn bc-btn-primary" onClick={handleUploadLogo} type="button">
                   Upload Logo
                 </button>
@@ -616,111 +623,120 @@ const Settings: React.FC = () => {
                   {businessLogoPath || 'No logo set'}
                 </div>
               </div>
-              <div style={{ marginTop: 8, color: 'var(--app-text-secondary)', fontSize: 12, lineHeight: 1.5 }}>
-                ⚠️ <strong>Maximum size: 1 MB</strong> (recommended: 500 KB or less)<br />
-                Large logos won't display on receipts. Use <a href="https://tinypng.com" target="_blank" style={{ color: 'var(--app-primary)' }}>TinyPNG.com</a> or <a href="https://squoosh.app" target="_blank" style={{ color: 'var(--app-primary)' }}>Squoosh.app</a> to compress.<br />
-                This logo will appear on receipts and can be used in your business materials. It does not replace the Inertia branding.
+            </div>
+
+            <div className="bc-card" style={{ borderRadius: 10, padding: 16 }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--app-text)' }}>
+                Receipt Header
+              </div>
+              <div style={{ marginTop: 12 }}>
+                <textarea
+                  value={receiptHeader}
+                  onChange={(e) => setReceiptHeader(e.target.value)}
+                  placeholder="Receipt header (optional)"
+                  className="bc-input"
+                  style={{ minHeight: 90, resize: 'vertical' }}
+                />
+                <div style={{ marginTop: 10 }}>
+                  <button className="bc-btn bc-btn-primary" onClick={saveReceiptHeader} type="button" disabled={isSavingReceiptHeader}>
+                    {isSavingReceiptHeader ? 'Saving…' : 'Save Header'}
+                  </button>
+                </div>
               </div>
             </div>
 
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--app-text-secondary)' }}>Receipt Header</div>
-              <textarea
-                value={receiptHeader}
-                onChange={(e) => setReceiptHeader(e.target.value)}
-                placeholder="Shown near the top of receipts (optional)"
-                className="bc-input"
-                style={{ minHeight: 90, resize: 'vertical' }}
-              />
-              <div style={{ marginTop: 10 }}>
-                <button className="bc-btn bc-btn-primary" onClick={saveReceiptHeader} type="button" disabled={isSavingReceiptHeader}>
-                  {isSavingReceiptHeader ? 'Saving…' : 'Save Header'}
+            <div className="bc-card" style={{ borderRadius: 10, padding: 16 }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--app-text)' }}>
+                Receipt Footer
+              </div>
+              <div style={{ marginTop: 12 }}>
+                <textarea
+                  value={receiptFooter}
+                  onChange={(e) => setReceiptFooter(e.target.value)}
+                  placeholder="Receipt footer (optional)"
+                  className="bc-input"
+                  style={{ minHeight: 90, resize: 'vertical' }}
+                />
+                <div style={{ marginTop: 10 }}>
+                  <button className="bc-btn bc-btn-primary" onClick={saveReceiptFooter} type="button" disabled={isSavingReceiptFooter}>
+                    {isSavingReceiptFooter ? 'Saving…' : 'Save Footer'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'database' && (
+          <div style={{ display: 'grid', gap: 12 }}>
+            <div className="bc-card" style={{ borderRadius: 10, padding: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 16, fontWeight: 800, color: 'var(--app-text)' }}>
+                Backup
+                <InfoTip id="db-backup" text="Export your data to an external location for safekeeping." />
+              </div>
+              <div style={{ marginTop: 12 }}>
+                <button className="bc-btn bc-btn-primary" onClick={handleBackupData} disabled={isBackingUp}>
+                  {isBackingUp ? 'Creating Backup…' : 'Create Backup'}
                 </button>
               </div>
             </div>
 
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--app-text-secondary)' }}>Receipt Footer</div>
-              <textarea
-                value={receiptFooter}
-                onChange={(e) => setReceiptFooter(e.target.value)}
-                placeholder="Shown at the bottom of receipts (optional)"
-                className="bc-input"
-                style={{ minHeight: 90, resize: 'vertical' }}
-              />
-              <div style={{ marginTop: 10 }}>
-                <button className="bc-btn bc-btn-primary" onClick={saveReceiptFooter} type="button" disabled={isSavingReceiptFooter}>
-                  {isSavingReceiptFooter ? 'Saving…' : 'Save Footer'}
+            <div className="bc-card" style={{ borderRadius: 10, padding: 16 }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--app-text)' }}>
+                Restore
+              </div>
+              <div style={{ marginTop: 12 }}>
+                <button className="bc-btn bc-btn-primary" onClick={handleRestoreDatabase}>
+                  Restore from Backup
                 </button>
               </div>
             </div>
 
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--app-text-secondary)' }}>Receipt Print Type</div>
-              <select
-                className="bc-input"
-                value={receiptType}
-                onChange={async (e) => {
-                  const newType = e.target.value;
-                  setReceiptType(newType);
-                  try {
-                    await invoke('set_setting', { key: 'receipt_type', value: newType });
-                    showSuccess('Receipt Type Updated', `Default print type set to: ${newType === 'both' ? 'Both' : newType === 'thermal' ? 'Thermal Only' : 'Standard Only'}`);
-                  } catch (error) {
-                    showError('Update Failed', String(error));
-                  }
-                }}
+            <div className="bc-card" style={{ borderRadius: 10, padding: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 16, fontWeight: 800, color: 'var(--app-text)' }}>
+                Reset
+                <InfoTip id="db-reset" text="Permanently delete all data. Use with caution." />
+              </div>
+              <div style={{ marginTop: 12 }}>
+                <button className="bc-btn bc-btn-primary" onClick={startResetProcess}>
+                  Reset Application Data
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'users' && (
+          <div className="bc-card" style={{ borderRadius: 10, padding: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 16, fontWeight: 800, marginBottom: 12, color: 'var(--app-text)' }}>
+              Users
+              <InfoTip id="users" text="Manage staff access and roles." />
+            </div>
+            <UserManagement embedded />
+          </div>
+        )}
+
+        {activeTab === 'support' && (
+          <div className="bc-card" style={{ borderRadius: 10, padding: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 16, fontWeight: 800, color: 'var(--app-text)' }}>
+              Support
+              <InfoTip id="support" text="Contact support for help or questions." />
+            </div>
+            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 16 }}>Email:</span>
+              <a
+                href="mailto:anomly80@gmail.com"
+                style={{ color: colors.accent, textDecoration: 'none', fontWeight: 700, fontSize: 14 }}
+                onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
+                onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}
               >
-                <option value="both">Both (Standard + Thermal)</option>
-                <option value="standard">Standard Receipt Only</option>
-                <option value="thermal">Thermal Receipt Only</option>
-              </select>
-              <div style={{ marginTop: 6, color: 'var(--app-text-secondary)', fontSize: 12 }}>
-                Choose which receipt types to print by default after completing a sale.
-              </div>
+                anomly80@gmail.com
+              </a>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {activeTab === 'database' && (
-        <div style={{ display: 'grid', gap: 12 }}>
-          <div className="bc-card" style={{ borderRadius: 10, padding: 16 }}>
-            <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 6, color: 'var(--app-text)' }}>Backup</div>
-            <div style={{ color: 'var(--app-text-secondary)', fontSize: 13, marginBottom: 12 }}>
-              Export your data to an external location for safekeeping.
-            </div>
-            <div style={{ color: 'var(--app-text-secondary)', fontSize: 12, marginBottom: 12 }}>
-              Includes: {label.client} records, {label.unit} data, sales, catalog items, financial records, users, and settings.
-            </div>
-            <button className="bc-btn bc-btn-primary" onClick={handleBackupData} disabled={isBackingUp}>
-              {isBackingUp ? 'Creating Backup…' : 'Create Backup'}
-            </button>
-          </div>
-
-          <div className="bc-card" style={{ borderRadius: 10, padding: 16 }}>
-            <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 6, color: 'var(--app-text)' }}>Restore</div>
-            <div style={{ color: 'var(--app-text-secondary)', fontSize: 13, marginBottom: 12 }}>
-              Restore your data from a previously created backup file. Your current data will be backed up automatically before restore.
-            </div>
-            <button className="bc-btn bc-btn-primary" onClick={handleRestoreDatabase}>
-              Restore from Backup
-            </button>
-          </div>
-
-          <div className="bc-card" style={{ borderRadius: 10, padding: 16 }}>
-            <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 6, color: 'var(--app-text)' }}>Reset</div>
-            <div style={{ color: 'var(--app-text-secondary)', fontSize: 13, marginBottom: 12 }}>
-              This will permanently delete ALL data including {label.client.toLowerCase()} records, {label.unit.toLowerCase()} records, sales, and settings.
-            </div>
-            <button className="bc-btn bc-btn-primary" onClick={startResetProcess}>
-              Reset Application Data
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Reset Confirmation Dialog */}
       {showResetDialog && (
         <div className="bc-modal-overlay" role="dialog" aria-modal="true">
           <div className="bc-modal" style={{ maxWidth: '640px', padding: '24px', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }}>
@@ -802,8 +818,8 @@ const Settings: React.FC = () => {
                   />
                   <div style={{ display: 'flex', gap: 10, marginTop: 12, justifyContent: 'flex-end' }}>
                     <button onClick={cancelReset} className="bc-btn bc-btn-outline" type="button">Cancel</button>
-                    <button 
-                      onClick={performReset} 
+                    <button
+                      onClick={performReset}
                       className="bc-btn bc-btn-primary"
                       disabled={finalConfirmation !== 'DELETE ALL DATA'}
                       type="button"
@@ -818,7 +834,6 @@ const Settings: React.FC = () => {
         </div>
       )}
 
-      {/* Restore Dialog */}
       {showRestoreDialog && (
         <div className="bc-modal-overlay" role="dialog" aria-modal="true">
           <div className="bc-modal">
@@ -929,108 +944,6 @@ const Settings: React.FC = () => {
                   </div>
                 </div>
               )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'support' && (
-        <div className="bc-card" style={{ borderRadius: 10, padding: 16 }}>
-          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 12, color: 'var(--app-text)' }}>Contact Support</div>
-
-          <div style={{ display: 'grid', gap: 20 }}>
-            {/* Contact Information */}
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10, color: 'var(--app-text)' }}>Get Help</div>
-              <div style={{ 
-                padding: '16px', 
-                backgroundColor: colors.surface, 
-                borderRadius: '10px', 
-                border: `1px solid ${colors.border}` 
-              }}>
-                <div style={{ color: colors.textSecondary, fontSize: 14, lineHeight: 1.6 }}>
-                  <div style={{ marginBottom: 12 }}>
-                    Need assistance? Have questions or feedback? We're here to help!
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                    <span style={{ fontSize: 18 }}>📧</span>
-                    <div>
-                      <div style={{ fontSize: 12, color: colors.textSecondary }}>Email Support</div>
-                      <a 
-                        href="mailto:anomly80@gmail.com" 
-                        style={{ 
-                          color: colors.accent, 
-                          textDecoration: 'none', 
-                          fontWeight: 700,
-                          fontSize: 15
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
-                        onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}
-                      >
-                        anomly80@gmail.com
-                      </a>
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 12, fontStyle: 'italic', marginTop: 12, color: colors.textSecondary }}>
-                    💡 Tip: Include screenshots and detailed descriptions of any issues for faster resolution.
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Logo & Receipt Information */}
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10, color: 'var(--app-text)' }}>Logo & Receipt Information</div>
-              <div style={{ 
-                padding: '16px', 
-                backgroundColor: colors.surface, 
-                borderRadius: '10px', 
-                border: `1px solid ${colors.border}` 
-              }}>
-                <div style={{ color: colors.textSecondary, fontSize: 13, lineHeight: 1.6 }}>
-                  <div style={{ marginBottom: 12 }}>
-                    <strong style={{ color: colors.text }}>Business Logo on Receipts:</strong>
-                  </div>
-                  <ul style={{ margin: '8px 0', paddingLeft: '20px' }}>
-                    <li style={{ marginBottom: 6 }}>Upload your logo in the <strong>Branding</strong> tab above</li>
-                    <li style={{ marginBottom: 6 }}>Your logo will appear on all printed receipts and reports</li>
-                    <li style={{ marginBottom: 6 }}>The INERTIA branding also appears automatically</li>
-                    <li>Supported formats: PNG, JPG, SVG, WebP</li>
-                  </ul>
-                  
-                  <div style={{ marginTop: 16, paddingTop: 12, borderTop: `1px solid ${colors.border}` }}>
-                    <strong style={{ color: colors.text }}>Receipt Header & Footer:</strong>
-                  </div>
-                  <ul style={{ margin: '8px 0', paddingLeft: '20px' }}>
-                    <li style={{ marginBottom: 6 }}>Add custom header/footer text in the <strong>Branding</strong> tab</li>
-                    <li style={{ marginBottom: 6 }}>Include your business name, address, phone, email</li>
-                    <li style={{ marginBottom: 6 }}>Add tax information or terms & conditions</li>
-                    <li>This text appears on all receipts</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-
-            {/* About INERTIA */}
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10, color: 'var(--app-text)' }}>About INERTIA</div>
-              <div style={{ 
-                padding: '16px', 
-                backgroundColor: colors.surface, 
-                borderRadius: '10px', 
-                border: `1px solid ${colors.border}`,
-                textAlign: 'center'
-              }}>
-                <div style={{ fontSize: 20, fontWeight: 900, color: colors.accent, marginBottom: 8 }}>
-                  INERTIA
-                </div>
-                <div style={{ color: colors.textSecondary, fontSize: 13 }}>
-                  Hotel & Business Management System
-                </div>
-                <div style={{ color: colors.textSecondary, fontSize: 12, marginTop: 12 }}>
-                  Version 1.0 • Powered by Tauri & React
-                </div>
-              </div>
             </div>
           </div>
         </div>

@@ -229,6 +229,40 @@ pub async fn get_receipt_footer() -> Result<Option<String>, String> {
     get_setting(&conn, "receipt_footer")
 }
 
+#[command]
+pub async fn set_receipt_type(value: String) -> Result<(), String> {
+    use crate::db::get_db_connection;
+    let conn = get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+    let trimmed = value.trim().to_lowercase();
+    let normalized = match trimmed.as_str() {
+        "both" | "standard" | "thermal" => trimmed,
+        _ => return Err("Receipt type must be one of: both, standard, thermal".to_string()),
+    };
+    upsert_setting(&conn, "receipt_type", &normalized)
+}
+
+#[command]
+pub async fn get_receipt_type() -> Result<Option<String>, String> {
+    use crate::db::get_db_connection;
+    let conn = get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+    get_setting(&conn, "receipt_type")
+}
+
+#[command]
+pub async fn set_receipt_auto_print(enabled: bool) -> Result<(), String> {
+    use crate::db::get_db_connection;
+    let conn = get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+    upsert_setting(&conn, "receipt_auto_print", if enabled { "1" } else { "0" })
+}
+
+#[command]
+pub async fn get_receipt_auto_print() -> Result<bool, String> {
+    use crate::db::get_db_connection;
+    let conn = get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+    let value = get_setting(&conn, "receipt_auto_print")?;
+    Ok(matches!(value.as_deref(), Some("1") | Some("true") | Some("TRUE")))
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct SecurityQuestion {
     pub id: String,

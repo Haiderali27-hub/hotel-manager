@@ -72,7 +72,9 @@ use settings::{
     get_business_logo_data_url, get_file_size, remove_business_logo,
     set_primary_color, get_primary_color,
     set_receipt_header, get_receipt_header,
-    set_receipt_footer, get_receipt_footer
+    set_receipt_footer, get_receipt_footer,
+    set_receipt_type, get_receipt_type,
+    set_receipt_auto_print, get_receipt_auto_print
 };
 
 use store_profiles::{
@@ -238,6 +240,12 @@ pub fn run() {
             get_barcode_enabled,
             set_currency_code,
             get_currency_code,
+            set_receipt_type,
+            get_receipt_type,
+            set_receipt_auto_print,
+            get_receipt_auto_print,
+            set_receipt_type,
+            get_receipt_type,
             set_locale,
             get_locale,
             set_business_name,

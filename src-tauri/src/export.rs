@@ -3,6 +3,27 @@ use std::fs;
 use std::io::Write;
 use tauri::{AppHandle, Wry};
 
+fn canonicalize_business_mode(raw: &str) -> String {
+    match raw.trim().to_lowercase().as_str() {
+        "barbershop" => "salon".to_string(),
+        "restaurant" | "hospitality" | "hotel" => "hotel".to_string(),
+        "retail" => "retail".to_string(),
+        "salon" => "salon".to_string(),
+        "cafe" => "cafe".to_string(),
+        _ => "hotel".to_string(),
+    }
+}
+
+fn get_active_business_mode(conn: &rusqlite::Connection) -> String {
+    let raw: Result<String, _> = conn.query_row(
+        "SELECT value FROM settings WHERE key = 'business_mode'",
+        [],
+        |row| row.get(0),
+    );
+
+    canonicalize_business_mode(raw.unwrap_or_else(|_| "hotel".to_string()).as_str())
+}
+
 /// Export data to CSV file with user-selected location
 #[tauri::command]
 pub async fn export_history_csv_with_dialog(_app: AppHandle<Wry>, tab: String, filters: Value) -> Result<String, String> {
@@ -75,6 +96,7 @@ pub fn export_history_csv(tab: String, filters: Value) -> Result<String, String>
 
 fn export_guests_csv(file: &mut fs::File, filters: &Value) -> Result<(), String> {
     let conn = crate::db::get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+    let business_mode = get_active_business_mode(&conn);
     
     // Write CSV header
     writeln!(file, "Guest ID,Name,Phone,Room Number,Check In,Check Out,Daily Rate,Total Bill,Status")
@@ -83,13 +105,13 @@ fn export_guests_csv(file: &mut fs::File, filters: &Value) -> Result<(), String>
     // Build query with filters
         let mut query = "SELECT g.id, g.name, g.phone, r.number as room_number, g.check_in, g.check_out, g.daily_rate, 
                     COALESCE((julianday(COALESCE(g.check_out, date('now'))) - julianday(g.check_in)) * g.daily_rate, 0) + 
-                    COALESCE((SELECT SUM(total_amount) FROM sales WHERE guest_id = g.id), 0) as total_bill,
+                    COALESCE((SELECT SUM(total_amount) FROM sales WHERE guest_id = g.id AND COALESCE(NULLIF(TRIM(business_mode), ''), 'hotel') = ?), 0) as total_bill,
                     g.status
                 FROM customers g 
                 JOIN resources r ON g.room_id = r.id 
                      WHERE 1=1".to_string();
     
-    let mut params: Vec<&dyn rusqlite::ToSql> = vec![];
+    let mut params: Vec<&dyn rusqlite::ToSql> = vec![&business_mode];
     
     // Apply filters - collect owned values first
     let start_date_str = filters.get("start_date").and_then(|v| v.as_str()).map(|s| s.to_string());
@@ -155,6 +177,7 @@ fn export_guests_csv(file: &mut fs::File, filters: &Value) -> Result<(), String>
 
 fn export_orders_csv(file: &mut fs::File, filters: &Value) -> Result<(), String> {
     let conn = crate::db::get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+    let business_mode = get_active_business_mode(&conn);
     
     // Write CSV header
     writeln!(file, "Order ID,Guest Name,Room,Order Date,Total Amount,Payment Status,Items")
@@ -167,9 +190,9 @@ fn export_orders_csv(file: &mut fs::File, filters: &Value) -> Result<(), String>
                 LEFT JOIN customers g ON fo.guest_id = g.id
                 LEFT JOIN resources r ON g.room_id = r.id
                 LEFT JOIN sale_items oi ON fo.id = oi.order_id
-                     WHERE 1=1".to_string();
+                     WHERE COALESCE(NULLIF(TRIM(fo.business_mode), ''), 'hotel') = ?".to_string();
     
-    let mut params: Vec<&dyn rusqlite::ToSql> = vec![];
+    let mut params: Vec<&dyn rusqlite::ToSql> = vec![&business_mode];
     
     // Apply filters - collect owned values first
     let start_date_str = filters.get("start_date").and_then(|v| v.as_str()).map(|s| s.to_string());
@@ -230,13 +253,14 @@ fn export_orders_csv(file: &mut fs::File, filters: &Value) -> Result<(), String>
 
 fn export_expenses_csv(file: &mut fs::File, filters: &Value) -> Result<(), String> {
     let conn = crate::db::get_db_connection().map_err(|e| format!("Failed to open database: {}", e))?;
+    let business_mode = get_active_business_mode(&conn);
     
     // Write CSV header
     writeln!(file, "Date,Category,Description,Amount")
         .map_err(|e| format!("Failed to write CSV header: {}", e))?;
     
-    let mut query = "SELECT date, category, description, amount FROM expenses WHERE 1=1".to_string();
-    let mut params: Vec<&dyn rusqlite::ToSql> = vec![];
+    let mut query = "SELECT date, category, description, amount FROM expenses WHERE COALESCE(NULLIF(TRIM(business_mode), ''), 'hotel') = ?".to_string();
+    let mut params: Vec<&dyn rusqlite::ToSql> = vec![&business_mode];
     
     // Apply filters - collect owned values first  
     let start_date_str = filters.get("start_date").and_then(|v| v.as_str()).map(|s| s.to_string());

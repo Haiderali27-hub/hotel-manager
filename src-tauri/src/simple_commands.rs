@@ -25,6 +25,52 @@ fn validate_positive_f64(value: f64, field: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn canonicalize_business_mode(raw: &str) -> String {
+    match raw.trim().to_lowercase().as_str() {
+        "barbershop" => "salon".to_string(),
+        "restaurant" | "hospitality" | "hotel" => "hotel".to_string(),
+        "retail" => "retail".to_string(),
+        "salon" => "salon".to_string(),
+        "cafe" => "cafe".to_string(),
+        _ => "hotel".to_string(),
+    }
+}
+
+fn get_active_business_mode(conn: &rusqlite::Connection) -> Result<String, String> {
+    ensure_settings_table(conn)?;
+
+    let raw: Option<String> = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'business_mode'",
+            [],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+
+    Ok(canonicalize_business_mode(raw.as_deref().unwrap_or("hotel")))
+}
+
+fn ensure_mode_scoping_columns(conn: &rusqlite::Connection) -> Result<(), String> {
+    let _ = conn.execute("ALTER TABLE sales ADD COLUMN business_mode TEXT", []);
+    let _ = conn.execute("ALTER TABLE expenses ADD COLUMN business_mode TEXT", []);
+
+    let active_mode = get_active_business_mode(conn)?;
+    conn.execute(
+        "UPDATE sales SET business_mode = ?1 WHERE business_mode IS NULL OR TRIM(business_mode) = ''",
+        params![active_mode],
+    )
+    .map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "UPDATE expenses SET business_mode = ?1 WHERE business_mode IS NULL OR TRIM(business_mode) = ''",
+        params![active_mode],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 fn compute_supplier_balance_summary(conn: &rusqlite::Connection, supplier_id: i64) -> Result<SupplierBalanceSummary, String> {
     let supplier_name: String = conn
         .query_row(
@@ -95,6 +141,8 @@ pub fn add_room(number: String, room_type: String, daily_rate: f64) -> Result<St
     println!("  daily_rate: {:?}", daily_rate);
     
     let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_mode_scoping_columns(&conn)?;
+    let business_mode = get_active_business_mode(&conn)?;
     
     // Validate input
     if number.trim().is_empty() {
@@ -109,8 +157,8 @@ pub fn add_room(number: String, room_type: String, daily_rate: f64) -> Result<St
     
     println!("🐛 DEBUG add_room - Executing INSERT query...");
     let result = conn.execute(
-        "INSERT INTO resources (number, room_type, daily_rate, is_occupied, is_active, resource_type) VALUES (?1, ?2, ?3, 0, 1, 'ROOM')",
-        params![number.trim(), room_type.trim(), daily_rate],
+        "INSERT INTO resources (number, room_type, daily_rate, is_occupied, is_active, resource_type, business_mode) VALUES (?1, ?2, ?3, 0, 1, 'ROOM', ?4)",
+        params![number.trim(), room_type.trim(), daily_rate, business_mode],
     );
     
     match result {
@@ -132,16 +180,19 @@ pub fn add_room(number: String, room_type: String, daily_rate: f64) -> Result<St
 #[command]
 pub fn get_rooms() -> Result<Vec<Room>, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_mode_scoping_columns(&conn)?;
+    let business_mode = get_active_business_mode(&conn)?;
     
     let mut stmt = conn.prepare(
            "SELECT r.id, r.number, r.room_type, r.daily_rate, r.is_occupied, r.guest_id, c.name as guest_name 
             FROM resources r 
             LEFT JOIN customers c ON r.guest_id = c.id AND c.status = 'active'
-         WHERE r.is_active = 1 
+         WHERE r.is_active = 1
+           AND COALESCE(NULLIF(TRIM(r.business_mode), ''), 'hotel') = ?1
          ORDER BY r.number"
     ).map_err(|e| e.to_string())?;
     
-    let room_iter = stmt.query_map([], |row| {
+    let room_iter = stmt.query_map([business_mode], |row| {
         Ok(Room {
             id: row.get(0)?,
             number: row.get(1)?,
@@ -164,6 +215,8 @@ pub fn get_rooms() -> Result<Vec<Room>, String> {
 #[command]
 pub fn get_available_rooms_for_guest(guest_id: Option<i64>) -> Result<Vec<Room>, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_mode_scoping_columns(&conn)?;
+    let business_mode = get_active_business_mode(&conn)?;
     
     let mut query = String::from(
            "SELECT r.id, r.number, r.room_type, r.daily_rate, r.is_occupied, r.guest_id, c.name as guest_name 
@@ -177,11 +230,11 @@ pub fn get_available_rooms_for_guest(guest_id: Option<i64>) -> Result<Vec<Room>,
         query.push_str(&format!(" OR r.guest_id = {}", gid));
     }
     
-    query.push_str(") ORDER BY r.number");
+    query.push_str(") AND COALESCE(NULLIF(TRIM(r.business_mode), ''), 'hotel') = ? ORDER BY r.number");
     
     let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
     
-    let room_iter = stmt.query_map([], |row| {
+    let room_iter = stmt.query_map([business_mode], |row| {
         Ok(Room {
             id: row.get(0)?,
             number: row.get(1)?,
@@ -204,6 +257,20 @@ pub fn get_available_rooms_for_guest(guest_id: Option<i64>) -> Result<Vec<Room>,
 #[command]
 pub fn update_room(room_id: i64, number: Option<String>, daily_rate: Option<f64>) -> Result<String, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_mode_scoping_columns(&conn)?;
+    let business_mode = get_active_business_mode(&conn)?;
+    
+    // Verify room exists and belongs to current business mode
+    let room_exists: bool = conn.query_row(
+        "SELECT 1 FROM resources WHERE id = ?1
+           AND COALESCE(NULLIF(TRIM(business_mode), ''), 'hotel') = ?2",
+        params![room_id, business_mode],
+        |_| Ok(true)
+    ).unwrap_or(false);
+    
+    if !room_exists {
+        return Err("Room not found".to_string());
+    }
     
     // Build dynamic update query
     let mut update_parts = Vec::new();
@@ -253,12 +320,27 @@ pub fn update_room(room_id: i64, number: Option<String>, daily_rate: Option<f64>
 pub fn delete_room(id: i64) -> Result<String, String> {
     println!("🐛 DEBUG delete_room - Received id: {:?}", id);
     let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_mode_scoping_columns(&conn)?;
+    let business_mode = get_active_business_mode(&conn)?;
+    
+    // Check if room exists and belongs to current business mode
+    let room_exists: bool = conn.query_row(
+        "SELECT 1 FROM resources WHERE id = ?1
+           AND COALESCE(NULLIF(TRIM(business_mode), ''), 'hotel') = ?2",
+        params![id, business_mode],
+        |_| Ok(true)
+    ).unwrap_or(false);
+    
+    if !room_exists {
+        return Err("Room not found".to_string());
+    }
     
     // Check if room is in use by active guests
     println!("🐛 DEBUG delete_room - Checking for active guests...");
     let guest_count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM customers WHERE room_id = ?1 AND status = 'active'",
-        params![id],
+        "SELECT COUNT(*) FROM customers WHERE room_id = ?1 AND status = 'active'
+           AND COALESCE(NULLIF(TRIM(business_mode), ''), 'hotel') = ?2",
+        params![id, business_mode],
         |row| row.get(0)
     ).map_err(|e| {
         println!("❌ DEBUG delete_room - Error checking guests: {}", e);
@@ -346,6 +428,8 @@ pub fn add_guest(name: String, phone: Option<String>, room_id: Option<i64>, chec
     println!("  daily_rate: {:?}", daily_rate);
     
     let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_mode_scoping_columns(&conn)?;
+    let business_mode = get_active_business_mode(&conn)?;
     
     // Validate inputs
     validate_date_format(&check_in)?;
@@ -390,9 +474,9 @@ pub fn add_guest(name: String, phone: Option<String>, room_id: Option<i64>, chec
     
     // Insert the guest
     tx.execute(
-        "INSERT INTO customers (name, phone, room_id, check_in, check_out, daily_rate, status, created_at, updated_at) 
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'active', ?7, ?8)",
-        params![name.trim(), phone, room_id, check_in, check_out, daily_rate, now, now],
+        "INSERT INTO customers (name, phone, room_id, check_in, check_out, daily_rate, status, business_mode, created_at, updated_at) 
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'active', ?7, ?8, ?9)",
+        params![name.trim(), phone, room_id, check_in, check_out, daily_rate, business_mode, now, now],
     ).map_err(|e| e.to_string())?;
     
     let guest_id = tx.last_insert_rowid();
@@ -476,6 +560,8 @@ pub fn update_customer(
 #[command]
 pub fn get_active_guests() -> Result<Vec<ActiveGuestRow>, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_mode_scoping_columns(&conn)?;
+    let business_mode = get_active_business_mode(&conn)?;
     
     let mut stmt = conn.prepare(
         "SELECT g.id, g.name, r.number, g.check_in, g.check_out, g.daily_rate, 
@@ -483,12 +569,13 @@ pub fn get_active_guests() -> Result<Vec<ActiveGuestRow>, String> {
          FROM customers g 
          LEFT JOIN resources r ON g.room_id = r.id 
          WHERE g.status = 'active'
+           AND COALESCE(NULLIF(TRIM(g.business_mode), ''), 'hotel') = ?1
          ORDER BY 
             CASE WHEN g.room_id IS NULL THEN 1 ELSE 0 END,  -- Walk-ins first
             r.number"
     ).map_err(|e| e.to_string())?;
     
-    let guest_iter = stmt.query_map([], |row| {
+    let guest_iter = stmt.query_map([business_mode], |row| {
         Ok(ActiveGuestRow {
             guest_id: row.get(0)?,
             name: row.get(1)?,
@@ -511,14 +598,17 @@ pub fn get_active_guests() -> Result<Vec<ActiveGuestRow>, String> {
 #[command]
 pub fn get_all_guests() -> Result<Vec<Guest>, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_mode_scoping_columns(&conn)?;
+    let business_mode = get_active_business_mode(&conn)?;
     
     let mut stmt = conn.prepare(
         "SELECT id, name, phone, room_id, check_in, check_out, daily_rate, status, created_at, updated_at
-            FROM customers 
+            FROM customers
+         WHERE COALESCE(NULLIF(TRIM(business_mode), ''), 'hotel') = ?1
          ORDER BY created_at DESC"
     ).map_err(|e| e.to_string())?;
     
-    let guest_iter = stmt.query_map([], |row| {
+    let guest_iter = stmt.query_map([business_mode], |row| {
         Ok(Guest {
             id: row.get(0)?,
             name: row.get(1)?,
@@ -544,14 +634,17 @@ pub fn get_all_guests() -> Result<Vec<Guest>, String> {
 #[command]
 pub fn get_guest(guest_id: i64) -> Result<ActiveGuestRow, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_mode_scoping_columns(&conn)?;
+    let business_mode = get_active_business_mode(&conn)?;
     
     let result = conn.query_row(
         "SELECT g.id, g.name, r.number, g.check_in, g.check_out, g.daily_rate,
                 CASE WHEN g.room_id IS NULL THEN 1 ELSE 0 END as is_walkin
          FROM customers g 
          LEFT JOIN resources r ON g.room_id = r.id 
-         WHERE g.id = ?1",
-        params![guest_id],
+         WHERE g.id = ?1
+           AND COALESCE(NULLIF(TRIM(g.business_mode), ''), 'hotel') = ?2",
+        params![guest_id, business_mode],
         |row| {
             Ok(ActiveGuestRow {
                 guest_id: row.get(0)?,
@@ -577,6 +670,8 @@ pub fn get_guest(guest_id: i64) -> Result<ActiveGuestRow, String> {
 #[command]
 pub fn checkout_guest(guest_id: i64, discount_flat: Option<f64>, discount_pct: Option<f64>) -> Result<CheckoutTotals, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_mode_scoping_columns(&conn)?;
+    let business_mode = get_active_business_mode(&conn)?;
     
     // Get guest details
     let (check_in, daily_rate): (String, f64) = conn.query_row(
@@ -602,8 +697,9 @@ pub fn checkout_guest(guest_id: i64, discount_flat: Option<f64>, discount_pct: O
     
     // Calculate unpaid food total
     let unpaid_food: f64 = conn.query_row(
-        "SELECT COALESCE(SUM(total_amount), 0) FROM sales WHERE guest_id = ?1 AND paid = 0",
-        params![guest_id],
+        "SELECT COALESCE(SUM(total_amount), 0) FROM sales WHERE guest_id = ?1 AND paid = 0
+         AND COALESCE(NULLIF(TRIM(business_mode), ''), 'hotel') = ?2",
+        params![guest_id, business_mode],
         |row| row.get(0)
     ).map_err(|e| e.to_string())?;
     
@@ -669,11 +765,14 @@ pub fn checkout_guest(guest_id: i64, discount_flat: Option<f64>, discount_pct: O
 #[command]
 pub fn update_guest(guest_id: i64, name: Option<String>, phone: Option<String>, room_id: Option<i64>, check_in: Option<String>, check_out: Option<String>, daily_rate: Option<f64>) -> Result<bool, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_mode_scoping_columns(&conn)?;
+    let business_mode = get_active_business_mode(&conn)?;
     
-    // Check if guest exists
+    // Check if guest exists and belongs to current business mode
     let guest_exists: bool = conn.query_row(
-        "SELECT 1 FROM customers WHERE id = ?1 AND status = 'active'",
-        params![guest_id],
+        "SELECT 1 FROM customers WHERE id = ?1 AND status = 'active'
+           AND COALESCE(NULLIF(TRIM(business_mode), ''), 'hotel') = ?2",
+        params![guest_id, business_mode],
         |_| Ok(true)
     ).unwrap_or(false);
     
@@ -794,6 +893,8 @@ pub fn add_menu_item(
     low_stock_limit: Option<i32>,
 ) -> Result<i64, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_mode_scoping_columns(&conn)?;
+    let business_mode = get_active_business_mode(&conn)?;
     
     validate_positive_amount(price, "price")?;
     
@@ -839,8 +940,8 @@ pub fn add_menu_item(
     }
     
     let result = conn.execute(
-        "INSERT INTO menu_items (name, sku, barcode, price, category, description, is_available, is_active, stock_quantity, track_stock, low_stock_limit)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 1, ?8, ?9, ?10)",
+        "INSERT INTO menu_items (name, sku, barcode, price, category, description, is_available, is_active, stock_quantity, track_stock, low_stock_limit, business_mode)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 1, ?8, ?9, ?10, ?11)",
         params![
             name.trim(),
             sku,
@@ -851,7 +952,8 @@ pub fn add_menu_item(
             if available { 1 } else { 0 },
             stock_quantity,
             track_stock,
-            low_stock_limit
+            low_stock_limit,
+            business_mode
         ],
     );
     
@@ -870,15 +972,18 @@ pub fn add_menu_item(
 #[tauri::command]
 pub fn get_menu_items() -> Result<Vec<MenuItem>, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_mode_scoping_columns(&conn)?;
+    let business_mode = get_active_business_mode(&conn)?;
     
     let mut stmt = conn.prepare(
         "SELECT id, name, sku, barcode, price, category, COALESCE(description, '') as description, is_available, stock_quantity, track_stock, low_stock_limit
          FROM menu_items
          WHERE is_active = 1
+           AND COALESCE(NULLIF(TRIM(business_mode), ''), 'hotel') = ?1
          ORDER BY name"
     ).map_err(|e| e.to_string())?;
     
-    let item_iter = stmt.query_map([], |row| {
+    let item_iter = stmt.query_map([business_mode], |row| {
         Ok(MenuItem {
             id: row.get(0)?,
             name: row.get(1)?,
@@ -930,6 +1035,20 @@ pub fn update_menu_item(
     println!("  low_stock_limit: {:?}", low_stock_limit);
     
     let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_mode_scoping_columns(&conn)?;
+    let business_mode = get_active_business_mode(&conn)?;
+    
+    // Verify item exists and belongs to current business mode
+    let item_exists: bool = conn.query_row(
+        "SELECT 1 FROM menu_items WHERE id = ?1
+           AND COALESCE(NULLIF(TRIM(business_mode), ''), 'hotel') = ?2",
+        params![item_id, business_mode],
+        |_| Ok(true)
+    ).unwrap_or(false);
+    
+    if !item_exists {
+        return Err("Menu item not found".to_string());
+    }
     
     // Build dynamic update query
     let mut update_parts = Vec::new();
@@ -1049,6 +1168,8 @@ pub fn add_stock_adjustment(
     }
 
     let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_mode_scoping_columns(&conn)?;
+    let business_mode = get_active_business_mode(&conn)?;
     conn.execute("BEGIN TRANSACTION", []).map_err(|e| e.to_string())?;
 
     let result: Result<i64, String> = (|| {
@@ -1069,8 +1190,9 @@ pub fn add_stock_adjustment(
             let (item_name, current_stock, track_stock): (String, i32, i32) = conn
                 .query_row(
                     "SELECT name, COALESCE(stock_quantity, 0), COALESCE(track_stock, 0)
-                     FROM menu_items WHERE id = ?1",
-                    params![it.menu_item_id],
+                     FROM menu_items WHERE id = ?1
+                       AND COALESCE(NULLIF(TRIM(business_mode), ''), 'hotel') = ?2",
+                    params![it.menu_item_id, business_mode],
                     |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
                 )
                 .map_err(|e| {
@@ -1240,12 +1362,29 @@ pub fn get_stock_adjustment_details(adjustment_id: i64) -> Result<StockAdjustmen
 pub fn delete_menu_item(item_id: i64) -> Result<String, String> {
     println!("🐛 DEBUG delete_menu_item - Received item_id: {:?}", item_id);
     let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_mode_scoping_columns(&conn)?;
+    let business_mode = get_active_business_mode(&conn)?;
     
-    // Check if menu item is used in any orders
+    // Verify item exists and belongs to current business mode
+    let item_exists: bool = conn.query_row(
+        "SELECT 1 FROM menu_items WHERE id = ?1
+           AND COALESCE(NULLIF(TRIM(business_mode), ''), 'hotel') = ?2",
+        params![item_id, business_mode],
+        |_| Ok(true)
+    ).unwrap_or(false);
+    
+    if !item_exists {
+        return Err("Menu item not found".to_string());
+    }
+    
+    // Check if menu item is used in any orders (scope by business mode)
     println!("🐛 DEBUG delete_menu_item - Checking for existing orders...");
     let order_count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM sale_items WHERE menu_item_id = ?1",
-        params![item_id],
+        "SELECT COUNT(*) FROM sale_items si
+         JOIN sales s ON si.sale_id = s.id
+         WHERE si.menu_item_id = ?1
+           AND COALESCE(NULLIF(TRIM(s.business_mode), ''), 'hotel') = ?2",
+        params![item_id, business_mode],
         |row| row.get(0)
     ).map_err(|e| {
         println!("❌ DEBUG delete_menu_item - Error checking orders: {}", e);
@@ -1469,6 +1608,8 @@ pub fn delete_product_category(category_id: i64) -> Result<bool, String> {
 #[command]
 pub fn dashboard_stats() -> Result<DashboardStats, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_mode_scoping_columns(&conn)?;
+    let business_mode = get_active_business_mode(&conn)?;
     
     let now = Utc::now();
     let current_month_start = format!("{}-{:02}-01", now.year(), now.month());
@@ -1508,8 +1649,9 @@ pub fn dashboard_stats() -> Result<DashboardStats, String> {
         "SELECT COALESCE(SUM(total_amount), 0) 
          FROM sales 
          WHERE paid = 1 
-         AND date(paid_at) >= ?1 AND date(paid_at) <= ?2",
-        params![current_month_start, current_month_end],
+         AND date(paid_at) >= ?1 AND date(paid_at) <= ?2
+         AND COALESCE(NULLIF(TRIM(business_mode), ''), 'hotel') = ?3",
+        params![current_month_start, current_month_end, business_mode],
         |row| row.get(0)
     ).map_err(|e| e.to_string())?;
     
@@ -1517,15 +1659,17 @@ pub fn dashboard_stats() -> Result<DashboardStats, String> {
     
     // Total expenses this month
     let total_expenses: f64 = conn.query_row(
-        "SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE date >= ?1 AND date <= ?2",
-        params![current_month_start, current_month_end],
+        "SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE date >= ?1 AND date <= ?2
+         AND COALESCE(NULLIF(TRIM(business_mode), ''), 'hotel') = ?3",
+        params![current_month_start, current_month_end, business_mode],
         |row| row.get(0)
     ).map_err(|e| e.to_string())?;
     
     // Total food orders this month
     let total_food_orders: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM sales WHERE date(created_at) >= ?1 AND date(created_at) <= ?2",
-        params![current_month_start, current_month_end],
+        "SELECT COUNT(*) FROM sales WHERE date(created_at) >= ?1 AND date(created_at) <= ?2
+         AND COALESCE(NULLIF(TRIM(business_mode), ''), 'hotel') = ?3",
+        params![current_month_start, current_month_end, business_mode],
         |row| row.get(0)
     ).map_err(|e| e.to_string())?;
     
@@ -1543,16 +1687,19 @@ pub fn dashboard_stats() -> Result<DashboardStats, String> {
 #[tauri::command]
 pub fn get_low_stock_items() -> Result<Vec<LowStockItem>, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_mode_scoping_columns(&conn)?;
+    let business_mode = get_active_business_mode(&conn)?;
     
     let mut stmt = conn.prepare(
         "SELECT id, name, stock_quantity, low_stock_limit 
          FROM menu_items 
          WHERE track_stock = 1 
          AND stock_quantity <= low_stock_limit
+         AND COALESCE(NULLIF(TRIM(business_mode), ''), 'hotel') = ?1
          ORDER BY stock_quantity ASC"
     ).map_err(|e| e.to_string())?;
     
-    let items = stmt.query_map([], |row| {
+    let items = stmt.query_map([business_mode], |row| {
         Ok(LowStockItem {
             id: row.get(0)?,
             name: row.get(1)?,
@@ -1575,6 +1722,8 @@ pub fn add_food_order(guest_id: Option<i64>, customer_type: String, customer_nam
     println!("  items count: {:?}", items.len());
     
     let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_mode_scoping_columns(&conn)?;
+    let business_mode = get_active_business_mode(&conn)?;
     
     if items.is_empty() {
         return Err("Order must have at least one item".to_string());
@@ -1584,8 +1733,9 @@ pub fn add_food_order(guest_id: Option<i64>, customer_type: String, customer_nam
     for item in &items {
         if let Some(menu_item_id) = item.menu_item_id {
             let stock_info: Result<(i32, i32), _> = conn.query_row(
-                "SELECT stock_quantity, track_stock FROM menu_items WHERE id = ?1",
-                params![menu_item_id],
+                "SELECT stock_quantity, track_stock FROM menu_items WHERE id = ?1
+                   AND COALESCE(NULLIF(TRIM(business_mode), ''), 'hotel') = ?2",
+                params![menu_item_id, business_mode],
                 |row| Ok((row.get(0)?, row.get(1)?))
             );
             
@@ -1607,9 +1757,9 @@ pub fn add_food_order(guest_id: Option<i64>, customer_type: String, customer_nam
     // Insert order
     println!("🐛 DEBUG add_food_order - Inserting food order...");
     let _rows_affected = conn.execute(
-        "INSERT INTO sales (guest_id, customer_type, customer_name, created_at, paid, total_amount) 
-         VALUES (?1, ?2, ?3, ?4, 0, ?5)",
-        params![guest_id, customer_type, customer_name, get_current_timestamp(), total_amount],
+        "INSERT INTO sales (guest_id, customer_type, customer_name, created_at, paid, total_amount, business_mode) 
+         VALUES (?1, ?2, ?3, ?4, 0, ?5, ?6)",
+        params![guest_id, customer_type, customer_name, get_current_timestamp(), total_amount, business_mode],
     ).map_err(|e| e.to_string())?;
     
     let order_id = conn.last_insert_rowid();
@@ -1640,18 +1790,21 @@ pub fn add_food_order(guest_id: Option<i64>, customer_type: String, customer_nam
 #[tauri::command]
 pub fn get_food_orders_by_guest(guest_id: i64) -> Result<Vec<FoodOrderSummary>, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_mode_scoping_columns(&conn)?;
+    let business_mode = get_active_business_mode(&conn)?;
     
     let mut stmt = conn.prepare(
         "SELECT fo.id, fo.created_at, fo.paid, fo.paid_at, fo.total_amount,
                 GROUP_CONCAT(oi.item_name || ' x' || oi.quantity) as items
             FROM sales fo
             LEFT JOIN sale_items oi ON fo.id = oi.order_id
-         WHERE fo.guest_id = ?1
+                 WHERE fo.guest_id = ?1
+                     AND COALESCE(NULLIF(TRIM(fo.business_mode), ''), 'hotel') = ?2
          GROUP BY fo.id, fo.created_at, fo.paid, fo.paid_at, fo.total_amount
          ORDER BY fo.created_at DESC"
     ).map_err(|e| e.to_string())?;
     
-    let orders = stmt.query_map([guest_id], |row| {
+    let orders = stmt.query_map(params![guest_id, business_mode], |row| {
         Ok(FoodOrderSummary {
             id: row.get(0)?,
             created_at: row.get(1)?,
@@ -1670,6 +1823,8 @@ pub fn get_food_orders_by_guest(guest_id: i64) -> Result<Vec<FoodOrderSummary>, 
 #[command]
 pub fn get_food_orders() -> Result<Vec<FoodOrderSummary>, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_mode_scoping_columns(&conn)?;
+    let business_mode = get_active_business_mode(&conn)?;
     
     let mut stmt = conn.prepare(
         "SELECT fo.id, fo.created_at, fo.paid, fo.paid_at, fo.total_amount,
@@ -1679,11 +1834,12 @@ pub fn get_food_orders() -> Result<Vec<FoodOrderSummary>, String> {
             FROM sales fo
             LEFT JOIN sale_items oi ON fo.id = oi.order_id
             LEFT JOIN customers g ON fo.guest_id = g.id
+            WHERE COALESCE(NULLIF(TRIM(fo.business_mode), ''), 'hotel') = ?1
          GROUP BY fo.id, fo.created_at, fo.paid, fo.paid_at, fo.total_amount, fo.guest_id, g.name
          ORDER BY fo.created_at DESC"
     ).map_err(|e| e.to_string())?;
     
-    let orders = stmt.query_map([], |row| {
+    let orders = stmt.query_map(params![business_mode], |row| {
         Ok(FoodOrderSummary {
             id: row.get(0)?,
             created_at: row.get(1)?,
@@ -1726,10 +1882,12 @@ pub fn add_expense(date: String, category: String, description: Option<String>, 
     validate_date_format(&date)?;
     
     let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_mode_scoping_columns(&conn)?;
+    let business_mode = get_active_business_mode(&conn)?;
     
     conn.execute(
-        "INSERT INTO expenses (date, category, description, amount) VALUES (?1, ?2, ?3, ?4)",
-        params![date, category, description, amount],
+        "INSERT INTO expenses (date, category, description, amount, business_mode) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![date, category, description, amount, business_mode],
     ).map_err(|e| e.to_string())?;
     
     Ok(conn.last_insert_rowid())
@@ -1738,27 +1896,29 @@ pub fn add_expense(date: String, category: String, description: Option<String>, 
 #[command]
 pub fn get_expenses(start_date: Option<String>, end_date: Option<String>) -> Result<Vec<ExpenseRecord>, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_mode_scoping_columns(&conn)?;
+    let business_mode = get_active_business_mode(&conn)?;
     
     let (query, params): (String, Vec<String>) = match (start_date, end_date) {
         (Some(start), Some(end)) => {
             validate_date_format(&start)?;
             validate_date_format(&end)?;
-            ("SELECT id, date, category, description, amount FROM expenses WHERE date BETWEEN ?1 AND ?2 ORDER BY date DESC".to_string(),
-             vec![start, end])
+            ("SELECT id, date, category, description, amount FROM expenses WHERE date BETWEEN ?1 AND ?2 AND COALESCE(NULLIF(TRIM(business_mode), ''), 'hotel') = ?3 ORDER BY date DESC".to_string(),
+             vec![start, end, business_mode])
         }
         (Some(start), None) => {
             validate_date_format(&start)?;
-            ("SELECT id, date, category, description, amount FROM expenses WHERE date >= ?1 ORDER BY date DESC".to_string(),
-             vec![start])
+            ("SELECT id, date, category, description, amount FROM expenses WHERE date >= ?1 AND COALESCE(NULLIF(TRIM(business_mode), ''), 'hotel') = ?2 ORDER BY date DESC".to_string(),
+             vec![start, business_mode])
         }
         (None, Some(end)) => {
             validate_date_format(&end)?;
-            ("SELECT id, date, category, description, amount FROM expenses WHERE date <= ?1 ORDER BY date DESC".to_string(),
-             vec![end])
+            ("SELECT id, date, category, description, amount FROM expenses WHERE date <= ?1 AND COALESCE(NULLIF(TRIM(business_mode), ''), 'hotel') = ?2 ORDER BY date DESC".to_string(),
+             vec![end, business_mode])
         }
         (None, None) => {
-            ("SELECT id, date, category, description, amount FROM expenses ORDER BY date DESC LIMIT 100".to_string(),
-             vec![])
+            ("SELECT id, date, category, description, amount FROM expenses WHERE COALESCE(NULLIF(TRIM(business_mode), ''), 'hotel') = ?1 ORDER BY date DESC LIMIT 100".to_string(),
+             vec![business_mode])
         }
     };
     
@@ -1782,16 +1942,19 @@ pub fn get_expenses_by_date_range(start_date: String, end_date: String) -> Resul
     validate_date_format(&start_date)?;
     validate_date_format(&end_date)?;
     
-    let conn = get_db_connection().map_err(|e| e.to_string())?;
+        let conn = get_db_connection().map_err(|e| e.to_string())?;
+        ensure_mode_scoping_columns(&conn)?;
+        let business_mode = get_active_business_mode(&conn)?;
     
     let mut stmt = conn.prepare(
         "SELECT id, date, category, description, amount 
          FROM expenses 
-         WHERE date >= ?1 AND date <= ?2 
+                 WHERE date >= ?1 AND date <= ?2
+                     AND COALESCE(NULLIF(TRIM(business_mode), ''), 'hotel') = ?3
          ORDER BY date DESC"
     ).map_err(|e| e.to_string())?;
     
-    let expense_iter = stmt.query_map([&start_date, &end_date], |row| {
+        let expense_iter = stmt.query_map(params![&start_date, &end_date, business_mode], |row| {
         Ok(ExpenseRecord {
             id: row.get(0)?,
             date: row.get(1)?,
@@ -3079,11 +3242,14 @@ pub fn checkout_guest_with_discount(
     _discount_description: String
 ) -> Result<f64, String> {
     let conn = get_db_connection().map_err(|e| e.to_string())?;
+    ensure_mode_scoping_columns(&conn)?;
+    let business_mode = get_active_business_mode(&conn)?;
     
-    // Get guest details
+    // Get guest details (validate guest belongs to current mode)
     let (check_in, daily_rate, room_id): (String, f64, Option<i64>) = conn.query_row(
-        "SELECT check_in, daily_rate, room_id FROM customers WHERE id = ?1 AND status = 'active'",
-        params![guest_id],
+        "SELECT check_in, daily_rate, room_id FROM customers WHERE id = ?1 AND status = 'active'
+           AND COALESCE(NULLIF(TRIM(business_mode), ''), 'hotel') = ?2",
+        params![guest_id, business_mode],
         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))
     ).map_err(|e| {
         if e.to_string().contains("no rows") {
@@ -3105,8 +3271,9 @@ pub fn checkout_guest_with_discount(
     
     // Calculate unpaid food total
     let unpaid_food: f64 = conn.query_row(
-        "SELECT COALESCE(SUM(total_amount), 0) FROM sales WHERE guest_id = ?1 AND paid = 0",
-        params![guest_id],
+        "SELECT COALESCE(SUM(total_amount), 0) FROM sales WHERE guest_id = ?1 AND paid = 0
+         AND COALESCE(NULLIF(TRIM(business_mode), ''), 'hotel') = ?2",
+        params![guest_id, business_mode],
         |row| row.get(0)
     ).map_err(|e| e.to_string())?;
     
@@ -3443,9 +3610,10 @@ pub fn set_business_mode(mode: String) -> Result<String, String> {
     let normalized = mode.trim().to_lowercase();
     let normalized = match normalized.as_str() {
         "barbershop" => "salon".to_string(),
-        "hotel" | "restaurant" | "retail" | "salon" | "cafe" => normalized,
+        "hotel" | "restaurant" | "hospitality" => "hotel".to_string(),
+        "retail" | "salon" | "cafe" => normalized,
         _ => {
-            return Err("Business mode must be one of: hotel, restaurant, retail, salon, cafe".to_string());
+            return Err("Business mode must be one of: hotel/hospitality, retail, salon, cafe".to_string());
         }
     };
 
@@ -3480,7 +3648,9 @@ pub fn get_business_mode_status() -> Result<BusinessModeStatus, String> {
             let normalized = v.trim().to_lowercase();
             if normalized == "barbershop" {
                 "salon".to_string()
-            } else if matches!(normalized.as_str(), "hotel" | "restaurant" | "retail" | "salon" | "cafe") {
+            } else if normalized == "hotel" || normalized == "restaurant" || normalized == "hospitality" {
+                "hotel".to_string()
+            } else if matches!(normalized.as_str(), "retail" | "salon" | "cafe") {
                 normalized
             } else {
                 "hotel".to_string()
@@ -3511,7 +3681,8 @@ pub fn get_business_mode() -> Result<String, String> {
     }
 
     match normalized.as_str() {
-        "hotel" | "restaurant" | "retail" | "salon" | "cafe" => Ok(normalized),
+        "hotel" | "restaurant" | "hospitality" => Ok("hotel".to_string()),
+        "retail" | "salon" | "cafe" => Ok(normalized),
         _ => Ok("hotel".to_string()),
     }
 }

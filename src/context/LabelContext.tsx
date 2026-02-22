@@ -9,6 +9,7 @@ function normalizeBusinessMode(raw: string | null | undefined): BusinessMode | n
   if (!v) return null;
   // Legacy / merged mode
   if (v === 'barbershop') return 'salon';
+  if (v === 'restaurant' || v === 'hospitality') return 'hotel';
 
   if (v === 'hotel' || v === 'restaurant' || v === 'retail' || v === 'salon' || v === 'cafe') {
     return v;

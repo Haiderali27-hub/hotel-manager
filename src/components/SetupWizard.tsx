@@ -239,8 +239,7 @@ const SetupWizard: React.FC<Props> = ({ onComplete }) => {
 
               <div style={{ display: 'grid', gap: 12, marginBottom: 16 }}>
                 {[
-                  { mode: 'hotel' as BusinessMode, icon: '🏨', title: 'Hotel/Motel', desc: 'Manage rooms, guests, check-ins and check-outs' },
-                  { mode: 'restaurant' as BusinessMode, icon: '🍽️', title: 'Restaurant', desc: 'Manage tables, customers, seating and orders' },
+                  { mode: 'hotel' as BusinessMode, icon: '🏨🍽️', title: 'Hospitality (Hotel/Restaurant)', desc: 'Manage rooms/tables, guests/customers, and orders' },
                   { mode: 'retail' as BusinessMode, icon: '🛍️', title: 'Retail/Shop', desc: 'Manage terminals, customers, and sales' },
                   { mode: 'salon' as BusinessMode, icon: '💇', title: 'Salon/Spa/Barbershop', desc: 'Manage stations/chairs, customers, and services' },
                   { mode: 'cafe' as BusinessMode, icon: '☕', title: 'Cafe/Coffee Shop', desc: 'Manage tables, customers, and orders' },

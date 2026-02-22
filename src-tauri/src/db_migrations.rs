@@ -227,6 +227,67 @@ INSERT OR IGNORE INTO shared_roles (key, name) VALUES
     ('staff', 'Staff');
 "#,
     },
+    Migration {
+        version: 2,
+        name: "add_business_mode_scoping",
+        sql: r#"
+ALTER TABLE sales ADD COLUMN business_mode TEXT;
+ALTER TABLE expenses ADD COLUMN business_mode TEXT;
+
+UPDATE sales
+SET business_mode = COALESCE(
+    NULLIF((SELECT value FROM settings WHERE key = 'business_mode' LIMIT 1), ''),
+    'hotel'
+)
+WHERE business_mode IS NULL OR TRIM(business_mode) = '';
+
+UPDATE expenses
+SET business_mode = COALESCE(
+    NULLIF((SELECT value FROM settings WHERE key = 'business_mode' LIMIT 1), ''),
+    'hotel'
+)
+WHERE business_mode IS NULL OR TRIM(business_mode) = '';
+
+UPDATE sales SET business_mode = 'hotel' WHERE LOWER(TRIM(COALESCE(business_mode, ''))) IN ('restaurant', 'hospitality');
+
+CREATE INDEX IF NOT EXISTS idx_sales_business_mode_created_at ON sales(business_mode, created_at);
+CREATE INDEX IF NOT EXISTS idx_expenses_business_mode_date ON expenses(business_mode, date);
+"#,
+    },
+    Migration {
+        version: 3,
+        name: "add_business_mode_to_core_entities",
+        sql: r#"
+ALTER TABLE customers ADD COLUMN business_mode TEXT;
+ALTER TABLE resources ADD COLUMN business_mode TEXT;
+ALTER TABLE menu_items ADD COLUMN business_mode TEXT;
+
+UPDATE customers
+SET business_mode = COALESCE(
+    NULLIF((SELECT value FROM settings WHERE key = 'business_mode' LIMIT 1), ''),
+    'hotel'
+)
+WHERE business_mode IS NULL OR TRIM(business_mode) = '';
+
+UPDATE resources
+SET business_mode = COALESCE(
+    NULLIF((SELECT value FROM settings WHERE key = 'business_mode' LIMIT 1), ''),
+    'hotel'
+)
+WHERE business_mode IS NULL OR TRIM(business_mode) = '';
+
+UPDATE menu_items
+SET business_mode = COALESCE(
+    NULLIF((SELECT value FROM settings WHERE key = 'business_mode' LIMIT 1), ''),
+    'hotel'
+)
+WHERE business_mode IS NULL OR TRIM(business_mode) = '';
+
+CREATE INDEX IF NOT EXISTS idx_customers_business_mode ON customers(business_mode);
+CREATE INDEX IF NOT EXISTS idx_resources_business_mode ON resources(business_mode);
+CREATE INDEX IF NOT EXISTS idx_menu_items_business_mode ON menu_items(business_mode);
+"#,
+    },
 ];
 
 pub fn run_migrations(conn: &Connection) -> SqliteResult<()> {
@@ -250,7 +311,15 @@ pub fn run_migrations(conn: &Connection) -> SqliteResult<()> {
             continue;
         }
 
-        conn.execute_batch(migration.sql)?;
+        if let Err(err) = conn.execute_batch(migration.sql) {
+            // Allow idempotent ALTER TABLE behavior on existing databases where columns are already present.
+            let msg = err.to_string().to_lowercase();
+            let ignorable = (migration.version == 2 || migration.version == 3)
+                && (msg.contains("duplicate column name") || msg.contains("already exists"));
+            if !ignorable {
+                return Err(err);
+            }
+        }
         conn.execute(
             "INSERT INTO schema_migrations (version, name) VALUES (?1, ?2)",
             (migration.version, migration.name),

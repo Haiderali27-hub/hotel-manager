@@ -1,6 +1,11 @@
 ﻿import { invoke } from '@tauri-apps/api/core';
 import React, { useEffect, useRef, useState } from 'react';
 import { FiChevronsDown, FiChevronsUp, FiHome } from 'react-icons/fi';
+import Settings from '../../../components/SettingsNew';
+import { useAuth } from '../../../context/AuthContext';
+import { useCurrency } from '../../../context/CurrencyContext';
+import { useLabels } from '../../../context/LabelContext';
+import { useTheme } from '../../../context/ThemeContext';
 import AccountsPage from './AccountsPage';
 import AddSale from './AddSale';
 import ExpensesPage from './ExpensesPage';
@@ -12,11 +17,6 @@ import ReturnsPage from './ReturnsPage';
 import SalesHistoryPage from './SalesHistoryPage';
 import StockAdjustmentsPage from './StockAdjustmentsPage';
 import SuppliersPage from './SuppliersPage';
-import { useAuth } from '../../../context/AuthContext';
-import { useCurrency } from '../../../context/CurrencyContext';
-import { useLabels } from '../../../context/LabelContext';
-import { useTheme } from '../../../context/ThemeContext';
-import Settings from '../../../components/SettingsNew';
 
 interface SaleSummary {
   id: number;

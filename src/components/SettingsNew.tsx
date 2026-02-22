@@ -615,7 +615,8 @@ const Settings: React.FC<SettingsProps> = ({ initialTab = 'general' }) => {
                     className="bc-input"
                     value={businessMode}
                     onChange={async (e) => {
-                      const newMode = e.target.value as BusinessMode;
+                      const selected = e.target.value as BusinessMode;
+                      const newMode: BusinessMode = selected === 'restaurant' ? 'hotel' : selected;
                       try {
                         await invoke('set_business_mode', { mode: newMode });
                         setBusinessMode(newMode);
@@ -625,11 +626,10 @@ const Settings: React.FC<SettingsProps> = ({ initialTab = 'general' }) => {
                       }
                     }}
                   >
-                    {Object.entries(labels).map(([mode, modeLabels]) => (
-                      <option key={mode} value={mode}>
-                        {mode.charAt(0).toUpperCase() + mode.slice(1)} ({modeLabels.unit}, {modeLabels.client})
-                      </option>
-                    ))}
+                    <option value="hotel">Hospitality (Room/Table, Guest/Customer)</option>
+                    <option value="retail">Retail ({labels.retail.unit}, {labels.retail.client})</option>
+                    <option value="salon">Salon ({labels.salon.unit}, {labels.salon.client})</option>
+                    <option value="cafe">Cafe ({labels.cafe.unit}, {labels.cafe.client})</option>
                   </select>
                   <div style={{ marginTop: 6, color: 'var(--app-text-secondary)', fontSize: 12 }}>
                     Changing business type switches the interface immediately.

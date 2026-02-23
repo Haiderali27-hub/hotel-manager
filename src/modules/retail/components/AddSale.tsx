@@ -26,6 +26,7 @@ import { useTheme } from '../../../context/ThemeContext';
 interface AddSaleProps {
   onSaleAdded: () => void;
   onNavigateToAccounts?: () => void;
+  onBack?: () => void;
 }
 
 interface OrderItemWithDetails extends OrderItem {

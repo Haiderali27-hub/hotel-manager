@@ -91,11 +91,11 @@ const PurchasesPage: React.FC<PurchasesPageProps> = ({ onBack }) => {
         notes: ''
       });
       await loadCore();
-      setSupplierId(newSupplier.id);
+      setSupplierId(newSupplier);
       setShowQuickAddSupplier(false);
       setQuickSupplierName('');
       setQuickSupplierPhone('');
-      showSuccess('Added', `Supplier "${newSupplier.name}" added successfully`);
+      showSuccess('Added', `Supplier "${quickSupplierName}" added successfully`);
     } catch (e) {
       console.error(e);
       showError('Add Failed', e instanceof Error ? e.message : 'Failed to add supplier');

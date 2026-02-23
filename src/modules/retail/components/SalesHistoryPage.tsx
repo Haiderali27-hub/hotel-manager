@@ -333,7 +333,7 @@ const SalesHistoryPage: React.FC<SalesHistoryPageProps> = ({ onBack, onDuplicate
               'Date': new Date(s.created_at).toLocaleString(),
               [label.client]: s.guest_name || 'Walk-in',
               'Items': s.items || '',
-              'Total': s.total,
+              'Total': s.total_amount,
               'Paid': s.paid ? 'Yes' : 'No'
             }));
             const headers = Object.keys(csvData[0] || {});

@@ -698,7 +698,7 @@ export const getMenuItems = (): Promise<MenuItem[]> =>
         sku: raw.sku ?? raw.SKU ?? undefined,
         barcode: raw.barcode ?? raw.barCode ?? raw.Barcode ?? undefined,
         is_available: raw.is_available ?? raw.isAvailable ?? false,
-        track_stock: raw.track_stock ?? raw.trackStock,
+        track_stock: raw.track_stock ?? (typeof raw.trackStock === 'boolean' ? (raw.trackStock ? 1 : 0) : raw.trackStock),
         stock_quantity: raw.stock_quantity ?? raw.stockQuantity,
         low_stock_limit: raw.low_stock_limit ?? raw.lowStockLimit,
         description: raw.description ?? ''
@@ -832,36 +832,36 @@ export const addStockAdjustment = (args: {
 export const getStockAdjustments = (): Promise<StockAdjustmentSummary[]> =>
   invoke<StockAdjustmentRow[]>('get_stock_adjustments').then((rows) =>
     rows.map((raw) => ({
-      id: raw.id,
-      adjustment_date: raw.adjustment_date ?? raw.adjustmentDate,
+      id: raw.id ?? 0,
+      adjustment_date: raw.adjustment_date ?? raw.adjustmentDate ?? '',
       reason: raw.reason ?? null,
       notes: raw.notes ?? null,
       item_count: raw.item_count ?? raw.itemCount ?? 0,
-      created_at: raw.created_at ?? raw.createdAt,
+      created_at: raw.created_at ?? raw.createdAt ?? '',
     }))
   );
 
 export const getStockAdjustmentDetails = (adjustmentId: number): Promise<StockAdjustmentDetails> =>
   invoke<StockAdjustmentDetailsRow>('get_stock_adjustment_details', { adjustmentId }).then((raw) => {
-    const a = raw.adjustment ?? raw.stockAdjustment ?? raw;
+    const a = (raw.adjustment ?? raw.stockAdjustment ?? raw) as StockAdjustmentRow;
     const items = raw.items ?? [];
     return {
       adjustment: {
-        id: a.id,
-        adjustment_date: a.adjustment_date ?? a.adjustmentDate,
+        id: a.id ?? 0,
+        adjustment_date: a.adjustment_date ?? a.adjustmentDate ?? '',
         reason: a.reason ?? null,
         notes: a.notes ?? null,
         item_count: a.item_count ?? a.itemCount ?? 0,
-        created_at: a.created_at ?? a.createdAt,
+        created_at: a.created_at ?? a.createdAt ?? '',
       },
       items: items.map((it) => ({
-        id: it.id,
-        adjustment_id: it.adjustment_id ?? it.adjustmentId,
-        menu_item_id: it.menu_item_id ?? it.menuItemId,
-        item_name: it.item_name ?? it.itemName,
-        previous_stock: it.previous_stock ?? it.previousStock,
-        quantity_change: it.quantity_change ?? it.quantityChange,
-        new_stock: it.new_stock ?? it.newStock,
+        id: it.id ?? 0,
+        adjustment_id: it.adjustment_id ?? it.adjustmentId ?? 0,
+        menu_item_id: it.menu_item_id ?? it.menuItemId ?? 0,
+        item_name: it.item_name ?? it.itemName ?? '',
+        previous_stock: it.previous_stock ?? it.previousStock ?? 0,
+        quantity_change: it.quantity_change ?? it.quantityChange ?? 0,
+        new_stock: it.new_stock ?? it.newStock ?? 0,
         note: it.note ?? null,
       })),
     };

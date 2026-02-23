@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import './App.css';
 
+import LicenseGate from './components/LicenseGate';
 import SetupWizard from './components/SetupWizard';
+import UpdateChecker from './components/UpdateChecker';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CurrencyProvider } from './context/CurrencyContext';
 import { LabelProvider, useLabels } from './context/LabelContext';
@@ -74,11 +76,12 @@ const AppContent: React.FC = () => {
             : <ModernDashboard />;
 
     return (
-      <>
+      <LicenseGate>
+        <UpdateChecker />
         {showSetupWizard && <SetupWizard onComplete={() => setShowSetupWizard(false)} />}
         {dashboard}
         <NotificationToast />
-      </>
+      </LicenseGate>
     );
   } else {
     return <OfflineLoginPage />;

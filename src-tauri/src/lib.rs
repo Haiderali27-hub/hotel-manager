@@ -9,6 +9,7 @@ mod validation;
 mod settings;
 mod store_profiles;
 mod db_migrations;
+mod license;
 
 use tauri::Manager;
 use db::initialize_database;
@@ -87,6 +88,7 @@ use store_profiles::{
     delete_store_profile,
     update_active_store_name,
 };
+use license::{get_license_info, activate_license, deactivate_license};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -98,6 +100,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             #[cfg(debug_assertions)]
             {
@@ -291,7 +294,11 @@ pub fn run() {
             award_loyalty_points,
             get_customer_loyalty_points,
             redeem_loyalty_points,
-            get_point_transactions
+            get_point_transactions,
+            // License & Trial
+            get_license_info,
+            activate_license,
+            deactivate_license
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

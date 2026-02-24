@@ -11,5 +11,11 @@ sqlite.db
 /src-tauri/target
 /src-tauri/.cargo
 
+# Release workflow generated artifacts
+/scripts/latest.json
+
+# Safety: if private keygen folder is ever copied into repo, keep it out of git
+/inertia-keygen/
+
 # VSCode settings
 .vscode/

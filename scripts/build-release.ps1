@@ -33,15 +33,20 @@ Write-Host "======================================================" -ForegroundC
 Write-Host ""
 
 # Validate signing env vars
+$keyPath = "$env:USERPROFILE\.tauri\inertia.key"
 if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
-    $keyPath = "$env:USERPROFILE\.tauri\inertia.key"
     if (Test-Path $keyPath) {
-        $env:TAURI_SIGNING_PRIVATE_KEY = Get-Content $keyPath -Raw
-        Write-Host "Loaded private key from $keyPath" -ForegroundColor Green
+        # Pass the FILE PATH — Tauri v2 accepts path or raw content
+        $env:TAURI_SIGNING_PRIVATE_KEY = $keyPath
+        Write-Host "Loaded private key path: $keyPath" -ForegroundColor Green
     } else {
-        Write-Error "TAURI_SIGNING_PRIVATE_KEY not set and key file not found at $keyPath"
-        Write-Host "Run scripts\generate-signing-key.ps1 first." -ForegroundColor Red
+        Write-Error "Key file not found at $keyPath. Run scripts\generate-signing-key.ps1 first."
         exit 1
+    }
+} else {
+    # If user set it to file contents, replace with path for reliability
+    if (Test-Path $keyPath) {
+        $env:TAURI_SIGNING_PRIVATE_KEY = $keyPath
     }
 }
 
@@ -61,18 +66,26 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# Find the built installer (Tauri v2 produces .exe + .exe.sig in the nsis folder)
-$nsisDir   = Join-Path $tauriDir "target\release\bundle\nsis"
-$installer = Get-ChildItem -Path $nsisDir -Filter "*-setup.exe" | Select-Object -First 1
-$sigFile   = Get-ChildItem -Path $nsisDir -Filter "*-setup.exe.sig" | Select-Object -First 1
+# Find signed updater artifact.
+# With createUpdaterArtifacts="v1Compatible", Tauri creates *.nsis.zip + *.nsis.zip.sig.
+# Some setups may still produce *-setup.exe + *-setup.exe.sig.
+$nsisDir = Join-Path $tauriDir "target\release\bundle\nsis"
+
+$installer = Get-ChildItem -Path $nsisDir -Filter "*.nsis.zip" -ErrorAction SilentlyContinue | Select-Object -First 1
+$sigFile   = Get-ChildItem -Path $nsisDir -Filter "*.nsis.zip.sig" -ErrorAction SilentlyContinue | Select-Object -First 1
+
+if (-not $installer -or -not $sigFile) {
+    $installer = Get-ChildItem -Path $nsisDir -Filter "*-setup.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+    $sigFile   = Get-ChildItem -Path $nsisDir -Filter "*-setup.exe.sig" -ErrorAction SilentlyContinue | Select-Object -First 1
+}
 
 if (-not $installer) {
-    Write-Error "Could not find built installer in target\release\bundle\nsis\"
+    Write-Error "Could not find built artifact in target\release\bundle\nsis\"
     exit 1
 }
 
 if (-not $sigFile) {
-    Write-Error "Could not find signature file (.exe.sig). Make sure TAURI_SIGNING_PRIVATE_KEY is set correctly."
+    Write-Error "Could not find signature file. Enable bundle.createUpdaterArtifacts in tauri.conf.json and verify signing env vars."
     exit 1
 }
 
